@@ -2,6 +2,7 @@ package it.krpng.cassa.data.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import it.krpng.cassa.data.database.dao.AdditionDao
 import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import it.krpng.cassa.data.database.entity.AdditionEntity
@@ -32,6 +33,8 @@ import it.krpng.cassa.data.database.entity.ProductIngredientEntity
     exportSchema = true,
 )
 abstract class CassaDatabase : RoomDatabase() {
+    abstract fun additionDao(): AdditionDao
+
     abstract fun productDao(): ProductDao
 
     abstract fun orderDao(): OrderDao

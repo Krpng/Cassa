@@ -1,15 +1,39 @@
 package it.krpng.cassa.data.repository
 
 import it.krpng.cassa.core.money.Money
+import it.krpng.cassa.data.database.entity.AdditionEntity
 import it.krpng.cassa.data.database.entity.IngredientEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.data.database.relation.ProductIngredientWithIngredient
 import it.krpng.cassa.data.database.relation.ProductWithIngredients
+import it.krpng.cassa.domain.model.Addition
 import it.krpng.cassa.domain.model.Ingredient
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductIngredient
 import java.time.Instant
+
+internal fun AdditionEntity.toDomain(): Addition = Addition(
+    id = id,
+    name = name,
+    normalizedName = normalizedName,
+    printedName = printedName,
+    price = Money.ofCents(priceCents),
+    active = active,
+    createdAt = Instant.ofEpochMilli(createdAt),
+    updatedAt = Instant.ofEpochMilli(updatedAt),
+)
+
+internal fun Addition.toEntity(): AdditionEntity = AdditionEntity(
+    id = id,
+    name = name,
+    normalizedName = normalizedName,
+    printedName = printedName,
+    priceCents = price.cents,
+    active = active,
+    createdAt = createdAt.toEpochMilli(),
+    updatedAt = updatedAt.toEpochMilli(),
+)
 
 internal fun ProductWithIngredients.toDomain(): Product = Product(
     id = product.id,
