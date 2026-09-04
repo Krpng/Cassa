@@ -35,6 +35,20 @@ internal fun Addition.toEntity(): AdditionEntity = AdditionEntity(
     updatedAt = updatedAt.toEpochMilli(),
 )
 
+internal fun IngredientEntity.toDomain(): Ingredient = Ingredient(
+    id = id,
+    name = name,
+    normalizedName = normalizedName,
+    active = active,
+)
+
+internal fun Ingredient.toEntity(): IngredientEntity = IngredientEntity(
+    id = id,
+    name = name,
+    normalizedName = normalizedName,
+    active = active,
+)
+
 internal fun ProductWithIngredients.toDomain(): Product = Product(
     id = product.id,
     name = product.name,
@@ -68,12 +82,7 @@ internal fun Product.toDatabaseModel(): ProductWithIngredients = ProductWithIngr
 )
 
 private fun ProductIngredientWithIngredient.toDomain(): ProductIngredient = ProductIngredient(
-    ingredient = Ingredient(
-        id = ingredient.id,
-        name = ingredient.name,
-        normalizedName = ingredient.normalizedName,
-        active = ingredient.active,
-    ),
+    ingredient = ingredient.toDomain(),
     displayOrder = link.displayOrder,
 )
 
@@ -84,10 +93,5 @@ private fun ProductIngredient.toDatabaseModel(productId: Long): ProductIngredien
             ingredientId = ingredient.id,
             displayOrder = displayOrder,
         ),
-        ingredient = IngredientEntity(
-            id = ingredient.id,
-            name = ingredient.name,
-            normalizedName = ingredient.normalizedName,
-            active = ingredient.active,
-        ),
+        ingredient = ingredient.toEntity(),
     )
