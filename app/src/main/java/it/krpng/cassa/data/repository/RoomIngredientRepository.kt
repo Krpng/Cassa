@@ -7,10 +7,17 @@ import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.domain.model.Ingredient
 import it.krpng.cassa.domain.model.ProductIngredient
 import it.krpng.cassa.domain.repository.IngredientRepository
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 class RoomIngredientRepository(
     private val ingredientDao: IngredientDao,
 ) : IngredientRepository {
+    override fun observeActive(): Flow<List<Ingredient>> =
+        ingredientDao.observeActive().map { ingredients ->
+            ingredients.map { it.toDomain() }
+        }
+
     override suspend fun getById(ingredientId: Long): Ingredient? =
         ingredientDao.getById(ingredientId)?.toDomain()
 

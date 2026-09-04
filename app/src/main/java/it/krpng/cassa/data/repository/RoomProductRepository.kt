@@ -6,10 +6,17 @@ import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.repository.ProductRepository
 import java.time.Instant
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
 class RoomProductRepository(
     private val productDao: ProductDao,
 ) : ProductRepository {
+    override fun observeActive(): Flow<List<Product>> =
+        productDao.observeActiveWithIngredients().map { products ->
+            products.map { it.toDomain() }
+        }
+
     override suspend fun getById(productId: Long): Product? =
         productDao.getWithIngredients(productId)?.toDomain()
 

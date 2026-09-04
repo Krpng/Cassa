@@ -10,6 +10,9 @@ import it.krpng.cassa.data.database.relation.ProductWithIngredients
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.model.ProductCategory
 import java.time.Instant
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -18,6 +21,28 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RoomRepositoriesTest {
+    @Test
+    fun `active products remain reactive and are mapped with ingredients`() = runTest {
+        val first = productWithIngredients()
+        val second = productWithIngredients().copy(
+            product = productWithIngredients().product.copy(
+                id = 43,
+                name = "Marinara",
+                normalizedName = "marinara",
+            ),
+        )
+        val dao = FakeProductDao(
+            activeResults = flowOf(listOf(first), listOf(first, second)),
+        )
+
+        val emissions = RoomProductRepository(dao).observeActive().toList()
+
+        assertEquals(
+            listOf(listOf("Margherita"), listOf("Margherita", "Marinara")),
+            emissions.map { products -> products.map { it.name } },
+        )
+    }
+
     @Test
     fun `product repository delegates to DAO and never exposes Room model`() = runTest {
         val dao = FakeProductDao(productWithIngredients())
@@ -117,11 +142,15 @@ class RoomRepositoriesTest {
         private val insertedId: Long = 1,
         private val updatedRows: Int = 1,
         private val activeUpdatedRows: Int = 1,
+        private val activeResults: Flow<List<ProductWithIngredients>> = flowOf(emptyList()),
     ) : ProductDao {
         var requestedId: Long? = null
         var insertedProduct: ProductEntity? = null
         var updatedProduct: ProductEntity? = null
         val activeUpdates = mutableListOf<ActiveUpdate>()
+
+        override fun observeActiveWithIngredients(): Flow<List<ProductWithIngredients>> =
+            activeResults
 
         override suspend fun getWithIngredients(productId: Long): ProductWithIngredients? {
             requestedId = productId

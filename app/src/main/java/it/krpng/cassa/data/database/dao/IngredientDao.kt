@@ -8,9 +8,19 @@ import androidx.room.Transaction
 import androidx.room.Update
 import it.krpng.cassa.data.database.entity.IngredientEntity
 import it.krpng.cassa.data.database.entity.ProductIngredientEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface IngredientDao {
+    @Query(
+        """
+        SELECT * FROM ingredients
+        WHERE active = 1
+        ORDER BY normalizedName ASC, id ASC
+        """,
+    )
+    fun observeActive(): Flow<List<IngredientEntity>>
+
     @Query("SELECT * FROM ingredients WHERE id = :ingredientId LIMIT 1")
     suspend fun getById(ingredientId: Long): IngredientEntity?
 

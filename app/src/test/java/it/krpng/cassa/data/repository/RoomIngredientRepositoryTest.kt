@@ -5,6 +5,9 @@ import it.krpng.cassa.data.database.entity.IngredientEntity
 import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.domain.model.Ingredient
 import it.krpng.cassa.domain.model.ProductIngredient
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,6 +16,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RoomIngredientRepositoryTest {
+    @Test
+    fun `active ingredients remain reactive and are mapped to domain`() = runTest {
+        val second = ingredientEntity().copy(
+            id = 13,
+            name = "Basilico",
+            normalizedName = "basilico",
+        )
+        val dao = FakeIngredientDao(
+            activeResults = flowOf(listOf(ingredientEntity()), listOf(ingredientEntity(), second)),
+        )
+
+        val emissions = RoomIngredientRepository(dao).observeActive().toList()
+
+        assertEquals(listOf(1, 2), emissions.map { it.size })
+        assertEquals("Basilico", emissions.last().last().name)
+    }
+
     @Test
     fun `get maps Room entity to domain`() = runTest {
         val dao = FakeIngredientDao(result = ingredientEntity())
@@ -128,6 +148,7 @@ class RoomIngredientRepositoryTest {
         private val insertedId: Long = 1,
         private val updatedRows: Int = 1,
         private val activeUpdatedRows: Int = 1,
+        private val activeResults: Flow<List<IngredientEntity>> = flowOf(emptyList()),
     ) : IngredientDao {
         var requestedId: Long? = null
         var insertedIngredient: IngredientEntity? = null
@@ -135,6 +156,8 @@ class RoomIngredientRepositoryTest {
         val activeUpdates = mutableListOf<ActiveUpdate>()
         val deletedProductIds = mutableListOf<Long>()
         val insertedProductIngredients = mutableListOf<ProductIngredientEntity>()
+
+        override fun observeActive(): Flow<List<IngredientEntity>> = activeResults
 
         override suspend fun getById(ingredientId: Long): IngredientEntity? {
             requestedId = ingredientId

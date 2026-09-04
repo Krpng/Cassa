@@ -5,6 +5,9 @@ import it.krpng.cassa.data.database.dao.AdditionDao
 import it.krpng.cassa.data.database.entity.AdditionEntity
 import it.krpng.cassa.domain.model.Addition
 import java.time.Instant
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,6 +16,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RoomAdditionRepositoryTest {
+    @Test
+    fun `active additions remain reactive and are mapped to domain money`() = runTest {
+        val second = additionEntity().copy(
+            id = 13,
+            name = "Olive",
+            normalizedName = "olive",
+            priceCents = 0,
+        )
+        val dao = FakeAdditionDao(
+            activeResults = flowOf(listOf(additionEntity()), listOf(additionEntity(), second)),
+        )
+
+        val emissions = RoomAdditionRepository(dao).observeActive().toList()
+
+        assertEquals(listOf(1, 2), emissions.map { it.size })
+        assertEquals(Money.ZERO, emissions.last().last().price)
+    }
+
     @Test
     fun `get maps Room entity to domain without exposing cents`() = runTest {
         val dao = FakeAdditionDao(result = additionEntity())
@@ -99,11 +120,14 @@ class RoomAdditionRepositoryTest {
         private val insertedId: Long = 1,
         private val updatedRows: Int = 1,
         private val activeUpdatedRows: Int = 1,
+        private val activeResults: Flow<List<AdditionEntity>> = flowOf(emptyList()),
     ) : AdditionDao {
         var requestedId: Long? = null
         var insertedAddition: AdditionEntity? = null
         var updatedAddition: AdditionEntity? = null
         val activeUpdates = mutableListOf<ActiveUpdate>()
+
+        override fun observeActive(): Flow<List<AdditionEntity>> = activeResults
 
         override suspend fun getById(additionId: Long): AdditionEntity? {
             requestedId = additionId

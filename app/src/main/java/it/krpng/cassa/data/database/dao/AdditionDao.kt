@@ -6,9 +6,19 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import it.krpng.cassa.data.database.entity.AdditionEntity
+import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AdditionDao {
+    @Query(
+        """
+        SELECT * FROM additions
+        WHERE active = 1
+        ORDER BY normalizedName ASC, id ASC
+        """,
+    )
+    fun observeActive(): Flow<List<AdditionEntity>>
+
     @Query("SELECT * FROM additions WHERE id = :additionId LIMIT 1")
     suspend fun getById(additionId: Long): AdditionEntity?
 
