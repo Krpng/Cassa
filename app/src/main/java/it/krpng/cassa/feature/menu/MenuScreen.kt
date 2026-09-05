@@ -24,6 +24,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -34,6 +38,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.feature.common.CassaBackButton
+import it.krpng.cassa.feature.importmenu.OdsFilePickerButton
 
 @Composable
 fun MenuRoute(
@@ -69,6 +74,8 @@ fun MenuScreen(
     onSectionSelected: (MenuSection) -> Unit,
     onSearchQueryChanged: (String) -> Unit,
 ) {
+    var hasSelectedOdsDocument by rememberSaveable { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -81,6 +88,17 @@ fun MenuScreen(
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
+        Spacer(modifier = Modifier.height(12.dp))
+        OdsFilePickerButton(
+            onDocumentSelected = { hasSelectedOdsDocument = true },
+        )
+        if (hasSelectedOdsDocument) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "File ODS selezionato.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
         Spacer(modifier = Modifier.height(16.dp))
         MenuSectionSelector(
             selectedSection = state.selectedSection,
