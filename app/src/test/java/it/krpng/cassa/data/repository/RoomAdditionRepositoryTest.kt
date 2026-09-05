@@ -17,6 +17,19 @@ import org.junit.Test
 
 class RoomAdditionRepositoryTest {
     @Test
+    fun `menu addition Flow includes inactive catalog rows`() = runTest {
+        val inactive = additionEntity().copy(active = false)
+        val repository = RoomAdditionRepository(
+            FakeAdditionDao(activeResults = flowOf(listOf(inactive))),
+        )
+
+        val additions = repository.observeAll().toList().single()
+
+        assertEquals(1, additions.size)
+        assertFalse(additions.single().active)
+    }
+
+    @Test
     fun `active additions remain reactive and are mapped to domain money`() = runTest {
         val second = additionEntity().copy(
             id = 13,
@@ -126,6 +139,8 @@ class RoomAdditionRepositoryTest {
         var insertedAddition: AdditionEntity? = null
         var updatedAddition: AdditionEntity? = null
         val activeUpdates = mutableListOf<ActiveUpdate>()
+
+        override fun observeAll(): Flow<List<AdditionEntity>> = activeResults
 
         override fun observeActive(): Flow<List<AdditionEntity>> = activeResults
 

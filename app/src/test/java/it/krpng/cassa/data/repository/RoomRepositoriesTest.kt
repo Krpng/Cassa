@@ -22,6 +22,21 @@ import org.junit.Test
 
 class RoomRepositoriesTest {
     @Test
+    fun `menu product Flow includes inactive catalog rows`() = runTest {
+        val inactive = productWithIngredients().copy(
+            product = productWithIngredients().product.copy(active = false),
+        )
+        val repository = RoomProductRepository(
+            FakeProductDao(activeResults = flowOf(listOf(inactive))),
+        )
+
+        val products = repository.observeAll().toList().single()
+
+        assertEquals(1, products.size)
+        assertFalse(products.single().active)
+    }
+
+    @Test
     fun `active products remain reactive and are mapped with ingredients`() = runTest {
         val first = productWithIngredients()
         val second = productWithIngredients().copy(
@@ -148,6 +163,9 @@ class RoomRepositoriesTest {
         var insertedProduct: ProductEntity? = null
         var updatedProduct: ProductEntity? = null
         val activeUpdates = mutableListOf<ActiveUpdate>()
+
+        override fun observeAllWithIngredients(): Flow<List<ProductWithIngredients>> =
+            activeResults
 
         override fun observeActiveWithIngredients(): Flow<List<ProductWithIngredients>> =
             activeResults

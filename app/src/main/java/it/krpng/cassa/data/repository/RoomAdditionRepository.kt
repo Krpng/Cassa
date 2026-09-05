@@ -6,12 +6,18 @@ import it.krpng.cassa.data.database.entity.AdditionEntity
 import it.krpng.cassa.domain.model.Addition
 import it.krpng.cassa.domain.repository.AdditionRepository
 import java.time.Instant
+import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class RoomAdditionRepository(
+class RoomAdditionRepository @Inject constructor(
     private val additionDao: AdditionDao,
 ) : AdditionRepository {
+    override fun observeAll(): Flow<List<Addition>> =
+        additionDao.observeAll().map { additions ->
+            additions.map { it.toDomain() }
+        }
+
     override fun observeActive(): Flow<List<Addition>> =
         additionDao.observeActive().map { additions ->
             additions.map { it.toDomain() }

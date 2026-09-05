@@ -13,6 +13,10 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ProductDao {
     @Transaction
+    @Query("SELECT * FROM products ORDER BY normalizedName ASC, id ASC")
+    fun observeAllWithIngredients(): Flow<List<ProductWithIngredients>>
+
+    @Transaction
     @Query(
         """
         SELECT * FROM products

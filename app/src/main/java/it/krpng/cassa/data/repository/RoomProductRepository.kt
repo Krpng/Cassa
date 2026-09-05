@@ -6,12 +6,18 @@ import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.repository.ProductRepository
 import java.time.Instant
+import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class RoomProductRepository(
+class RoomProductRepository @Inject constructor(
     private val productDao: ProductDao,
 ) : ProductRepository {
+    override fun observeAll(): Flow<List<Product>> =
+        productDao.observeAllWithIngredients().map { products ->
+            products.map { it.toDomain() }
+        }
+
     override fun observeActive(): Flow<List<Product>> =
         productDao.observeActiveWithIngredients().map { products ->
             products.map { it.toDomain() }

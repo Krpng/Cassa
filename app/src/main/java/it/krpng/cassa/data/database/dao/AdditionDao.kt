@@ -10,6 +10,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AdditionDao {
+    @Query("SELECT * FROM additions ORDER BY normalizedName ASC, id ASC")
+    fun observeAll(): Flow<List<AdditionEntity>>
+
     @Query(
         """
         SELECT * FROM additions

@@ -5,6 +5,8 @@ import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 
 interface AdditionRepository {
+    fun observeAll(): Flow<List<Addition>>
+
     fun observeActive(): Flow<List<Addition>>
 
     suspend fun getById(additionId: Long): Addition?

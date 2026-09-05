@@ -5,6 +5,8 @@ import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 
 interface ProductRepository {
+    fun observeAll(): Flow<List<Product>>
+
     fun observeActive(): Flow<List<Product>>
 
     suspend fun getById(productId: Long): Product?

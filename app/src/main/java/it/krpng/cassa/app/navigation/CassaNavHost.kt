@@ -6,7 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import it.krpng.cassa.feature.archive.ArchiveScreen
 import it.krpng.cassa.feature.home.HomeScreen
-import it.krpng.cassa.feature.menu.MenuScreen
+import it.krpng.cassa.feature.menu.MenuRoute
 import it.krpng.cassa.feature.order.NewOrderScreen
 import it.krpng.cassa.feature.settings.SettingsScreen
 import it.krpng.cassa.feature.todayorders.TodayOrdersScreen
@@ -38,11 +38,10 @@ fun CassaNavHost() {
             ArchiveScreen(onBack = navController::navigateUp)
         }
         composable(CassaDestination.MENU.route) {
-            MenuScreen(onBack = navController::navigateUp)
+            MenuRoute(onBack = navController::navigateUp)
         }
         composable(CassaDestination.SETTINGS.route) {
             SettingsScreen(onBack = navController::navigateUp)
         }
     }
 }
-
