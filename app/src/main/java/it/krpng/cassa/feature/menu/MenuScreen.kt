@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,7 +23,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,12 +33,15 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.domain.model.ProductCategory
+import it.krpng.cassa.feature.common.CassaBackButton
 
 @Composable
 fun MenuRoute(
     onBack: () -> Unit,
     onCreateProduct: (ProductCategory) -> Unit,
     onEditProduct: (Long) -> Unit,
+    onCreateAddition: () -> Unit,
+    onEditAddition: (Long) -> Unit,
     viewModel: MenuViewModel = hiltViewModel(),
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -48,6 +51,8 @@ fun MenuRoute(
         onBack = onBack,
         onCreateProduct = onCreateProduct,
         onEditProduct = onEditProduct,
+        onCreateAddition = onCreateAddition,
+        onEditAddition = onEditAddition,
         onSectionSelected = viewModel::selectSection,
         onSearchQueryChanged = viewModel::updateSearchQuery,
     )
@@ -59,17 +64,18 @@ fun MenuScreen(
     onBack: () -> Unit,
     onCreateProduct: (ProductCategory) -> Unit,
     onEditProduct: (Long) -> Unit,
+    onCreateAddition: () -> Unit,
+    onEditAddition: (Long) -> Unit,
     onSectionSelected: (MenuSection) -> Unit,
     onSearchQueryChanged: (String) -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .safeDrawingPadding()
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
-        TextButton(onClick = onBack) {
-            Text("INDIETRO")
-        }
+        CassaBackButton(onClick = onBack)
         Text(
             text = "Menu",
             style = MaterialTheme.typography.headlineMedium,
@@ -88,6 +94,14 @@ fun MenuScreen(
             ) {
                 Text("NUOVO PRODOTTO")
             }
+        } ?: run {
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = onCreateAddition,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("NUOVA AGGIUNTA")
+            }
         }
         Spacer(modifier = Modifier.height(12.dp))
         OutlinedTextField(
@@ -101,6 +115,7 @@ fun MenuScreen(
         MenuContent(
             state = state,
             onEditProduct = onEditProduct,
+            onEditAddition = onEditAddition,
             modifier = Modifier.weight(1f),
         )
     }
@@ -132,6 +147,7 @@ private fun MenuSectionSelector(
 private fun MenuContent(
     state: MenuUiState,
     onEditProduct: (Long) -> Unit,
+    onEditAddition: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -167,6 +183,7 @@ private fun MenuContent(
                     MenuItemCard(
                         item = item,
                         onEditProduct = onEditProduct,
+                        onEditAddition = onEditAddition,
                     )
                 }
             }
@@ -178,6 +195,7 @@ private fun MenuContent(
 private fun MenuItemCard(
     item: MenuListItem,
     onEditProduct: (Long) -> Unit,
+    onEditAddition: (Long) -> Unit,
 ) {
     val status = if (item.active) "ATTIVO" else "INATTIVO"
     val cardDescription = buildString {
@@ -195,8 +213,11 @@ private fun MenuItemCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = item.productId != null) {
-                item.productId?.let(onEditProduct)
+            .clickable(enabled = item.productId != null || item.additionId != null) {
+                when {
+                    item.productId != null -> onEditProduct(item.productId)
+                    item.additionId != null -> onEditAddition(item.additionId)
+                }
             }
             .semantics { contentDescription = cardDescription },
         colors = CardDefaults.cardColors(

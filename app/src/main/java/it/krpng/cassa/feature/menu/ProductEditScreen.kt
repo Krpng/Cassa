@@ -36,6 +36,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.domain.model.Ingredient
 import it.krpng.cassa.domain.model.ProductCategory
+import it.krpng.cassa.feature.common.CassaBackButton
 
 @Composable
 fun ProductEditRoute(
@@ -104,9 +105,7 @@ fun ProductEditScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            TextButton(onClick = onBack, enabled = !state.isSaving) {
-                Text("ANNULLA")
-            }
+            CassaBackButton(onClick = onBack, enabled = !state.isSaving)
         }
         item {
             Text(

@@ -8,6 +8,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import it.krpng.cassa.feature.archive.ArchiveScreen
 import it.krpng.cassa.feature.home.HomeScreen
+import it.krpng.cassa.feature.menu.AdditionEditRoute
+import it.krpng.cassa.feature.menu.AdditionEditViewModel
 import it.krpng.cassa.feature.menu.MenuRoute
 import it.krpng.cassa.feature.menu.ProductEditRoute
 import it.krpng.cassa.feature.menu.ProductEditViewModel
@@ -50,6 +52,12 @@ fun CassaNavHost() {
                 onEditProduct = { productId ->
                     navController.navigate(ProductEditDestination.createRoute(productId = productId))
                 },
+                onCreateAddition = {
+                    navController.navigate(AdditionEditDestination.createRoute())
+                },
+                onEditAddition = { additionId ->
+                    navController.navigate(AdditionEditDestination.createRoute(additionId))
+                },
             )
         }
         composable(
@@ -65,6 +73,20 @@ fun CassaNavHost() {
             ),
         ) {
             ProductEditRoute(
+                onBack = navController::navigateUp,
+                onSaved = navController::navigateUp,
+            )
+        }
+        composable(
+            route = AdditionEditDestination.routePattern,
+            arguments = listOf(
+                navArgument(AdditionEditViewModel.ADDITION_ID_ARGUMENT) {
+                    type = NavType.LongType
+                    defaultValue = AdditionEditDestination.NEW_ADDITION_ID
+                },
+            ),
+        ) {
+            AdditionEditRoute(
                 onBack = navController::navigateUp,
                 onSaved = navController::navigateUp,
             )
