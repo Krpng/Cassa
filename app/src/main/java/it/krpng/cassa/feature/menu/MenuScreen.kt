@@ -1,5 +1,6 @@
 package it.krpng.cassa.feature.menu
 
+import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,10 +25,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -47,6 +44,7 @@ fun MenuRoute(
     onEditProduct: (Long) -> Unit,
     onCreateAddition: () -> Unit,
     onEditAddition: (Long) -> Unit,
+    onOdsDocumentSelected: (Uri) -> Unit,
     viewModel: MenuViewModel = hiltViewModel(),
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
@@ -58,6 +56,7 @@ fun MenuRoute(
         onEditProduct = onEditProduct,
         onCreateAddition = onCreateAddition,
         onEditAddition = onEditAddition,
+        onOdsDocumentSelected = onOdsDocumentSelected,
         onSectionSelected = viewModel::selectSection,
         onSearchQueryChanged = viewModel::updateSearchQuery,
     )
@@ -71,11 +70,10 @@ fun MenuScreen(
     onEditProduct: (Long) -> Unit,
     onCreateAddition: () -> Unit,
     onEditAddition: (Long) -> Unit,
+    onOdsDocumentSelected: (Uri) -> Unit,
     onSectionSelected: (MenuSection) -> Unit,
     onSearchQueryChanged: (String) -> Unit,
 ) {
-    var hasSelectedOdsDocument by rememberSaveable { mutableStateOf(false) }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -90,15 +88,8 @@ fun MenuScreen(
         )
         Spacer(modifier = Modifier.height(12.dp))
         OdsFilePickerButton(
-            onDocumentSelected = { hasSelectedOdsDocument = true },
+            onDocumentSelected = onOdsDocumentSelected,
         )
-        if (hasSelectedOdsDocument) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "File ODS selezionato.",
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
         Spacer(modifier = Modifier.height(16.dp))
         MenuSectionSelector(
             selectedSection = state.selectedSection,

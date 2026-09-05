@@ -8,6 +8,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import it.krpng.cassa.feature.archive.ArchiveScreen
 import it.krpng.cassa.feature.home.HomeScreen
+import it.krpng.cassa.feature.importmenu.ImportPreviewRoute
+import it.krpng.cassa.feature.importmenu.ImportPreviewViewModel
 import it.krpng.cassa.feature.menu.AdditionEditRoute
 import it.krpng.cassa.feature.menu.AdditionEditViewModel
 import it.krpng.cassa.feature.menu.MenuRoute
@@ -57,6 +59,25 @@ fun CassaNavHost() {
                 },
                 onEditAddition = { additionId ->
                     navController.navigate(AdditionEditDestination.createRoute(additionId))
+                },
+                onOdsDocumentSelected = { documentUri ->
+                    navController.navigate(ImportPreviewDestination.createRoute(documentUri))
+                },
+            )
+        }
+        composable(
+            route = ImportPreviewDestination.routePattern,
+            arguments = listOf(
+                navArgument(ImportPreviewViewModel.DOCUMENT_URI_ARGUMENT) {
+                    type = NavType.StringType
+                },
+            ),
+        ) {
+            ImportPreviewRoute(
+                onBack = navController::navigateUp,
+                onCancel = navController::navigateUp,
+                onConfirm = {
+                    // ODS-010 will connect this action to the atomic Room import.
                 },
             )
         }
