@@ -79,11 +79,109 @@ class OdsMenuParserTest {
 
         val rows = result.sheets.single().rows
         assertEquals(3, rows.size)
-        rows.forEach { row ->
+        rows.forEachIndexed { index, row ->
             assertEquals(3, row.cells.size)
             assertEquals(listOf("A", "A", ""), row.cells.map(RawOdsCell::text))
             assertEquals("1.25", row.cells.last().rawValue)
+            assertEquals(index + 1, row.sourceRow)
         }
+    }
+
+    @Test
+    fun `large trailing empty cell repeat is ignored without expansion`() {
+        val result = parser(OdsParserLimits(maxCellsPerRow = 4)).parse(
+            odsZip(
+                document(
+                    """
+                    <t:table>
+                      <t:table-row>
+                        <t:table-cell><x:p>Prodotto</x:p></t:table-cell>
+                        <t:table-cell t:number-columns-repeated="1024"/>
+                      </t:table-row>
+                    </t:table>
+                    """,
+                ),
+            ),
+        )
+
+        val cells = result.sheets.single().rows.single().cells
+        assertEquals(1, cells.size)
+        assertEquals("Prodotto", cells.single().text)
+    }
+
+    @Test
+    fun `internal empty cell repeat preserves following column position`() {
+        val result = parser(OdsParserLimits(maxCellsPerRow = 4)).parse(
+            odsZip(
+                document(
+                    """
+                    <t:table>
+                      <t:table-row>
+                        <t:table-cell><x:p>A</x:p></t:table-cell>
+                        <t:table-cell t:number-columns-repeated="2"/>
+                        <t:table-cell><x:p>B</x:p></t:table-cell>
+                      </t:table-row>
+                    </t:table>
+                    """,
+                ),
+            ),
+        )
+
+        val cells = result.sheets.single().rows.single().cells
+        assertEquals(4, cells.size)
+        assertEquals(listOf("A", "", "", "B"), cells.map(RawOdsCell::text))
+    }
+
+    @Test
+    fun `large trailing empty row repeat is compacted safely`() {
+        val result = parser(OdsParserLimits(maxRowsPerSheet = 3)).parse(
+            odsZip(
+                document(
+                    """
+                    <t:table>
+                      <t:table-row><t:table-cell><x:p>Dato</x:p></t:table-cell></t:table-row>
+                      <t:table-row t:number-rows-repeated="1048520"/>
+                    </t:table>
+                    """,
+                ),
+            ),
+        )
+
+        val rows = result.sheets.single().rows
+        assertEquals(2, rows.size)
+        assertEquals("Dato", rows[0].cells.single().text)
+        assertEquals(emptyList<RawOdsCell>(), rows[1].cells)
+        assertEquals(2, rows[1].sourceRow)
+    }
+
+    @Test
+    fun `internal empty row repeat preserves source row for following data`() {
+        val parsed = parser(OdsParserLimits(maxRowsPerSheet = 5)).parse(
+            odsZip(
+                document(
+                    """
+                    <t:table t:name="Catalogo">
+                      <t:table-row>
+                        <t:table-cell><x:p>Prodotto</x:p></t:table-cell>
+                        <t:table-cell><x:p>Prezzo Asporto</x:p></t:table-cell>
+                        <t:table-cell><x:p>Categoria</x:p></t:table-cell>
+                      </t:table-row>
+                      <t:table-row t:number-rows-repeated="5"/>
+                      <t:table-row>
+                        <t:table-cell><x:p>Margherita</x:p></t:table-cell>
+                        <t:table-cell><x:p>7,00</x:p></t:table-cell>
+                        <t:table-cell><x:p>Pizze</x:p></t:table-cell>
+                      </t:table-row>
+                    </t:table>
+                    """,
+                ),
+            ),
+        )
+
+        val detected = requireNotNull(OdsSheetDetector().detect(parsed).productSheet)
+        val productRow = OdsProductRowParser().parse(detected).single()
+
+        assertEquals(7, productRow.rowNumber)
     }
 
     @Test
@@ -131,12 +229,14 @@ class OdsMenuParserTest {
     }
 
     @Test
-    fun `rejects repeated rows beyond configured limit without truncation`() {
+    fun `rejects repeated significant rows beyond configured limit without truncation`() {
         val archive = odsZip(
             document(
                 """
                 <t:table>
-                  <t:table-row t:number-rows-repeated="4"><t:table-cell/></t:table-row>
+                  <t:table-row t:number-rows-repeated="4">
+                    <t:table-cell><x:p>dato</x:p></t:table-cell>
+                  </t:table-row>
                 </t:table>
                 """,
             ),
@@ -148,12 +248,14 @@ class OdsMenuParserTest {
     }
 
     @Test
-    fun `rejects repeated cells beyond configured limit without truncation`() {
+    fun `rejects repeated significant cells beyond configured limit without truncation`() {
         val archive = odsZip(
             document(
                 """
                 <t:table>
-                  <t:table-row><t:table-cell t:number-columns-repeated="5"/></t:table-row>
+                  <t:table-row>
+                    <t:table-cell t:number-columns-repeated="5"><x:p>dato</x:p></t:table-cell>
+                  </t:table-row>
                 </t:table>
                 """,
             ),

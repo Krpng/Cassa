@@ -11,6 +11,7 @@ data class RawOdsSheet(
 
 data class RawOdsRow(
     val cells: List<RawOdsCell>,
+    val sourceRow: Int? = null,
 )
 
 data class RawOdsCell(

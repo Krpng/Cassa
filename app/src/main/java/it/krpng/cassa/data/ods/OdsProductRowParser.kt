@@ -35,7 +35,7 @@ class OdsProductRowParser {
             .map { (rowIndex, row) ->
                 RawProductRow(
                     sheetName = sheet.source.name,
-                    rowNumber = rowIndex + 1,
+                    rowNumber = row.sourceRow ?: rowIndex + 1,
                     productName = row.cells.getOrNull(productColumn),
                     takeawayPrice = row.cells.getOrNull(takeawayPriceColumn),
                     category = row.cells.getOrNull(categoryColumn),

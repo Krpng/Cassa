@@ -24,7 +24,7 @@ class OdsAdditionRowParser {
             .map { (rowIndex, row) ->
                 RawAdditionRow(
                     sheetName = sheet.source.name,
-                    rowNumber = rowIndex + 1,
+                    rowNumber = row.sourceRow ?: rowIndex + 1,
                     additionName = row.cells.getOrNull(additionNameColumn),
                     price = row.cells.getOrNull(priceColumn),
                     printedName = row.optionalCell(sheet.columns[AdditionOdsColumn.PRINTED_NAME]),

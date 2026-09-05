@@ -132,27 +132,46 @@ class OdsMenuParser(
         val sheetName = parser.getAttributeValue(TABLE_NAMESPACE, NAME_ATTRIBUTE)
         val rows = mutableListOf<RawOdsRow>()
         var totalCells = initialTotalCells
+        var nextSourceRow = 1L
 
         while (true) {
             when (parser.next()) {
                 XmlPullParser.START_TAG -> if (parser.isStartTag(TABLE_NAMESPACE, ROW_TAG)) {
                     val rowRepeat = parser.positiveRepeat(ROWS_REPEATED_ATTRIBUTE)
-                    if (rows.size.toLong() + rowRepeat > limits.maxRowsPerSheet.toLong()) {
-                        throw OdsExpansionLimitException(
-                            "Il foglio supera il limite di ${limits.maxRowsPerSheet} righe.",
-                        )
-                    }
-
                     val row = parseRow(parser)
-                    val expandedCells = row.cells.size.toLong() * rowRepeat.toLong()
-                    if (totalCells + expandedCells > limits.maxTotalCells.toLong()) {
+                    val lastSourceRow = nextSourceRow + rowRepeat.toLong() - 1L
+                    if (lastSourceRow > Int.MAX_VALUE.toLong()) {
                         throw OdsExpansionLimitException(
-                            "Il documento supera il limite di ${limits.maxTotalCells} celle.",
+                            "La numerazione delle righe supera il limite supportato.",
                         )
                     }
 
-                    repeat(rowRepeat) { rows += row }
-                    totalCells += expandedCells
+                    if (row.isSemanticallyEmpty()) {
+                        if (rows.size >= limits.maxRowsPerSheet) {
+                            throw OdsExpansionLimitException(
+                                "Il foglio supera il limite di ${limits.maxRowsPerSheet} righe materializzate.",
+                            )
+                        }
+                        rows += row.copy(sourceRow = nextSourceRow.toInt())
+                    } else {
+                        if (rows.size.toLong() + rowRepeat > limits.maxRowsPerSheet.toLong()) {
+                            throw OdsExpansionLimitException(
+                                "Il foglio supera il limite di ${limits.maxRowsPerSheet} righe materializzate.",
+                            )
+                        }
+                        val expandedCells = row.cells.size.toLong() * rowRepeat.toLong()
+                        if (expandedCells > limits.maxTotalCells.toLong() - totalCells) {
+                            throw OdsExpansionLimitException(
+                                "Il documento supera il limite di ${limits.maxTotalCells} celle.",
+                            )
+                        }
+
+                        repeat(rowRepeat) { repeatIndex ->
+                            rows += row.copy(sourceRow = nextSourceRow.toInt() + repeatIndex)
+                        }
+                        totalCells += expandedCells
+                    }
+                    nextSourceRow = lastSourceRow + 1L
                 }
 
                 XmlPullParser.END_TAG -> if (parser.isEndTag(TABLE_NAMESPACE, TABLE_TAG)) {
@@ -169,21 +188,31 @@ class OdsMenuParser(
 
     private fun parseRow(parser: XmlPullParser): RawOdsRow {
         val cells = mutableListOf<RawOdsCell>()
+        var pendingEmptyCells = 0L
 
         while (true) {
             when (parser.next()) {
                 XmlPullParser.START_TAG -> if (parser.isStartTag(TABLE_NAMESPACE, CELL_TAG)) {
                     val cellRepeat = parser.positiveRepeat(COLUMNS_REPEATED_ATTRIBUTE)
-                    if (cells.size.toLong() + cellRepeat > limits.maxCellsPerRow.toLong()) {
-                        throw OdsExpansionLimitException(
-                            "Una riga supera il limite di ${limits.maxCellsPerRow} celle.",
-                        )
-                    }
                     val cell = parseCell(parser)
-                    repeat(cellRepeat) { cells += cell }
+                    if (cell.isSemanticallyEmpty()) {
+                        pendingEmptyCells += cellRepeat.toLong()
+                    } else {
+                        val expandedSize =
+                            cells.size.toLong() + pendingEmptyCells + cellRepeat.toLong()
+                        if (expandedSize > limits.maxCellsPerRow.toLong()) {
+                            throw OdsExpansionLimitException(
+                                "Una riga supera il limite di ${limits.maxCellsPerRow} celle significative o posizionali.",
+                            )
+                        }
+                        repeat(pendingEmptyCells.toInt()) { cells += EMPTY_POSITIONAL_CELL }
+                        pendingEmptyCells = 0L
+                        repeat(cellRepeat) { cells += cell }
+                    }
                 }
 
                 XmlPullParser.END_TAG -> if (parser.isEndTag(TABLE_NAMESPACE, ROW_TAG)) {
+                    // Empty repeated cells still pending here are only trailing spreadsheet padding.
                     return RawOdsRow(cells = cells)
                 }
 
@@ -399,5 +428,17 @@ class OdsMenuParser(
         const val STRING_VALUE_TYPE = "string"
         const val FLOAT_VALUE_TYPE = "float"
         const val CURRENCY_VALUE_TYPE = "currency"
+
+        val EMPTY_POSITIONAL_CELL = RawOdsCell(
+            kind = RawOdsCellKind.EMPTY,
+            text = "",
+            rawValue = null,
+            currencyCode = null,
+        )
     }
 }
+
+private fun RawOdsRow.isSemanticallyEmpty(): Boolean = cells.all(RawOdsCell::isSemanticallyEmpty)
+
+private fun RawOdsCell.isSemanticallyEmpty(): Boolean =
+    text.isEmpty() && rawValue == null && currencyCode == null
