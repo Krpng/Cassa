@@ -5,12 +5,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import it.krpng.cassa.data.ods.MenuImportField
+import it.krpng.cassa.data.ods.MenuImportCommitter
+import it.krpng.cassa.data.ods.MenuImportDatabaseException
+import it.krpng.cassa.data.ods.MenuImportPlan
+import it.krpng.cassa.data.ods.MenuImportPlanConflictException
 import it.krpng.cassa.data.ods.MenuImportValidationError
 import it.krpng.cassa.data.ods.MenuImportValidationErrorCode
 import it.krpng.cassa.data.ods.NoRecognizedOdsSheetException
 import it.krpng.cassa.data.ods.OdsImportPreviewResult
 import it.krpng.cassa.data.ods.OdsMenuParseException
 import it.krpng.cassa.data.ods.OdsSheetDetectionException
+import it.krpng.cassa.data.ods.UnexpectedMenuImportException
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,12 +25,14 @@ import kotlinx.coroutines.launch
 
 sealed interface ImportPreviewUiState {
     val canConfirm: Boolean
-        get() = this is Ready
+        get() = this is Ready && !isImporting
 
     data object Loading : ImportPreviewUiState
 
     data class Ready(
         val summary: ImportPreviewSummary,
+        val isImporting: Boolean = false,
+        val importError: String? = null,
     ) : ImportPreviewUiState
 
     data class Invalid(
@@ -35,6 +42,8 @@ sealed interface ImportPreviewUiState {
     data class Failure(
         val message: String,
     ) : ImportPreviewUiState
+
+    data object Imported : ImportPreviewUiState
 }
 
 data class ImportPreviewSummary(
@@ -57,9 +66,11 @@ data class ImportPreviewError(
 class ImportPreviewViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val previewLoader: OdsImportPreviewLoader,
+    private val importCommitter: MenuImportCommitter,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow<ImportPreviewUiState>(ImportPreviewUiState.Loading)
     val uiState: StateFlow<ImportPreviewUiState> = _uiState.asStateFlow()
+    private var readyPlan: MenuImportPlan? = null
 
     init {
         val documentUri = savedStateHandle.get<String>(DOCUMENT_URI_ARGUMENT)
@@ -76,16 +87,19 @@ class ImportPreviewViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 _uiState.value = when (val result = previewLoader.load(documentUri)) {
-                    is OdsImportPreviewResult.Ready -> ImportPreviewUiState.Ready(
-                        summary = ImportPreviewSummary(
-                            productsToCreate = result.plan.productsToCreate.size,
-                            productsToUpdate = result.plan.productsToUpdate.size,
-                            unchangedProducts = result.plan.unchangedProducts.size,
-                            additionsToCreate = result.plan.additionsToCreate.size,
-                            additionsToUpdate = result.plan.additionsToUpdate.size,
-                            unchangedAdditions = result.plan.unchangedAdditions.size,
-                        ),
-                    )
+                    is OdsImportPreviewResult.Ready -> {
+                        readyPlan = result.plan
+                        ImportPreviewUiState.Ready(
+                            summary = ImportPreviewSummary(
+                                productsToCreate = result.plan.productsToCreate.size,
+                                productsToUpdate = result.plan.productsToUpdate.size,
+                                unchangedProducts = result.plan.unchangedProducts.size,
+                                additionsToCreate = result.plan.additionsToCreate.size,
+                                additionsToUpdate = result.plan.additionsToUpdate.size,
+                                unchangedAdditions = result.plan.unchangedAdditions.size,
+                            ),
+                        )
+                    }
 
                     is OdsImportPreviewResult.Invalid -> ImportPreviewUiState.Invalid(
                         errors = result.errors.map { error -> error.toUiError() },
@@ -97,6 +111,35 @@ class ImportPreviewViewModel @Inject constructor(
                 _uiState.value = ImportPreviewUiState.Failure(error.safeMessage())
             }
         }
+    }
+
+    fun confirmImport() {
+        val currentState = _uiState.value as? ImportPreviewUiState.Ready ?: return
+        val plan = readyPlan ?: return
+        if (currentState.isImporting) return
+
+        _uiState.value = currentState.copy(isImporting = true, importError = null)
+        viewModelScope.launch {
+            try {
+                importCommitter.commit(plan)
+                _uiState.value = ImportPreviewUiState.Imported
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: MenuImportPlanConflictException) {
+                showImportError("Il catalogo è cambiato. Riprova l'importazione.")
+            } catch (error: MenuImportDatabaseException) {
+                showImportError("Importazione non riuscita. Nessuna modifica è stata salvata.")
+            } catch (error: UnexpectedMenuImportException) {
+                showImportError("Errore imprevisto. Nessuna modifica è stata salvata.")
+            } catch (error: Exception) {
+                showImportError("Errore imprevisto. Nessuna modifica è stata salvata.")
+            }
+        }
+    }
+
+    private fun showImportError(message: String) {
+        val currentState = _uiState.value as? ImportPreviewUiState.Ready ?: return
+        _uiState.value = currentState.copy(isImporting = false, importError = message)
     }
 
     private fun MenuImportValidationError.toUiError(): ImportPreviewError =

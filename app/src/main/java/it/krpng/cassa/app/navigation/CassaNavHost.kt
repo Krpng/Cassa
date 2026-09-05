@@ -76,9 +76,7 @@ fun CassaNavHost() {
             ImportPreviewRoute(
                 onBack = navController::navigateUp,
                 onCancel = navController::navigateUp,
-                onConfirm = {
-                    // ODS-010 will connect this action to the atomic Room import.
-                },
+                onImported = navController::navigateUp,
             )
         }
         composable(

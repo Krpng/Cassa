@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -32,15 +33,20 @@ import it.krpng.cassa.feature.common.CassaBackButton
 fun ImportPreviewRoute(
     onBack: () -> Unit,
     onCancel: () -> Unit,
-    onConfirm: () -> Unit,
+    onImported: () -> Unit,
     viewModel: ImportPreviewViewModel = hiltViewModel(),
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
+    LaunchedEffect(state) {
+        if (state is ImportPreviewUiState.Imported) {
+            onImported()
+        }
+    }
     ImportPreviewScreen(
         state = state,
         onBack = onBack,
         onCancel = onCancel,
-        onConfirm = onConfirm,
+        onConfirm = viewModel::confirmImport,
     )
 }
 
@@ -78,13 +84,14 @@ fun ImportPreviewScreen(
                     },
                 )
 
-                is ImportPreviewUiState.Ready -> ReadyPreview(state.summary)
+                is ImportPreviewUiState.Ready -> ReadyPreview(state)
                 is ImportPreviewUiState.Invalid -> InvalidPreview(state.errors)
                 is ImportPreviewUiState.Failure -> Text(
                     text = state.message,
                     color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.bodyLarge,
                 )
+                ImportPreviewUiState.Imported -> CircularProgressIndicator()
             }
         }
 
@@ -94,7 +101,13 @@ fun ImportPreviewScreen(
             enabled = state.canConfirm,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("CONFERMA IMPORTAZIONE")
+            Text(
+                if ((state as? ImportPreviewUiState.Ready)?.isImporting == true) {
+                    "IMPORTAZIONE IN CORSO…"
+                } else {
+                    "CONFERMA IMPORTAZIONE"
+                },
+            )
         }
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedButton(
@@ -107,7 +120,8 @@ fun ImportPreviewScreen(
 }
 
 @Composable
-private fun ReadyPreview(summary: ImportPreviewSummary) {
+private fun ReadyPreview(state: ImportPreviewUiState.Ready) {
+    val summary = state.summary
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -129,6 +143,15 @@ private fun ReadyPreview(summary: ImportPreviewSummary) {
                 text = "Gli elementi assenti dal file resteranno invariati.",
                 style = MaterialTheme.typography.bodyMedium,
             )
+        }
+        state.importError?.let { message ->
+            item {
+                Text(
+                    text = message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
         }
     }
 }

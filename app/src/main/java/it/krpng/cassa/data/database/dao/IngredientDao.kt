@@ -24,6 +24,9 @@ interface IngredientDao {
     @Query("SELECT * FROM ingredients WHERE id = :ingredientId LIMIT 1")
     suspend fun getById(ingredientId: Long): IngredientEntity?
 
+    @Query("SELECT * FROM ingredients WHERE normalizedName = :normalizedName LIMIT 1")
+    suspend fun getByNormalizedName(normalizedName: String): IngredientEntity?
+
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(ingredient: IngredientEntity): Long
 

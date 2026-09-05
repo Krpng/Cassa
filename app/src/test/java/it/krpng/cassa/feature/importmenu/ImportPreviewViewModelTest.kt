@@ -6,6 +6,7 @@ import it.krpng.cassa.data.ods.AdditionImportUpdate
 import it.krpng.cassa.data.ods.AdditionImportValues
 import it.krpng.cassa.data.ods.ImportFieldUpdate
 import it.krpng.cassa.data.ods.MalformedOdsArchiveException
+import it.krpng.cassa.data.ods.MenuImportCommitter
 import it.krpng.cassa.data.ods.MenuImportField
 import it.krpng.cassa.data.ods.MenuImportPlan
 import it.krpng.cassa.data.ods.MenuImportValidationError
@@ -16,13 +17,16 @@ import it.krpng.cassa.data.ods.ProductImportUpdate
 import it.krpng.cassa.data.ods.ProductImportValues
 import it.krpng.cassa.data.ods.UnchangedAdditionImport
 import it.krpng.cassa.data.ods.UnchangedProductImport
+import it.krpng.cassa.data.ods.UnexpectedMenuImportException
 import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.domain.model.ProductCategory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -119,7 +123,7 @@ class ImportPreviewViewModelTest {
     @Test
     fun `missing navigation argument fails without invoking pipeline`() = runTest(mainDispatcher) {
         val loader = FakeLoader(OdsImportPreviewResult.Ready(plan()))
-        val viewModel = ImportPreviewViewModel(SavedStateHandle(), loader)
+        val viewModel = ImportPreviewViewModel(SavedStateHandle(), loader, FakeCommitter())
 
         advanceUntilIdle()
 
@@ -130,14 +134,87 @@ class ImportPreviewViewModelTest {
         )
     }
 
+    @Test
+    fun `confirmation commits the prepared plan once and reports completion`() =
+        runTest(mainDispatcher) {
+            val expectedPlan = plan()
+            val committer = FakeCommitter()
+            val viewModel = viewModel(
+                loader = FakeLoader(OdsImportPreviewResult.Ready(expectedPlan)),
+                committer = committer,
+            )
+            advanceUntilIdle()
+
+            viewModel.confirmImport()
+            advanceUntilIdle()
+
+            assertEquals(listOf(expectedPlan), committer.committedPlans)
+            assertEquals(ImportPreviewUiState.Imported, viewModel.uiState.value)
+        }
+
+    @Test
+    fun `double tap while import is running starts only one commit`() =
+        runTest(mainDispatcher) {
+            val gate = CompletableDeferred<Unit>()
+            val committer = FakeCommitter(gate = gate)
+            val viewModel = viewModel(
+                loader = FakeLoader(OdsImportPreviewResult.Ready(plan())),
+                committer = committer,
+            )
+            advanceUntilIdle()
+
+            viewModel.confirmImport()
+            viewModel.confirmImport()
+            runCurrent()
+
+            assertEquals(1, committer.committedPlans.size)
+            assertFalse(viewModel.uiState.value.canConfirm)
+
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(ImportPreviewUiState.Imported, viewModel.uiState.value)
+        }
+
+    @Test
+    fun `commit failure stays in preview and permits retry`() = runTest(mainDispatcher) {
+        val committer = FakeCommitter(
+            failures = ArrayDeque(
+                listOf(UnexpectedMenuImportException(IllegalStateException("test"))),
+            ),
+        )
+        val viewModel = viewModel(
+            loader = FakeLoader(OdsImportPreviewResult.Ready(plan())),
+            committer = committer,
+        )
+        advanceUntilIdle()
+
+        viewModel.confirmImport()
+        advanceUntilIdle()
+
+        val failedState = viewModel.uiState.value as ImportPreviewUiState.Ready
+        assertTrue(failedState.canConfirm)
+        assertEquals(
+            "Errore imprevisto. Nessuna modifica è stata salvata.",
+            failedState.importError,
+        )
+
+        viewModel.confirmImport()
+        advanceUntilIdle()
+
+        assertEquals(2, committer.committedPlans.size)
+        assertEquals(ImportPreviewUiState.Imported, viewModel.uiState.value)
+    }
+
     private fun viewModel(
         loader: OdsImportPreviewLoader,
         uri: String = "content://menu/test.ods",
+        committer: MenuImportCommitter = FakeCommitter(),
     ): ImportPreviewViewModel = ImportPreviewViewModel(
         savedStateHandle = SavedStateHandle(
             mapOf(ImportPreviewViewModel.DOCUMENT_URI_ARGUMENT to uri),
         ),
         previewLoader = loader,
+        importCommitter = committer,
     )
 
     private fun error(
@@ -195,6 +272,19 @@ class ImportPreviewViewModelTest {
             requestedUris += documentUri
             if (result is Exception) throw result
             return result as OdsImportPreviewResult
+        }
+    }
+
+    private class FakeCommitter(
+        private val gate: CompletableDeferred<Unit>? = null,
+        private val failures: ArrayDeque<Exception> = ArrayDeque(),
+    ) : MenuImportCommitter {
+        val committedPlans = mutableListOf<MenuImportPlan>()
+
+        override suspend fun commit(plan: MenuImportPlan) {
+            committedPlans += plan
+            gate?.await()
+            if (failures.isNotEmpty()) throw failures.removeFirst()
         }
     }
 }

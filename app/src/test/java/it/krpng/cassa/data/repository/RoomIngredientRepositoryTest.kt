@@ -164,6 +164,9 @@ class RoomIngredientRepositoryTest {
             return result
         }
 
+        override suspend fun getByNormalizedName(normalizedName: String): IngredientEntity? =
+            result?.takeIf { it.normalizedName == normalizedName }
+
         override suspend fun insert(ingredient: IngredientEntity): Long {
             insertedIngredient = ingredient
             return insertedId
