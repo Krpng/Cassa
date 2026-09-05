@@ -1,12 +1,16 @@
 package it.krpng.cassa.app.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import it.krpng.cassa.feature.archive.ArchiveScreen
 import it.krpng.cassa.feature.home.HomeScreen
 import it.krpng.cassa.feature.menu.MenuRoute
+import it.krpng.cassa.feature.menu.ProductEditRoute
+import it.krpng.cassa.feature.menu.ProductEditViewModel
 import it.krpng.cassa.feature.order.NewOrderScreen
 import it.krpng.cassa.feature.settings.SettingsScreen
 import it.krpng.cassa.feature.todayorders.TodayOrdersScreen
@@ -38,7 +42,32 @@ fun CassaNavHost() {
             ArchiveScreen(onBack = navController::navigateUp)
         }
         composable(CassaDestination.MENU.route) {
-            MenuRoute(onBack = navController::navigateUp)
+            MenuRoute(
+                onBack = navController::navigateUp,
+                onCreateProduct = { category ->
+                    navController.navigate(ProductEditDestination.createRoute(category = category))
+                },
+                onEditProduct = { productId ->
+                    navController.navigate(ProductEditDestination.createRoute(productId = productId))
+                },
+            )
+        }
+        composable(
+            route = ProductEditDestination.routePattern,
+            arguments = listOf(
+                navArgument(ProductEditViewModel.PRODUCT_ID_ARGUMENT) {
+                    type = NavType.LongType
+                    defaultValue = ProductEditDestination.NEW_PRODUCT_ID
+                },
+                navArgument(ProductEditViewModel.CATEGORY_ARGUMENT) {
+                    type = NavType.StringType
+                },
+            ),
+        ) {
+            ProductEditRoute(
+                onBack = navController::navigateUp,
+                onSaved = navController::navigateUp,
+            )
         }
         composable(CassaDestination.SETTINGS.route) {
             SettingsScreen(onBack = navController::navigateUp)

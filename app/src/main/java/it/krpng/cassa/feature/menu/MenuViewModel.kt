@@ -30,6 +30,7 @@ enum class MenuSection(
 
 data class MenuListItem(
     val key: String,
+    val productId: Long?,
     val name: String,
     val price: Money,
     val active: Boolean,
@@ -130,6 +131,7 @@ class MenuViewModel @Inject constructor(
     private fun Product.toMenuItem(matchedIngredient: String? = null): MenuListItem =
         MenuListItem(
             key = "product-$id",
+            productId = id,
             name = name,
             price = price,
             active = active,
@@ -138,6 +140,7 @@ class MenuViewModel @Inject constructor(
 
     private fun Addition.toMenuItem(): MenuListItem = MenuListItem(
         key = "addition-$id",
+        productId = null,
         name = name,
         price = price,
         active = active,

@@ -3,6 +3,7 @@ package it.krpng.cassa.data.repository
 import it.krpng.cassa.core.normalization.TextNormalizer
 import it.krpng.cassa.data.database.dao.ProductDao
 import it.krpng.cassa.data.database.entity.ProductEntity
+import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.repository.ProductRepository
 import java.time.Instant
@@ -26,11 +27,16 @@ class RoomProductRepository @Inject constructor(
     override suspend fun getById(productId: Long): Product? =
         productDao.getWithIngredients(productId)?.toDomain()
 
-    override suspend fun create(product: Product): Long =
-        productDao.insert(product.toWritableEntity(productId = 0))
+    override suspend fun create(product: Product): Long = productDao.insertWithIngredients(
+        product = product.toWritableEntity(productId = 0),
+        ingredients = product.toWritableIngredients(productId = 0),
+    )
 
     override suspend fun update(product: Product): Boolean =
-        productDao.update(product.toWritableEntity(productId = product.id)) == 1
+        productDao.updateWithIngredients(
+            product = product.toWritableEntity(productId = product.id),
+            ingredients = product.toWritableIngredients(productId = product.id),
+        ) == 1
 
     override suspend fun activate(productId: Long, updatedAt: Instant): Boolean =
         updateActive(productId = productId, active = true, updatedAt = updatedAt)
@@ -53,4 +59,13 @@ class RoomProductRepository @Inject constructor(
             id = productId,
             normalizedName = TextNormalizer.normalize(name),
         )
+
+    private fun Product.toWritableIngredients(productId: Long): List<ProductIngredientEntity> =
+        ingredients.map { productIngredient ->
+            ProductIngredientEntity(
+                productId = productId,
+                ingredientId = productIngredient.ingredient.id,
+                displayOrder = productIngredient.displayOrder,
+            )
+        }
 }

@@ -4,11 +4,14 @@ import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
+import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.data.database.relation.FullOrder
 import it.krpng.cassa.data.database.relation.OrderWithItems
 import it.krpng.cassa.data.database.relation.ProductWithIngredients
 import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.model.Ingredient
 import it.krpng.cassa.domain.model.ProductCategory
+import it.krpng.cassa.domain.model.ProductIngredient
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -99,6 +102,29 @@ class RoomRepositoriesTest {
     }
 
     @Test
+    fun `create product persists ordered ingredient composition with generated id`() = runTest {
+        val dao = FakeProductDao(insertedId = 73)
+        val repository = RoomProductRepository(dao)
+        val product = productWithIngredients().toDomain().copy(
+            ingredients = listOf(
+                ProductIngredient(ingredient(id = 8, name = "Basilico"), displayOrder = 0),
+                ProductIngredient(ingredient(id = 5, name = "Pomodoro"), displayOrder = 1),
+            ),
+        )
+
+        repository.create(product)
+
+        assertEquals(listOf(73L), dao.deletedProductIngredientIds)
+        assertEquals(
+            listOf(
+                ProductIngredientEntity(73, 8, 0),
+                ProductIngredientEntity(73, 5, 1),
+            ),
+            dao.insertedProductIngredients,
+        )
+    }
+
+    @Test
     fun `update product preserves id and refreshes normalized identity`() = runTest {
         val dao = FakeProductDao(updatedRows = 1)
         val repository = RoomProductRepository(dao)
@@ -113,6 +139,7 @@ class RoomRepositoriesTest {
         assertTrue(updated)
         assertEquals(42L, dao.updatedProduct?.id)
         assertEquals("calzone", dao.updatedProduct?.normalizedName)
+        assertEquals(listOf(42L), dao.deletedProductIngredientIds)
     }
 
     @Test
@@ -144,6 +171,7 @@ class RoomRepositoriesTest {
         assertFalse(repository.activate(product.id, Instant.EPOCH))
         assertFalse(repository.deactivate(product.id, Instant.EPOCH))
         assertNull(dao.insertedProduct)
+        assertTrue(dao.deletedProductIngredientIds.isEmpty())
     }
 
     @Test
@@ -163,6 +191,8 @@ class RoomRepositoriesTest {
         var insertedProduct: ProductEntity? = null
         var updatedProduct: ProductEntity? = null
         val activeUpdates = mutableListOf<ActiveUpdate>()
+        val deletedProductIngredientIds = mutableListOf<Long>()
+        val insertedProductIngredients = mutableListOf<ProductIngredientEntity>()
 
         override fun observeAllWithIngredients(): Flow<List<ProductWithIngredients>> =
             activeResults
@@ -183,6 +213,16 @@ class RoomRepositoriesTest {
         override suspend fun update(product: ProductEntity): Int {
             updatedProduct = product
             return updatedRows
+        }
+
+        override suspend fun deleteProductIngredients(productId: Long) {
+            deletedProductIngredientIds += productId
+        }
+
+        override suspend fun insertProductIngredients(
+            ingredients: List<ProductIngredientEntity>,
+        ) {
+            insertedProductIngredients += ingredients
         }
 
         override suspend fun updateActive(
@@ -228,6 +268,13 @@ class RoomRepositoriesTest {
             updatedAt = 2_000,
         ),
         ingredients = emptyList(),
+    )
+
+    private fun ingredient(id: Long, name: String): Ingredient = Ingredient(
+        id = id,
+        name = name,
+        normalizedName = name.lowercase(),
+        active = true,
     )
 
     private fun fullOrder(): FullOrder = FullOrder(

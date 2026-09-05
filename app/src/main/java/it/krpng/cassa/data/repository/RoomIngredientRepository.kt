@@ -7,10 +7,11 @@ import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.domain.model.Ingredient
 import it.krpng.cassa.domain.model.ProductIngredient
 import it.krpng.cassa.domain.repository.IngredientRepository
+import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class RoomIngredientRepository(
+class RoomIngredientRepository @Inject constructor(
     private val ingredientDao: IngredientDao,
 ) : IngredientRepository {
     override fun observeActive(): Flow<List<Ingredient>> =

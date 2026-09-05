@@ -9,6 +9,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import it.krpng.cassa.data.database.CassaDatabase
 import it.krpng.cassa.data.database.dao.AdditionDao
+import it.krpng.cassa.data.database.dao.IngredientDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import javax.inject.Singleton
 
@@ -30,6 +31,9 @@ object DatabaseModule {
 
     @Provides
     fun provideAdditionDao(database: CassaDatabase): AdditionDao = database.additionDao()
+
+    @Provides
+    fun provideIngredientDao(database: CassaDatabase): IngredientDao = database.ingredientDao()
 
     private const val DATABASE_NAME = "cassa.db"
 }

@@ -7,6 +7,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import it.krpng.cassa.data.database.entity.ProductEntity
+import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.data.database.relation.ProductWithIngredients
 import kotlinx.coroutines.flow.Flow
 
@@ -35,6 +36,47 @@ interface ProductDao {
 
     @Update(onConflict = OnConflictStrategy.ABORT)
     suspend fun update(product: ProductEntity): Int
+
+    @Query("DELETE FROM product_ingredients WHERE productId = :productId")
+    suspend fun deleteProductIngredients(productId: Long)
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertProductIngredients(ingredients: List<ProductIngredientEntity>)
+
+    @Transaction
+    suspend fun insertWithIngredients(
+        product: ProductEntity,
+        ingredients: List<ProductIngredientEntity>,
+    ): Long {
+        val productId = insert(product)
+        replaceProductIngredients(productId, ingredients)
+        return productId
+    }
+
+    @Transaction
+    suspend fun updateWithIngredients(
+        product: ProductEntity,
+        ingredients: List<ProductIngredientEntity>,
+    ): Int {
+        val updatedRows = update(product)
+        if (updatedRows == 1) {
+            replaceProductIngredients(product.id, ingredients)
+        }
+        return updatedRows
+    }
+
+    @Transaction
+    suspend fun replaceProductIngredients(
+        productId: Long,
+        ingredients: List<ProductIngredientEntity>,
+    ) {
+        deleteProductIngredients(productId)
+        if (ingredients.isNotEmpty()) {
+            insertProductIngredients(
+                ingredients.map { ingredient -> ingredient.copy(productId = productId) },
+            )
+        }
+    }
 
     @Query(
         """
