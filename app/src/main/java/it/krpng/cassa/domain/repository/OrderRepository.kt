@@ -13,6 +13,8 @@ interface OrderRepository {
     suspend fun createDraft(): CreateDraftResult
 
     suspend fun deleteDraft(orderId: String): DeleteDraftResult
+
+    suspend fun replaceDraft(orderId: String): ReplaceDraftResult
 }
 
 sealed interface CreateDraftResult {
@@ -25,4 +27,12 @@ sealed interface DeleteDraftResult {
     data object Deleted : DeleteDraftResult
 
     data object NotFoundOrNotDraft : DeleteDraftResult
+}
+
+sealed interface ReplaceDraftResult {
+    data class Created(val draft: Order) : ReplaceDraftResult
+
+    data object OriginalNotFoundOrNotDraft : ReplaceDraftResult
+
+    data object Conflict : ReplaceDraftResult
 }

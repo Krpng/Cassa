@@ -8,6 +8,7 @@ import it.krpng.cassa.data.database.relation.OrderWithItems
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
+import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
@@ -102,6 +103,43 @@ class RoomOrderRepositoryTest {
             RoomOrderRepository(protectedDao, CountingClock(FIXED_NOW)).deleteDraft("accepted-id"),
         )
         assertEquals("accepted-id", protectedDao.deletedDraftId)
+    }
+
+    @Test
+    fun `replace draft delegates one atomic DAO operation and returns the new draft`() = runTest {
+        val dao = FakeOrderDao(insertResult = 1, deleteResult = 1)
+        val clock = CountingClock(FIXED_NOW)
+        val repository = RoomOrderRepository(dao, clock)
+
+        val result = repository.replaceDraft("draft-id")
+
+        assertTrue(result is ReplaceDraftResult.Created)
+        val created = (result as ReplaceDraftResult.Created).draft
+        assertEquals("draft-id", dao.deletedDraftId)
+        assertEquals(created.id, dao.insertedDraft?.id)
+        assertEquals(FIXED_NOW, created.createdAt)
+        assertEquals(FIXED_NOW, created.updatedAt)
+        assertEquals(1, clock.calls)
+    }
+
+    @Test
+    fun `replace draft reports missing original without a replacement`() = runTest {
+        val dao = FakeOrderDao(insertResult = 1, deleteResult = 0)
+        val repository = RoomOrderRepository(dao, CountingClock(FIXED_NOW))
+
+        assertSame(
+            ReplaceDraftResult.OriginalNotFoundOrNotDraft,
+            repository.replaceDraft("missing-id"),
+        )
+        assertNull(dao.insertedDraft)
+    }
+
+    @Test
+    fun `replace draft maps insert conflict explicitly`() = runTest {
+        val dao = FakeOrderDao(insertResult = -1, deleteResult = 1)
+        val repository = RoomOrderRepository(dao, CountingClock(FIXED_NOW))
+
+        assertSame(ReplaceDraftResult.Conflict, repository.replaceDraft("draft-id"))
     }
 
     private class CountingClock(

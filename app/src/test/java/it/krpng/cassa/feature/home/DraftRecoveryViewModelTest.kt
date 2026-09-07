@@ -8,6 +8,7 @@ import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -172,6 +173,9 @@ class DraftRecoveryViewModelTest {
             }
             return deleteResult
         }
+
+        override suspend fun replaceDraft(orderId: String): ReplaceDraftResult =
+            ReplaceDraftResult.OriginalNotFoundOrNotDraft
     }
 
     private fun emptyDraft(): Order = Order(

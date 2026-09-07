@@ -8,12 +8,15 @@ import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -59,57 +62,167 @@ class HomeViewModelTest {
             assertEquals(3, state.activeDraft?.itemCount)
             assertEquals(Money.ofCents(2_200), state.activeDraft?.total)
             assertEquals(0, repository.createCalls)
+            assertEquals(0, repository.replaceCalls)
             assertEquals(0, repository.deleteCalls)
         }
 
     @Test
-    fun `missing and empty drafts do not produce a banner or writes`() =
+    fun `new order without a draft creates once and opens the created id`() =
         runTest(mainDispatcher) {
-            val source = MutableStateFlow<Order?>(null)
-            val repository = FakeOrderRepository(source)
+            val created = emptyDraft("new-draft-id")
+            val repository = FakeOrderRepository(
+                activeDrafts = MutableStateFlow(null),
+                createResult = CreateDraftResult.Created(created),
+            )
             val viewModel = HomeViewModel(repository)
-            collectState(viewModel)
+            val event = async(UnconfinedTestDispatcher(testScheduler)) {
+                viewModel.navigationEvents.first()
+            }
+
+            viewModel.startNewOrder()
+            viewModel.startNewOrder()
             advanceUntilIdle()
 
-            assertNull(viewModel.uiState.value.activeDraft)
+            assertEquals(HomeNavigationEvent.OpenDraft("new-draft-id"), event.await())
+            assertEquals(1, repository.createCalls)
+            assertEquals(0, repository.replaceCalls)
+            assertEquals(0, repository.deleteCalls)
+        }
 
-            source.value = emptyDraft()
+    @Test
+    fun `existing non-empty draft opens conflict and resume keeps the same id without writes`() =
+        runTest(mainDispatcher) {
+            val repository = FakeOrderRepository(MutableStateFlow(draftWithItems()))
+            val viewModel = HomeViewModel(repository)
+
+            viewModel.startNewOrder()
             advanceUntilIdle()
 
-            assertNull(viewModel.uiState.value.activeDraft)
+            assertEquals("draft-id", viewModel.uiState.value.newOrderConflict?.draftId)
+            assertEquals(0, repository.createCalls)
+
+            val event = async(UnconfinedTestDispatcher(testScheduler)) {
+                viewModel.navigationEvents.first()
+            }
+            viewModel.resumeConflictingDraft()
+
+            assertEquals(HomeNavigationEvent.OpenDraft("draft-id"), event.await())
+            assertNull(viewModel.uiState.value.newOrderConflict)
+            assertEquals(0, repository.createCalls)
+            assertEquals(0, repository.replaceCalls)
+            assertEquals(0, repository.deleteCalls)
+        }
+
+    @Test
+    fun `existing empty draft is reopened without conflict or replacement`() =
+        runTest(mainDispatcher) {
+            val repository = FakeOrderRepository(MutableStateFlow(emptyDraft("empty-draft-id")))
+            val viewModel = HomeViewModel(repository)
+            val event = async(UnconfinedTestDispatcher(testScheduler)) {
+                viewModel.navigationEvents.first()
+            }
+
+            viewModel.startNewOrder()
+            advanceUntilIdle()
+
+            assertEquals(HomeNavigationEvent.OpenDraft("empty-draft-id"), event.await())
+            assertNull(viewModel.uiState.value.newOrderConflict)
+            assertEquals(0, repository.createCalls)
+            assertEquals(0, repository.replaceCalls)
+        }
+
+    @Test
+    fun `cancel conflict leaves the existing draft unchanged`() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(draftWithItems()))
+        val viewModel = HomeViewModel(repository)
+
+        viewModel.startNewOrder()
+        advanceUntilIdle()
+        viewModel.cancelNewOrderConflict()
+
+        assertNull(viewModel.uiState.value.newOrderConflict)
+        assertEquals("draft-id", repository.activeDrafts.value?.id)
+        assertEquals(0, repository.createCalls)
+        assertEquals(0, repository.replaceCalls)
+        assertEquals(0, repository.deleteCalls)
+    }
+
+    @Test
+    fun `confirmed replacement is one repository operation and opens the new id once`() =
+        runTest(mainDispatcher) {
+            val replacement = emptyDraft("replacement-id")
+            val repository = FakeOrderRepository(
+                activeDrafts = MutableStateFlow(draftWithItems()),
+                replaceResult = ReplaceDraftResult.Created(replacement),
+            )
+            val viewModel = HomeViewModel(repository)
+
+            viewModel.startNewOrder()
+            advanceUntilIdle()
+            viewModel.requestReplaceDraft()
+            assertTrue(viewModel.uiState.value.showReplaceConfirmation)
+
+            val event = async(UnconfinedTestDispatcher(testScheduler)) {
+                viewModel.navigationEvents.first()
+            }
+            viewModel.confirmReplaceDraft()
+            viewModel.confirmReplaceDraft()
+            advanceUntilIdle()
+
+            assertEquals(HomeNavigationEvent.OpenDraft("replacement-id"), event.await())
+            assertEquals(listOf("draft-id"), repository.replacedIds)
+            assertEquals(1, repository.replaceCalls)
             assertEquals(0, repository.createCalls)
             assertEquals(0, repository.deleteCalls)
         }
 
     @Test
-    fun `home follows repository emissions while preserving the same draft id`() =
+    fun `replacement failure keeps conflict recoverable and does not create separately`() =
         runTest(mainDispatcher) {
-            val source = MutableStateFlow<Order?>(null)
-            val repository = FakeOrderRepository(source)
+            val repository = FakeOrderRepository(
+                activeDrafts = MutableStateFlow(draftWithItems()),
+                replaceResult = ReplaceDraftResult.OriginalNotFoundOrNotDraft,
+            )
             val viewModel = HomeViewModel(repository)
-            collectState(viewModel)
+
+            viewModel.startNewOrder()
+            advanceUntilIdle()
+            viewModel.requestReplaceDraft()
+            viewModel.confirmReplaceDraft()
             advanceUntilIdle()
 
-            source.value = draftWithItems()
-            advanceUntilIdle()
-            assertEquals("draft-id", viewModel.uiState.value.activeDraft?.draftId)
-
-            source.value = draftWithItems().copy(total = Money.ofCents(2_500))
-            advanceUntilIdle()
-            assertEquals("draft-id", viewModel.uiState.value.activeDraft?.draftId)
-            assertEquals(Money.ofCents(2_500), viewModel.uiState.value.activeDraft?.total)
-
-            source.value = null
-            advanceUntilIdle()
-            assertNull(viewModel.uiState.value.activeDraft)
+            val state = viewModel.uiState.value
+            assertEquals("draft-id", state.newOrderConflict?.draftId)
+            assertFalse(state.isNewOrderOperationInProgress)
+            assertEquals("L'ordine in corso non è più disponibile.", state.errorMessage)
+            assertEquals(1, repository.replaceCalls)
             assertEquals(0, repository.createCalls)
             assertEquals(0, repository.deleteCalls)
         }
 
     @Test
-    fun `repository failure becomes a safe home error`() = runTest(mainDispatcher) {
+    fun `create conflict reloads persisted draft and never creates a second one`() =
+        runTest(mainDispatcher) {
+            val repository = FakeOrderRepository(
+                activeDrafts = MutableStateFlow(null),
+                createResult = CreateDraftResult.AlreadyExists,
+                activeDraftAfterCreateConflict = draftWithItems(),
+            )
+            val viewModel = HomeViewModel(repository)
+
+            viewModel.startNewOrder()
+            advanceUntilIdle()
+
+            assertEquals("draft-id", viewModel.uiState.value.newOrderConflict?.draftId)
+            assertEquals(1, repository.createCalls)
+            assertEquals(0, repository.replaceCalls)
+        }
+
+    @Test
+    fun `repository observation failure becomes a safe home error`() = runTest(mainDispatcher) {
         val repository = FakeOrderRepository(
-            activeDrafts = flow { throw IllegalStateException("database unavailable") },
+            activeDrafts = MutableStateFlow(null),
+            observedDrafts = flow { throw IllegalStateException("database unavailable") },
         )
         val viewModel = HomeViewModel(repository)
         collectState(viewModel)
@@ -120,8 +233,6 @@ class HomeViewModelTest {
         assertFalse(state.isLoading)
         assertNull(state.activeDraft)
         assertEquals("Impossibile controllare l'ordine in corso.", state.errorMessage)
-        assertEquals(0, repository.createCalls)
-        assertEquals(0, repository.deleteCalls)
     }
 
     private fun kotlinx.coroutines.test.TestScope.collectState(viewModel: HomeViewModel) {
@@ -131,30 +242,49 @@ class HomeViewModelTest {
     }
 
     private class FakeOrderRepository(
-        private val activeDrafts: Flow<Order?>,
+        val activeDrafts: MutableStateFlow<Order?>,
+        private val createResult: CreateDraftResult = CreateDraftResult.AlreadyExists,
+        private val replaceResult: ReplaceDraftResult =
+            ReplaceDraftResult.OriginalNotFoundOrNotDraft,
+        private val activeDraftAfterCreateConflict: Order? = null,
+        private val observedDrafts: Flow<Order?> = activeDrafts,
     ) : OrderRepository {
         var createCalls: Int = 0
+        var replaceCalls: Int = 0
         var deleteCalls: Int = 0
+        val replacedIds = mutableListOf<String>()
 
-        override suspend fun getById(orderId: String): Order? = null
+        override suspend fun getById(orderId: String): Order? = activeDrafts.value
 
-        override fun observeActiveDraft(): Flow<Order?> = activeDrafts
+        override fun observeActiveDraft(): Flow<Order?> = observedDrafts
 
-        override suspend fun getActiveDraft(): Order? = null
+        override suspend fun getActiveDraft(): Order? = activeDrafts.value
 
         override suspend fun createDraft(): CreateDraftResult {
             createCalls += 1
-            return CreateDraftResult.AlreadyExists
+            if (createResult == CreateDraftResult.AlreadyExists) {
+                activeDraftAfterCreateConflict?.let { activeDrafts.value = it }
+            }
+            return createResult
         }
 
         override suspend fun deleteDraft(orderId: String): DeleteDraftResult {
             deleteCalls += 1
             return DeleteDraftResult.NotFoundOrNotDraft
         }
+
+        override suspend fun replaceDraft(orderId: String): ReplaceDraftResult {
+            replaceCalls += 1
+            replacedIds += orderId
+            if (replaceResult is ReplaceDraftResult.Created) {
+                activeDrafts.value = replaceResult.draft
+            }
+            return replaceResult
+        }
     }
 
-    private fun emptyDraft(): Order = Order(
-        id = "empty-draft-id",
+    private fun emptyDraft(id: String = "empty-draft-id"): Order = Order(
+        id = id,
         status = OrderStatus.DRAFT,
         displayNumber = null,
         numberingMode = null,
@@ -169,8 +299,7 @@ class HomeViewModelTest {
         items = emptyList(),
     )
 
-    private fun draftWithItems(): Order = emptyDraft().copy(
-        id = "draft-id",
+    private fun draftWithItems(): Order = emptyDraft("draft-id").copy(
         total = Money.ofCents(2_200),
         items = listOf(
             orderItem(id = "item-1", quantity = 2, finalUnitPrice = Money.ofCents(700)),

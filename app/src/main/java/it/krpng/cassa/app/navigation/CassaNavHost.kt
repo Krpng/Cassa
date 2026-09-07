@@ -50,8 +50,7 @@ fun CassaNavHost() {
         }
         composable(CassaDestination.HOME.route) {
             HomeRoute(
-                onNewOrder = { navController.navigate(CassaDestination.NEW_ORDER.route) },
-                onResumeDraft = { navController.navigate(CassaDestination.NEW_ORDER.route) },
+                onOpenDraft = { navController.navigate(CassaDestination.NEW_ORDER.route) },
                 onTodayOrders = { navController.navigate(CassaDestination.TODAY_ORDERS.route) },
                 onArchive = { navController.navigate(CassaDestination.ARCHIVE.route) },
                 onMenu = { navController.navigate(CassaDestination.MENU.route) },

@@ -50,4 +50,30 @@ interface OrderDao {
         """,
     )
     suspend fun deleteDraft(orderId: String): Int
+
+    @Transaction
+    suspend fun replaceDraft(
+        orderId: String,
+        replacement: OrderEntity,
+    ): ReplaceDraftDatabaseResult {
+        if (deleteDraft(orderId) != 1) {
+            return ReplaceDraftDatabaseResult.OriginalNotFoundOrNotDraft
+        }
+        if (insertDraft(replacement) == INSERT_CONFLICT) {
+            throw DraftReplacementConflictException()
+        }
+        return ReplaceDraftDatabaseResult.Replaced
+    }
+
+    private companion object {
+        const val INSERT_CONFLICT = -1L
+    }
 }
+
+sealed interface ReplaceDraftDatabaseResult {
+    data object Replaced : ReplaceDraftDatabaseResult
+
+    data object OriginalNotFoundOrNotDraft : ReplaceDraftDatabaseResult
+}
+
+class DraftReplacementConflictException : IllegalStateException()

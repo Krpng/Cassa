@@ -6,10 +6,12 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import it.krpng.cassa.core.datetime.ClockProvider
 import it.krpng.cassa.data.database.CassaDatabase
+import it.krpng.cassa.data.database.dao.DraftReplacementConflictException
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
+import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import java.time.Instant
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -71,6 +73,47 @@ class RoomOrderRepositoryTest {
             DeleteDraftResult.NotFoundOrNotDraft,
             repository.deleteDraft(accepted.id),
         )
+        assertEquals(accepted.id, repository.getById(accepted.id)?.id)
+    }
+
+    @Test
+    fun replaceDraftIsAtomicAndLeavesAcceptedOrdersUntouched() = runBlocking {
+        val original = (repository.createDraft() as CreateDraftResult.Created).draft
+        val accepted = acceptedOrder()
+        database.orderDao().insertDraft(accepted)
+
+        val result = repository.replaceDraft(original.id)
+
+        assertTrue(result is ReplaceDraftResult.Created)
+        val replacement = (result as ReplaceDraftResult.Created).draft
+        assertNull(repository.getById(original.id))
+        assertEquals(replacement.id, repository.getActiveDraft()?.id)
+        assertEquals(accepted.id, repository.getById(accepted.id)?.id)
+        assertEquals(listOf(accepted.id, replacement.id).sorted(), allOrderIds().sorted())
+    }
+
+    @Test
+    fun failedReplacementInsertRollsBackTheDraftDeletion() = runBlocking {
+        val original = (repository.createDraft() as CreateDraftResult.Created).draft
+        val accepted = acceptedOrder()
+        database.orderDao().insertDraft(accepted)
+        val collidingReplacement = accepted.copy(
+            status = OrderStatus.DRAFT,
+            draftSlot = 1,
+            displayNumber = null,
+            businessDate = null,
+            acceptedAt = null,
+        )
+
+        try {
+            database.orderDao().replaceDraft(original.id, collidingReplacement)
+            throw AssertionError("Expected replacement conflict")
+        } catch (_: DraftReplacementConflictException) {
+            // Expected: Room rolls the transaction back when the replacement insert fails.
+        }
+
+        assertEquals(original.id, repository.getActiveDraft()?.id)
+        assertEquals(original.id, repository.getById(original.id)?.id)
         assertEquals(accepted.id, repository.getById(accepted.id)?.id)
     }
 

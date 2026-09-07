@@ -3,12 +3,15 @@ package it.krpng.cassa.data.repository
 import it.krpng.cassa.core.datetime.ClockProvider
 import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.data.database.dao.OrderDao
+import it.krpng.cassa.data.database.dao.DraftReplacementConflictException
+import it.krpng.cassa.data.database.dao.ReplaceDraftDatabaseResult
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -28,22 +31,7 @@ class RoomOrderRepository @Inject constructor(
         orderDao.getActiveDraft()?.toDomain()
 
     override suspend fun createDraft(): CreateDraftResult {
-        val now = clockProvider.now()
-        val draft = Order(
-            id = UUID.randomUUID().toString(),
-            status = OrderStatus.DRAFT,
-            displayNumber = null,
-            numberingMode = null,
-            numberingCycle = null,
-            businessDate = null,
-            createdAt = now,
-            updatedAt = now,
-            acceptedAt = null,
-            total = Money.ZERO,
-            generalNote = null,
-            sourceOrderId = null,
-            items = emptyList(),
-        )
+        val draft = newDraft()
         val insertResult = orderDao.insertDraft(draft.toDraftEntity())
 
         return if (insertResult == INSERT_CONFLICT) {
@@ -59,6 +47,38 @@ class RoomOrderRepository @Inject constructor(
         } else {
             DeleteDraftResult.NotFoundOrNotDraft
         }
+
+    override suspend fun replaceDraft(orderId: String): ReplaceDraftResult {
+        val replacement = newDraft()
+        return try {
+            when (orderDao.replaceDraft(orderId, replacement.toDraftEntity())) {
+                ReplaceDraftDatabaseResult.Replaced -> ReplaceDraftResult.Created(replacement)
+                ReplaceDraftDatabaseResult.OriginalNotFoundOrNotDraft ->
+                    ReplaceDraftResult.OriginalNotFoundOrNotDraft
+            }
+        } catch (_: DraftReplacementConflictException) {
+            ReplaceDraftResult.Conflict
+        }
+    }
+
+    private fun newDraft(): Order {
+        val now = clockProvider.now()
+        return Order(
+            id = UUID.randomUUID().toString(),
+            status = OrderStatus.DRAFT,
+            displayNumber = null,
+            numberingMode = null,
+            numberingCycle = null,
+            businessDate = null,
+            createdAt = now,
+            updatedAt = now,
+            acceptedAt = null,
+            total = Money.ZERO,
+            generalNote = null,
+            sourceOrderId = null,
+            items = emptyList(),
+        )
+    }
 
     private fun Order.toDraftEntity(): OrderEntity = toDatabaseModel().order
 
