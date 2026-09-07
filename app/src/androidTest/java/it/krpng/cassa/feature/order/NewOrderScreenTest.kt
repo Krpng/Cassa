@@ -27,6 +27,8 @@ class NewOrderScreenTest {
                     onRetry = {},
                     onSearchQueryChanged = {},
                     onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
                 )
             }
         }
@@ -48,6 +50,8 @@ class NewOrderScreenTest {
                     onRetry = {},
                     onSearchQueryChanged = {},
                     onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
                 )
             }
         }
@@ -68,6 +72,8 @@ class NewOrderScreenTest {
                     onRetry = { retryClicks += 1 },
                     onSearchQueryChanged = {},
                     onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
                 )
             }
         }
@@ -79,7 +85,7 @@ class NewOrderScreenTest {
     }
 
     @Test
-    fun searchFiltersAndIngredientMatchAreVisibleWithoutQuickAddBehavior() {
+    fun searchFiltersAndIngredientMatchRemainVisibleWithProductActions() {
         var enteredQuery: String? = null
         var selectedFilter: OrderCatalogFilter? = null
         composeRule.setContent {
@@ -99,6 +105,8 @@ class NewOrderScreenTest {
                     onRetry = {},
                     onSearchQueryChanged = { enteredQuery = it },
                     onFilterSelected = { selectedFilter = it },
+                    onProductSelected = {},
+                    onQuickAdd = {},
                 )
             }
         }
@@ -110,13 +118,52 @@ class NewOrderScreenTest {
         composeRule.onNodeWithText("Quattro formaggi").assertIsDisplayed()
         composeRule.onNodeWithText("Contiene: Parmigiano Reggiano").assertIsDisplayed()
         composeRule.onNodeWithText("9,00 €").assertIsDisplayed()
-        composeRule.onNodeWithText("+").assertDoesNotExist()
+        composeRule.onNodeWithText("+").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Ricerca prodotti e ingredienti")
             .performTextInput("parm")
 
         composeRule.runOnIdle {
             assertEquals(OrderCatalogFilter.DRINKS, selectedFilter)
             assertEquals("parm", enteredQuery)
+        }
+    }
+
+    @Test
+    fun productRowTapAndQuickAddDispatchDistinctActionsForTheSameProduct() {
+        val openedProductIds = mutableListOf<Long>()
+        val quickAddedProductIds = mutableListOf<Long>()
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        catalogItems = listOf(
+                            OrderCatalogItem(
+                                productId = 42,
+                                name = "Margherita",
+                                price = it.krpng.cassa.core.money.Money.ofCents(700),
+                            ),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = { openedProductIds += it },
+                    onQuickAdd = { quickAddedProductIds += it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Apri dettagli Margherita").performClick()
+        composeRule.runOnIdle {
+            assertEquals(listOf(42L), openedProductIds)
+            assertEquals(emptyList<Long>(), quickAddedProductIds)
+        }
+
+        composeRule.onNodeWithContentDescription("Aggiungi Margherita").performClick()
+        composeRule.runOnIdle {
+            assertEquals(listOf(42L), openedProductIds)
+            assertEquals(listOf(42L), quickAddedProductIds)
         }
     }
 
