@@ -36,6 +36,7 @@ class RoomMenuImportCommitter @Inject constructor(
     private suspend fun applyProducts(plan: MenuImportPlan, timestamp: Long) {
         plan.productsToCreate.forEach { operation ->
             val values = operation.values
+            val flags = MenuImportFlagPolicy.forNewProduct()
             val productId = database.productDao().insert(
                 ProductEntity(
                     name = values.name,
@@ -43,6 +44,8 @@ class RoomMenuImportCommitter @Inject constructor(
                     printedName = values.printedName.requiredCreateValue("printedName"),
                     category = values.category,
                     priceCents = values.price.cents,
+                    automaticExtrasPricing = flags.automaticExtrasPricing,
+                    active = flags.active,
                     createdAt = timestamp,
                     updatedAt = timestamp,
                 ),
@@ -61,6 +64,10 @@ class RoomMenuImportCommitter @Inject constructor(
                     "Il prodotto ${operation.existingProductId} non esiste più.",
                 )
             val values = operation.values
+            val flags = MenuImportFlagPolicy.forExistingProduct(
+                active = existing.active,
+                automaticExtrasPricing = existing.automaticExtrasPricing,
+            )
             val updatedRows = database.productDao().update(
                 existing.copy(
                     name = values.name,
@@ -68,6 +75,8 @@ class RoomMenuImportCommitter @Inject constructor(
                     printedName = values.printedName.resolve(existing.printedName),
                     category = values.category,
                     priceCents = values.price.cents,
+                    automaticExtrasPricing = flags.automaticExtrasPricing,
+                    active = flags.active,
                     updatedAt = timestamp,
                 ),
             )
@@ -85,12 +94,14 @@ class RoomMenuImportCommitter @Inject constructor(
     private suspend fun applyAdditions(plan: MenuImportPlan, timestamp: Long) {
         plan.additionsToCreate.forEach { operation ->
             val values = operation.values
+            val flags = MenuImportFlagPolicy.forNewAddition()
             database.additionDao().insert(
                 AdditionEntity(
                     name = values.name,
                     normalizedName = values.normalizedName,
                     printedName = values.printedName.requiredCreateValue("printedName"),
                     priceCents = values.price.cents,
+                    active = flags.active,
                     createdAt = timestamp,
                     updatedAt = timestamp,
                 ),
@@ -103,12 +114,14 @@ class RoomMenuImportCommitter @Inject constructor(
                     "L'aggiunta ${operation.existingAdditionId} non esiste più.",
                 )
             val values = operation.values
+            val flags = MenuImportFlagPolicy.forExistingAddition(active = existing.active)
             val updatedRows = database.additionDao().update(
                 existing.copy(
                     name = values.name,
                     normalizedName = values.normalizedName,
                     printedName = values.printedName.resolve(existing.printedName),
                     priceCents = values.price.cents,
+                    active = flags.active,
                     updatedAt = timestamp,
                 ),
             )

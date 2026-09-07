@@ -73,7 +73,13 @@ class RoomMenuImportCommitterTest {
             product(name = "Invariato", normalizedName = "invariato", updatedAt = 3_000),
         )
         val absentProductId = insertProduct(
-            product(name = "Assente ODS", normalizedName = "assente ods", updatedAt = 4_000),
+            product(
+                name = "Assente ODS",
+                normalizedName = "assente ods",
+                active = false,
+                automaticExtrasPricing = false,
+                updatedAt = 4_000,
+            ),
         )
         val updatedAdditionId = database.additionDao().insert(
             addition(
@@ -84,7 +90,11 @@ class RoomMenuImportCommitterTest {
             ),
         )
         val absentAdditionId = database.additionDao().insert(
-            addition(name = "Aggiunta assente", normalizedName = "aggiunta assente"),
+            addition(
+                name = "Aggiunta assente",
+                normalizedName = "aggiunta assente",
+                active = false,
+            ),
         )
         val unchangedAdditionId = database.additionDao().insert(
             addition(
@@ -195,7 +205,10 @@ class RoomMenuImportCommitterTest {
         assertFalse(database.ingredientDao().getByNormalizedName("mozzarella")!!.active)
         assertNotNull(database.ingredientDao().getById(oldIngredientId))
         assertEquals(3_000, database.productDao().getWithIngredients(unchangedProductId)!!.product.updatedAt)
-        assertEquals(4_000, database.productDao().getWithIngredients(absentProductId)!!.product.updatedAt)
+        val absentProduct = database.productDao().getWithIngredients(absentProductId)!!.product
+        assertEquals(4_000, absentProduct.updatedAt)
+        assertFalse(absentProduct.active)
+        assertFalse(absentProduct.automaticExtrasPricing)
 
         val updatedAddition = database.additionDao().getById(updatedAdditionId)!!
         assertEquals(updatedAdditionId, updatedAddition.id)
@@ -203,9 +216,99 @@ class RoomMenuImportCommitterTest {
         assertEquals("AGG ESISTENTE", updatedAddition.printedName)
         assertFalse(updatedAddition.active)
         val additions = database.additionDao().observeAll().first()
-        assertEquals(0, additions.single { it.normalizedName == "aggiunta zero" }.priceCents)
-        assertNotNull(database.additionDao().getById(absentAdditionId))
+        val createdAddition = additions.single { it.normalizedName == "aggiunta zero" }
+        assertEquals(0, createdAddition.priceCents)
+        assertEquals(true, createdAddition.active)
+        assertFalse(database.additionDao().getById(absentAdditionId)!!.active)
         assertEquals(3_000, database.additionDao().getById(unchangedAdditionId)!!.updatedAt)
+    }
+
+    @Test
+    fun reimportPreservesManualFlagsWhileUpdatingImportedFields() = runBlocking {
+        committer.commit(
+            MenuImportPlan(
+                productsToCreate = listOf(
+                    ProductImportCreate(
+                        "Prodotti",
+                        2,
+                        productValues(
+                            name = "Pìzza Test",
+                            normalizedName = "pizza test",
+                        ),
+                    ),
+                ),
+                productsToUpdate = emptyList(),
+                unchangedProducts = emptyList(),
+                additionsToCreate = listOf(
+                    AdditionImportCreate(
+                        "Aggiunte",
+                        2,
+                        additionValues("Olìve", "olive"),
+                    ),
+                ),
+                additionsToUpdate = emptyList(),
+                unchangedAdditions = emptyList(),
+            ),
+        )
+        val createdProduct = database.productDao().observeAllWithIngredients().first().single().product
+        val createdAddition = database.additionDao().observeAll().first().single()
+        assertEquals(true, createdProduct.active)
+        assertEquals(true, createdProduct.automaticExtrasPricing)
+        assertEquals(true, createdAddition.active)
+
+        database.productDao().update(
+            createdProduct.copy(
+                automaticExtrasPricing = false,
+                active = false,
+                updatedAt = 20_000,
+            ),
+        )
+        database.additionDao().update(
+            createdAddition.copy(active = false, updatedAt = 20_000),
+        )
+
+        committer.commit(
+            MenuImportPlan(
+                productsToCreate = emptyList(),
+                productsToUpdate = listOf(
+                    ProductImportUpdate(
+                        existingProductId = createdProduct.id,
+                        sourceSheet = "Prodotti",
+                        sourceRow = 2,
+                        values = productValues(
+                            name = "Pizza Test",
+                            normalizedName = "pizza test",
+                            category = ProductCategory.FRITTURA,
+                        ),
+                    ),
+                ),
+                unchangedProducts = emptyList(),
+                additionsToCreate = emptyList(),
+                additionsToUpdate = listOf(
+                    AdditionImportUpdate(
+                        existingAdditionId = createdAddition.id,
+                        sourceSheet = "Aggiunte",
+                        sourceRow = 2,
+                        values = additionValues("Olive", "olive", price = Money.ofCents(300)),
+                    ),
+                ),
+                unchangedAdditions = emptyList(),
+            ),
+        )
+
+        val reimportedProduct = database.productDao().getWithIngredients(createdProduct.id)!!.product
+        assertEquals(createdProduct.id, reimportedProduct.id)
+        assertEquals("Pizza Test", reimportedProduct.name)
+        assertEquals(ProductCategory.FRITTURA, reimportedProduct.category)
+        assertEquals(850, reimportedProduct.priceCents)
+        assertFalse(reimportedProduct.active)
+        assertFalse(reimportedProduct.automaticExtrasPricing)
+
+        val reimportedAddition = database.additionDao().getById(createdAddition.id)!!
+        assertEquals(createdAddition.id, reimportedAddition.id)
+        assertEquals("Olive", reimportedAddition.name)
+        assertEquals(300, reimportedAddition.priceCents)
+        assertFalse(reimportedAddition.active)
     }
 
     @Test

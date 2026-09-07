@@ -78,6 +78,35 @@ class MenuImportPlannerTest {
     }
 
     @Test
+    fun `manual flags do not turn an identical reimport into an update or duplicate`() {
+        val existingProduct = product(
+            id = 71,
+            name = "Pizza Test",
+            active = false,
+            automaticExtrasPricing = false,
+        )
+        val existingAddition = addition(
+            id = 72,
+            name = "Olive",
+            active = false,
+        )
+
+        val plan = plan(
+            products = listOf(validatedProduct(name = "Pizza Test")),
+            additions = listOf(validatedAddition(name = "Olive")),
+            existingProducts = listOf(existingProduct),
+            existingAdditions = listOf(existingAddition),
+        )
+
+        assertEquals(listOf(71L), plan.unchangedProducts.map { it.existingProductId })
+        assertEquals(listOf(72L), plan.unchangedAdditions.map { it.existingAdditionId })
+        assertTrue(plan.productsToCreate.isEmpty())
+        assertTrue(plan.productsToUpdate.isEmpty())
+        assertTrue(plan.additionsToCreate.isEmpty())
+        assertTrue(plan.additionsToUpdate.isEmpty())
+    }
+
+    @Test
     fun `ODS-009 existing product absent from ODS produces no operation`() {
         val existing = product(id = 9, name = "Prodotto locale", active = false)
 
