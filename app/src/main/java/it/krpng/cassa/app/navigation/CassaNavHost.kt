@@ -7,6 +7,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import it.krpng.cassa.feature.archive.ArchiveScreen
+import it.krpng.cassa.feature.home.DraftRecoveryRoute
 import it.krpng.cassa.feature.home.HomeScreen
 import it.krpng.cassa.feature.importmenu.ImportPreviewRoute
 import it.krpng.cassa.feature.importmenu.ImportPreviewViewModel
@@ -25,8 +26,28 @@ fun CassaNavHost() {
 
     NavHost(
         navController = navController,
-        startDestination = CassaDestination.HOME.route,
+        startDestination = CassaDestination.DRAFT_RECOVERY.route,
     ) {
+        composable(CassaDestination.DRAFT_RECOVERY.route) {
+            DraftRecoveryRoute(
+                onContinueToHome = {
+                    navController.navigate(CassaDestination.HOME.route) {
+                        popUpTo(CassaDestination.DRAFT_RECOVERY.route) {
+                            inclusive = true
+                        }
+                        launchSingleTop = true
+                    }
+                },
+                onResumeDraft = {
+                    navController.navigate(CassaDestination.NEW_ORDER.route) {
+                        popUpTo(CassaDestination.DRAFT_RECOVERY.route) {
+                            inclusive = true
+                        }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
         composable(CassaDestination.HOME.route) {
             HomeScreen(
                 onNewOrder = { navController.navigate(CassaDestination.NEW_ORDER.route) },
