@@ -256,6 +256,8 @@ class HomeViewModelTest {
 
         override suspend fun getById(orderId: String): Order? = activeDrafts.value
 
+        override fun observeById(orderId: String): Flow<Order?> = activeDrafts
+
         override fun observeActiveDraft(): Flow<Order?> = observedDrafts
 
         override suspend fun getActiveDraft(): Order? = activeDrafts.value

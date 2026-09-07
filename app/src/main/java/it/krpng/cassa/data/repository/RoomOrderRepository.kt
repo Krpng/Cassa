@@ -24,6 +24,9 @@ class RoomOrderRepository @Inject constructor(
     override suspend fun getById(orderId: String): Order? =
         orderDao.getFullOrder(orderId)?.toDomain()
 
+    override fun observeById(orderId: String): Flow<Order?> =
+        orderDao.observeFullOrder(orderId).map { order -> order?.toDomain() }
+
     override fun observeActiveDraft(): Flow<Order?> =
         orderDao.observeActiveDraft().map { draft -> draft?.toDomain() }
 

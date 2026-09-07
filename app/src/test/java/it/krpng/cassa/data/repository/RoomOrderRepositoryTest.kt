@@ -78,6 +78,16 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
+    fun `observe by id delegates the requested aggregate and maps updates`() = runTest {
+        val fullOrder = fullDraft()
+        val dao = FakeOrderDao(observedOrder = fullOrder)
+        val repository = RoomOrderRepository(dao, CountingClock(FIXED_NOW))
+
+        assertEquals("draft-id", repository.observeById("draft-id").first()?.id)
+        assertEquals("draft-id", dao.observedOrderId)
+    }
+
+    @Test
     fun `get and observe active draft preserve absence as null`() = runTest {
         val repository = RoomOrderRepository(
             orderDao = FakeOrderDao(activeDraft = null),
@@ -155,15 +165,22 @@ class RoomOrderRepositoryTest {
 
     private class FakeOrderDao(
         private val activeDraft: FullOrder? = null,
+        private val observedOrder: FullOrder? = null,
         private val insertResult: Long = 1,
         private val deleteResult: Int = 0,
     ) : OrderDao {
         var insertedDraft: OrderEntity? = null
         var deletedDraftId: String? = null
+        var observedOrderId: String? = null
 
         override suspend fun getWithItems(orderId: String): OrderWithItems? = null
 
         override suspend fun getFullOrder(orderId: String): FullOrder? = null
+
+        override fun observeFullOrder(orderId: String): Flow<FullOrder?> {
+            observedOrderId = orderId
+            return flowOf(observedOrder)
+        }
 
         override fun observeActiveDraft(): Flow<FullOrder?> = flowOf(activeDraft)
 

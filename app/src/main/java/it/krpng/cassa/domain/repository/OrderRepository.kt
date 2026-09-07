@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.Flow
 interface OrderRepository {
     suspend fun getById(orderId: String): Order?
 
+    fun observeById(orderId: String): Flow<Order?>
+
     fun observeActiveDraft(): Flow<Order?>
 
     suspend fun getActiveDraft(): Order?

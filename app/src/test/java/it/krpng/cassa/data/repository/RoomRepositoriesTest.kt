@@ -256,6 +256,8 @@ class RoomRepositoriesTest {
             return result
         }
 
+        override fun observeFullOrder(orderId: String): Flow<FullOrder?> = flowOf(result)
+
         override fun observeActiveDraft(): Flow<FullOrder?> = flowOf(result)
 
         override suspend fun getActiveDraft(): FullOrder? = result

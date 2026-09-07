@@ -16,7 +16,8 @@ import it.krpng.cassa.feature.menu.AdditionEditViewModel
 import it.krpng.cassa.feature.menu.MenuRoute
 import it.krpng.cassa.feature.menu.ProductEditRoute
 import it.krpng.cassa.feature.menu.ProductEditViewModel
-import it.krpng.cassa.feature.order.NewOrderScreen
+import it.krpng.cassa.feature.order.NewOrderRoute
+import it.krpng.cassa.feature.order.NewOrderViewModel
 import it.krpng.cassa.feature.settings.SettingsScreen
 import it.krpng.cassa.feature.todayorders.TodayOrdersScreen
 
@@ -38,27 +39,37 @@ fun CassaNavHost() {
                         launchSingleTop = true
                     }
                 },
-                onResumeDraft = {
-                    navController.navigate(CassaDestination.NEW_ORDER.route) {
+                onResumeDraft = { draftId ->
+                    navController.navigate(CassaDestination.HOME.route) {
                         popUpTo(CassaDestination.DRAFT_RECOVERY.route) {
                             inclusive = true
                         }
                         launchSingleTop = true
                     }
+                    navController.navigate(NewOrderDestination.createRoute(draftId))
                 },
             )
         }
         composable(CassaDestination.HOME.route) {
             HomeRoute(
-                onOpenDraft = { navController.navigate(CassaDestination.NEW_ORDER.route) },
+                onOpenDraft = { draftId ->
+                    navController.navigate(NewOrderDestination.createRoute(draftId))
+                },
                 onTodayOrders = { navController.navigate(CassaDestination.TODAY_ORDERS.route) },
                 onArchive = { navController.navigate(CassaDestination.ARCHIVE.route) },
                 onMenu = { navController.navigate(CassaDestination.MENU.route) },
                 onSettings = { navController.navigate(CassaDestination.SETTINGS.route) },
             )
         }
-        composable(CassaDestination.NEW_ORDER.route) {
-            NewOrderScreen(onBack = navController::navigateUp)
+        composable(
+            route = NewOrderDestination.routePattern,
+            arguments = listOf(
+                navArgument(NewOrderViewModel.DRAFT_ID_ARGUMENT) {
+                    type = NavType.StringType
+                },
+            ),
+        ) {
+            NewOrderRoute(onBack = navController::navigateUp)
         }
         composable(CassaDestination.TODAY_ORDERS.route) {
             TodayOrdersScreen(onBack = navController::navigateUp)

@@ -21,6 +21,10 @@ interface OrderDao {
     suspend fun getFullOrder(orderId: String): FullOrder?
 
     @Transaction
+    @Query("SELECT * FROM orders WHERE id = :orderId LIMIT 1")
+    fun observeFullOrder(orderId: String): Flow<FullOrder?>
+
+    @Transaction
     @Query(
         """
         SELECT * FROM orders

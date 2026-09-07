@@ -157,6 +157,8 @@ class DraftRecoveryViewModelTest {
 
         override suspend fun getById(orderId: String): Order? = activeDraft.value
 
+        override fun observeById(orderId: String): Flow<Order?> = activeDraft
+
         override fun observeActiveDraft(): Flow<Order?> = activeDraft
 
         override suspend fun getActiveDraft(): Order? = activeDraft.value

@@ -65,6 +65,16 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
+    fun observeByIdLoadsThePersistedDraftThroughRoom() = runBlocking {
+        val created = repository.createDraft() as CreateDraftResult.Created
+
+        val observed = repository.observeById(created.draft.id).first()
+
+        assertEquals(created.draft.id, observed?.id)
+        assertEquals(OrderStatus.DRAFT, observed?.status)
+    }
+
+    @Test
     fun deleteDraftCannotDeleteAcceptedOrder() = runBlocking {
         val accepted = acceptedOrder()
         database.orderDao().insertDraft(accepted)
