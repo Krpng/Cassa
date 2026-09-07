@@ -1,5 +1,6 @@
 package it.krpng.cassa.data.repository
 
+import it.krpng.cassa.core.datetime.SystemClockProvider
 import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import it.krpng.cassa.data.database.entity.OrderEntity
@@ -75,7 +76,7 @@ class RoomRepositoriesTest {
     @Test
     fun `order repository delegates to full aggregate query`() = runTest {
         val dao = FakeOrderDao(fullOrder())
-        val repository = RoomOrderRepository(dao)
+        val repository = RoomOrderRepository(dao, SystemClockProvider)
 
         val result = repository.getById("order-id")
 
@@ -177,7 +178,9 @@ class RoomRepositoriesTest {
     @Test
     fun `repositories preserve missing row as null`() = runTest {
         assertNull(RoomProductRepository(FakeProductDao(null)).getById(1))
-        assertNull(RoomOrderRepository(FakeOrderDao(null)).getById("missing"))
+        assertNull(
+            RoomOrderRepository(FakeOrderDao(null), SystemClockProvider).getById("missing"),
+        )
     }
 
     private class FakeProductDao(
@@ -252,6 +255,14 @@ class RoomRepositoriesTest {
             requestedFullOrderId = orderId
             return result
         }
+
+        override fun observeActiveDraft(): Flow<FullOrder?> = flowOf(result)
+
+        override suspend fun getActiveDraft(): FullOrder? = result
+
+        override suspend fun insertDraft(order: OrderEntity): Long = 1
+
+        override suspend fun deleteDraft(orderId: String): Int = 0
     }
 
     private fun productWithIngredients(): ProductWithIngredients = ProductWithIngredients(

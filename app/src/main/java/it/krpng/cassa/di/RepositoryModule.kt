@@ -6,9 +6,11 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import it.krpng.cassa.data.repository.RoomAdditionRepository
 import it.krpng.cassa.data.repository.RoomIngredientRepository
+import it.krpng.cassa.data.repository.RoomOrderRepository
 import it.krpng.cassa.data.repository.RoomProductRepository
 import it.krpng.cassa.domain.repository.AdditionRepository
 import it.krpng.cassa.domain.repository.IngredientRepository
+import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
 import javax.inject.Singleton
 
@@ -32,4 +34,10 @@ abstract class RepositoryModule {
     abstract fun bindIngredientRepository(
         repository: RoomIngredientRepository,
     ): IngredientRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindOrderRepository(
+        repository: RoomOrderRepository,
+    ): OrderRepository
 }

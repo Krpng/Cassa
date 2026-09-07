@@ -10,6 +10,7 @@ import dagger.hilt.components.SingletonComponent
 import it.krpng.cassa.data.database.CassaDatabase
 import it.krpng.cassa.data.database.dao.AdditionDao
 import it.krpng.cassa.data.database.dao.IngredientDao
+import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import javax.inject.Singleton
 
@@ -34,6 +35,9 @@ object DatabaseModule {
 
     @Provides
     fun provideIngredientDao(database: CassaDatabase): IngredientDao = database.ingredientDao()
+
+    @Provides
+    fun provideOrderDao(database: CassaDatabase): OrderDao = database.orderDao()
 
     private const val DATABASE_NAME = "cassa.db"
 }
