@@ -2,13 +2,18 @@ package it.krpng.cassa.feature.order
 
 import androidx.lifecycle.SavedStateHandle
 import it.krpng.cassa.core.money.Money
+import it.krpng.cassa.core.normalization.TextNormalizer
+import it.krpng.cassa.domain.model.Ingredient
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.OrderItem
 import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductCategory
+import it.krpng.cassa.domain.model.ProductIngredient
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -53,13 +58,13 @@ class NewOrderViewModelTest {
 
             val initial = viewModel.uiState.value as NewOrderUiState.Ready
             assertEquals("draft-id", initial.draftId)
-            assertTrue(initial.isEmpty)
+            assertTrue(initial.isDraftEmpty)
             assertEquals(listOf("draft-id"), repository.observedIds)
 
             orders.value = draft().copy(items = listOf(orderItem()))
             advanceUntilIdle()
 
-            assertFalse((viewModel.uiState.value as NewOrderUiState.Ready).isEmpty)
+            assertFalse((viewModel.uiState.value as NewOrderUiState.Ready).isDraftEmpty)
             assertEquals(0, repository.createCalls)
             assertEquals(0, repository.deleteCalls)
             assertEquals(0, repository.replaceCalls)
@@ -101,6 +106,84 @@ class NewOrderViewModelTest {
     }
 
     @Test
+    fun `active catalog is reactive and category filters combine with blank query`() =
+        runTest(mainDispatcher) {
+            val products = MutableStateFlow(
+                listOf(
+                    product(1, "Margherita", ProductCategory.PIZZA),
+                    product(2, "Crocchè", ProductCategory.FRITTURA),
+                    product(3, "Acqua", ProductCategory.BIBITA),
+                    product(4, "Pizza inattiva", ProductCategory.PIZZA, active = false),
+                ),
+            )
+            val viewModel = viewModel(
+                repository = FakeOrderRepository(MutableStateFlow(draft())),
+                draftId = "draft-id",
+                products = products,
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf("Acqua", "Crocchè", "Margherita"),
+                (viewModel.uiState.value as NewOrderUiState.Ready).catalogItems.map { it.name },
+            )
+
+            viewModel.selectFilter(OrderCatalogFilter.PIZZAS)
+            advanceUntilIdle()
+            assertEquals(
+                listOf("Margherita"),
+                (viewModel.uiState.value as NewOrderUiState.Ready).catalogItems.map { it.name },
+            )
+
+            products.value = products.value + product(5, "Marinara", ProductCategory.PIZZA)
+            advanceUntilIdle()
+            assertEquals(
+                listOf("Margherita", "Marinara"),
+                (viewModel.uiState.value as NewOrderUiState.Ready).catalogItems.map { it.name },
+            )
+        }
+
+    @Test
+    fun `search reuses documented ranking and exposes ingredient match reason`() =
+        runTest(mainDispatcher) {
+            val parmigiano = ProductIngredient(
+                ingredient = ingredient(10, "Parmigiano Reggiano"),
+                displayOrder = 0,
+            )
+            val products = MutableStateFlow(
+                listOf(
+                    product(1, "Pizza Margherita", ProductCategory.PIZZA),
+                    product(2, "Marinara", ProductCategory.PIZZA),
+                    product(
+                        3,
+                        "Quattro formaggi",
+                        ProductCategory.PIZZA,
+                        ingredients = listOf(parmigiano),
+                    ),
+                ),
+            )
+            val viewModel = viewModel(
+                repository = FakeOrderRepository(MutableStateFlow(draft())),
+                draftId = "draft-id",
+                products = products,
+            )
+
+            viewModel.updateSearchQuery("  MAR  ")
+            advanceUntilIdle()
+            assertEquals(
+                listOf("Marinara", "Pizza Margherita"),
+                (viewModel.uiState.value as NewOrderUiState.Ready).catalogItems.map { it.name },
+            )
+
+            viewModel.updateSearchQuery("PARMÌGIANO")
+            advanceUntilIdle()
+            val ingredientMatch =
+                (viewModel.uiState.value as NewOrderUiState.Ready).catalogItems.single()
+            assertEquals("Quattro formaggi", ingredientMatch.name)
+            assertEquals("Parmigiano Reggiano", ingredientMatch.matchedIngredient)
+        }
+
+    @Test
     fun `repository failure is safe and retry re-subscribes to the same id`() =
         runTest(mainDispatcher) {
             val repository = FakeOrderRepository(
@@ -110,7 +193,7 @@ class NewOrderViewModelTest {
             advanceUntilIdle()
 
             assertEquals(
-                NewOrderUiState.Failure("Impossibile caricare l'ordine."),
+                NewOrderUiState.Failure("Impossibile caricare l'ordine o il catalogo."),
                 viewModel.uiState.value,
             )
 
@@ -125,11 +208,13 @@ class NewOrderViewModelTest {
     private fun viewModel(
         repository: OrderRepository,
         draftId: String,
+        products: Flow<List<Product>> = MutableStateFlow(emptyList()),
     ): NewOrderViewModel = NewOrderViewModel(
         savedStateHandle = SavedStateHandle(
             mapOf(NewOrderViewModel.DRAFT_ID_ARGUMENT to draftId),
         ),
         orderRepository = repository,
+        productRepository = FakeProductRepository(products),
     )
 
     private class FakeOrderRepository(
@@ -167,6 +252,26 @@ class NewOrderViewModelTest {
         }
     }
 
+    private class FakeProductRepository(
+        private val products: Flow<List<Product>>,
+    ) : ProductRepository {
+        override fun observeAll(): Flow<List<Product>> = products
+
+        override fun observeActive(): Flow<List<Product>> = products
+
+        override suspend fun getById(productId: Long): Product? = null
+
+        override suspend fun create(product: Product): Long = error("Not used")
+
+        override suspend fun update(product: Product): Boolean = error("Not used")
+
+        override suspend fun activate(productId: Long, updatedAt: Instant): Boolean =
+            error("Not used")
+
+        override suspend fun deactivate(productId: Long, updatedAt: Instant): Boolean =
+            error("Not used")
+    }
+
     private fun draft(): Order = Order(
         id = "draft-id",
         status = OrderStatus.DRAFT,
@@ -199,5 +304,32 @@ class NewOrderViewModelTest {
         createdSequence = 1,
         additions = emptyList(),
         removals = emptyList(),
+    )
+
+    private fun product(
+        id: Long,
+        name: String,
+        category: ProductCategory,
+        active: Boolean = true,
+        ingredients: List<ProductIngredient> = emptyList(),
+    ): Product = Product(
+        id = id,
+        name = name,
+        normalizedName = TextNormalizer.normalize(name),
+        printedName = null,
+        category = category,
+        price = Money.ofCents(700),
+        automaticExtrasPricing = true,
+        active = active,
+        createdAt = Instant.EPOCH,
+        updatedAt = Instant.EPOCH,
+        ingredients = ingredients,
+    )
+
+    private fun ingredient(id: Long, name: String): Ingredient = Ingredient(
+        id = id,
+        name = name,
+        normalizedName = TextNormalizer.normalize(name),
+        active = true,
     )
 }
