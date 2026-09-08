@@ -37,10 +37,51 @@ class NewOrderScreenTest {
         }
 
         composeRule.onNodeWithText("Nuovo ordine").assertIsDisplayed()
+        composeRule.onNodeWithText("ORDINE CORRENTE").assertIsDisplayed()
         composeRule.onNodeWithText("Aggiungi un prodotto per iniziare l'ordine.")
             .assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Indietro").performClick()
         composeRule.runOnIdle { assertEquals(1, backClicks) }
+    }
+
+    @Test
+    fun persistedOrderLinesShowSnapshotQuantityAndLinePriceWithoutEditActions() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        orderLines = listOf(
+                            DraftOrderLine(
+                                itemId = "pizza-id",
+                                quantity = 2,
+                                productName = "Margherita snapshot",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(1_400),
+                            ),
+                            DraftOrderLine(
+                                itemId = "coca-id",
+                                quantity = 3,
+                                productName = "Coca Cola",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(750),
+                            ),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("2x Margherita snapshot").assertIsDisplayed()
+        composeRule.onNodeWithText("14,00 €").assertIsDisplayed()
+        composeRule.onNodeWithText("3x Coca Cola").assertIsDisplayed()
+        composeRule.onNodeWithText("7,50 €").assertIsDisplayed()
+        composeRule.onNodeWithText("Aggiungi un prodotto per iniziare l'ordine.")
+            .assertDoesNotExist()
     }
 
     @Test
@@ -223,9 +264,10 @@ class NewOrderScreenTest {
 
     private fun readyState(
         catalogItems: List<OrderCatalogItem> = emptyList(),
+        orderLines: List<DraftOrderLine> = emptyList(),
     ): NewOrderUiState.Ready = NewOrderUiState.Ready(
         draftId = "draft-id",
-        isDraftEmpty = true,
+        orderLines = orderLines,
         searchQuery = "",
         selectedFilter = OrderCatalogFilter.ALL,
         catalogItems = catalogItems,

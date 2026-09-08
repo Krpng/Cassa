@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -138,12 +139,7 @@ private fun OrderCatalogContent(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (state.isDraftEmpty) {
-            Text(
-                text = "Aggiungi un prodotto per iniziare l'ordine.",
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
+        CurrentOrderContent(orderLines = state.orderLines)
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = onSearchQueryChanged,
@@ -222,6 +218,63 @@ private fun OrderCatalogContent(
                         isQuickAddInProgress = item.productId in
                             state.quickAddInProgressProductIds,
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CurrentOrderContent(orderLines: List<DraftOrderLine>) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "ORDINE CORRENTE",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        if (orderLines.isEmpty()) {
+            Text(
+                text = "Aggiungi un prodotto per iniziare l'ordine.",
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 168.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items(
+                    items = orderLines,
+                    key = DraftOrderLine::itemId,
+                ) { line ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics {
+                                contentDescription =
+                                    "Riga ordine: ${line.quantity}x ${line.productName}, " +
+                                        line.lineTotal.formatEur()
+                            }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "${line.quantity}x ${line.productName}",
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            text = line.lineTotal.formatEur(),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                    HorizontalDivider()
                 }
             }
         }

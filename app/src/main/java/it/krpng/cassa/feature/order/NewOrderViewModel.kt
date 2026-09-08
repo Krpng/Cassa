@@ -43,18 +43,28 @@ data class OrderCatalogItem(
     val matchedIngredient: String? = null,
 )
 
+data class DraftOrderLine(
+    val itemId: String,
+    val quantity: Int,
+    val productName: String,
+    val lineTotal: Money,
+)
+
 sealed interface NewOrderUiState {
     data object Loading : NewOrderUiState
 
     data class Ready(
         val draftId: String,
-        val isDraftEmpty: Boolean,
+        val orderLines: List<DraftOrderLine>,
         val searchQuery: String,
         val selectedFilter: OrderCatalogFilter,
         val catalogItems: List<OrderCatalogItem>,
         val quickAddInProgressProductIds: Set<Long> = emptySet(),
         val quickAddError: String? = null,
-    ) : NewOrderUiState
+    ) : NewOrderUiState {
+        val isDraftEmpty: Boolean
+            get() = orderLines.isEmpty()
+    }
 
     data object NotFound : NewOrderUiState
 
@@ -140,7 +150,16 @@ class NewOrderViewModel @Inject constructor(
                         order.status != OrderStatus.DRAFT -> NewOrderUiState.NotEditable
                         else -> NewOrderUiState.Ready(
                             draftId = order.id,
-                            isDraftEmpty = order.items.isEmpty(),
+                            orderLines = order.items
+                                .sortedWith(compareBy({ it.createdSequence }, { it.id }))
+                                .map { item ->
+                                    DraftOrderLine(
+                                        itemId = item.id,
+                                        quantity = item.quantity,
+                                        productName = item.productNameSnapshot,
+                                        lineTotal = item.finalUnitPrice * item.quantity,
+                                    )
+                                },
                             searchQuery = query,
                             selectedFilter = filter,
                             catalogItems = products.toCatalogItems(query, filter),

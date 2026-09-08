@@ -67,10 +67,111 @@ class NewOrderViewModelTest {
             orders.value = draft().copy(items = listOf(orderItem()))
             advanceUntilIdle()
 
-            assertFalse((viewModel.uiState.value as NewOrderUiState.Ready).isDraftEmpty)
+            val updated = viewModel.uiState.value as NewOrderUiState.Ready
+            assertFalse(updated.isDraftEmpty)
+            assertEquals(
+                listOf(DraftOrderLine("item-id", 1, "Margherita", Money.ofCents(700))),
+                updated.orderLines,
+            )
             assertEquals(0, repository.createCalls)
             assertEquals(0, repository.deleteCalls)
             assertEquals(0, repository.replaceCalls)
+        }
+
+    @Test
+    fun `persisted lines are ordered by creation sequence and expose quantities and line totals`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(
+                draft().copy(
+                    items = listOf(
+                        orderItem(
+                            id = "coca-id",
+                            name = "Coca Cola",
+                            quantity = 3,
+                            unitPriceCents = 250,
+                            createdSequence = 2,
+                        ),
+                        orderItem(
+                            id = "pizza-id",
+                            name = "Margherita",
+                            quantity = 2,
+                            unitPriceCents = 700,
+                            createdSequence = 1,
+                        ),
+                    ),
+                ),
+            )
+            val repository = FakeOrderRepository(orders)
+            val viewModel = viewModel(repository, "draft-id")
+
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(
+                    DraftOrderLine("pizza-id", 2, "Margherita", Money.ofCents(1_400)),
+                    DraftOrderLine("coca-id", 3, "Coca Cola", Money.ofCents(750)),
+                ),
+                (viewModel.uiState.value as NewOrderUiState.Ready).orderLines,
+            )
+            assertEquals(0, repository.createCalls)
+            assertEquals(0, repository.deleteCalls)
+            assertEquals(0, repository.replaceCalls)
+            assertTrue(repository.quickAddCalls.isEmpty())
+        }
+
+    @Test
+    fun `order lines react to persisted state and remain independent from live catalog changes`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(
+                draft().copy(
+                    items = listOf(
+                        orderItem(
+                            productId = 1,
+                            name = "Margherita snapshot",
+                            quantity = 1,
+                        ),
+                    ),
+                ),
+            )
+            val products = MutableStateFlow(
+                listOf(product(1, "Margherita live", ProductCategory.PIZZA)),
+            )
+            val repository = FakeOrderRepository(orders)
+            val viewModel = viewModel(repository, "draft-id", products)
+            advanceUntilIdle()
+
+            assertEquals(
+                "Margherita snapshot",
+                (viewModel.uiState.value as NewOrderUiState.Ready)
+                    .orderLines.single().productName,
+            )
+
+            products.value = listOf(product(1, "Margherita rinominata", ProductCategory.PIZZA))
+            advanceUntilIdle()
+            assertEquals(
+                "Margherita snapshot",
+                (viewModel.uiState.value as NewOrderUiState.Ready)
+                    .orderLines.single().productName,
+            )
+
+            orders.value = orders.value?.copy(
+                items = listOf(
+                    orderItem(
+                        productId = 1,
+                        name = "Margherita snapshot",
+                        quantity = 2,
+                    ),
+                ),
+            )
+            advanceUntilIdle()
+
+            val line = (viewModel.uiState.value as NewOrderUiState.Ready).orderLines.single()
+            assertEquals(2, line.quantity)
+            assertEquals(Money.ofCents(1_400), line.lineTotal)
+            assertEquals(0, repository.createCalls)
+            assertEquals(0, repository.deleteCalls)
+            assertEquals(0, repository.replaceCalls)
+            assertTrue(repository.quickAddCalls.isEmpty())
         }
 
     @Test
@@ -347,20 +448,27 @@ class NewOrderViewModelTest {
         items = emptyList(),
     )
 
-    private fun orderItem(): OrderItem = OrderItem(
-        id = "item-id",
-        productId = null,
-        productNameSnapshot = "Margherita",
-        productPrintedNameSnapshot = "MARGHERITA",
+    private fun orderItem(
+        id: String = "item-id",
+        productId: Long? = null,
+        name: String = "Margherita",
+        quantity: Int = 1,
+        unitPriceCents: Long = 700,
+        createdSequence: Int = 1,
+    ): OrderItem = OrderItem(
+        id = id,
+        productId = productId,
+        productNameSnapshot = name,
+        productPrintedNameSnapshot = name.uppercase(),
         categorySnapshot = ProductCategory.PIZZA,
-        quantity = 1,
-        baseUnitPrice = Money.ofCents(700),
+        quantity = quantity,
+        baseUnitPrice = Money.ofCents(unitPriceCents),
         automaticExtrasTotal = Money.ZERO,
         manualUnitPrice = null,
-        finalUnitPrice = Money.ofCents(700),
+        finalUnitPrice = Money.ofCents(unitPriceCents),
         automaticExtrasPricingSnapshot = true,
         note = null,
-        createdSequence = 1,
+        createdSequence = createdSequence,
         additions = emptyList(),
         removals = emptyList(),
     )
