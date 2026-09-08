@@ -1,5 +1,6 @@
 package it.krpng.cassa.domain.repository
 
+import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.domain.model.Order
 import kotlinx.coroutines.flow.Flow
 
@@ -19,6 +20,30 @@ interface OrderRepository {
     suspend fun replaceDraft(orderId: String): ReplaceDraftResult
 
     suspend fun quickAddStandard(orderId: String, productId: Long): QuickAddStandardResult
+
+    suspend fun updateOrderItem(
+        orderId: String,
+        orderItemId: String,
+        quantity: Int,
+        note: String?,
+        manualUnitPrice: Money?,
+    ): UpdateOrderItemResult
+}
+
+sealed interface UpdateOrderItemResult {
+    data object Updated : UpdateOrderItemResult
+
+    data object OrderNotFound : UpdateOrderItemResult
+
+    data object OrderNotEditable : UpdateOrderItemResult
+
+    data object ItemNotFound : UpdateOrderItemResult
+
+    data object InvalidQuantity : UpdateOrderItemResult
+
+    data object AmountOverflow : UpdateOrderItemResult
+
+    data object PersistenceFailure : UpdateOrderItemResult
 }
 
 sealed interface QuickAddStandardResult {

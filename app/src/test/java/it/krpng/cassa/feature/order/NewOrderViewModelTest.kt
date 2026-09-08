@@ -16,6 +16,7 @@ import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import it.krpng.cassa.domain.usecase.AddProductToDraft
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -410,6 +411,14 @@ class NewOrderViewModelTest {
             quickAddCalls += orderId to productId
             return quickAddResult
         }
+
+        override suspend fun updateOrderItem(
+            orderId: String,
+            orderItemId: String,
+            quantity: Int,
+            note: String?,
+            manualUnitPrice: Money?,
+        ): UpdateOrderItemResult = error("Not used")
     }
 
     private class FakeProductRepository(

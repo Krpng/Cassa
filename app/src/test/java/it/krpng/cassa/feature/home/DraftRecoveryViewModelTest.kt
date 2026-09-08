@@ -10,6 +10,7 @@ import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -184,6 +185,14 @@ class DraftRecoveryViewModelTest {
             orderId: String,
             productId: Long,
         ): QuickAddStandardResult = error("Not used")
+
+        override suspend fun updateOrderItem(
+            orderId: String,
+            orderItemId: String,
+            quantity: Int,
+            note: String?,
+            manualUnitPrice: Money?,
+        ): UpdateOrderItemResult = error("Not used")
     }
 
     private fun emptyDraft(): Order = Order(

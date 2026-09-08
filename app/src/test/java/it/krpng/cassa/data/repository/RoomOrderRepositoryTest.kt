@@ -14,6 +14,7 @@ import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
@@ -244,6 +245,147 @@ class RoomOrderRepositoryTest {
         assertNull(unavailableProductDao.insertedOrderItem)
     }
 
+    @Test
+    fun `generic item update preserves snapshots and writes item plus timestamp atomically`() =
+        runTest {
+            val original = orderItemEntity(quantity = 2).copy(
+                automaticExtrasTotalCents = 100,
+                finalUnitPriceCents = 800,
+                note = "Originale",
+            )
+            val dao = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(OrderItemWithModifiers(original, emptyList(), emptyList())),
+                ),
+            )
+            val clock = CountingClock(FIXED_NOW)
+            val repository = RoomOrderRepository(dao, clock)
+
+            val result = repository.updateOrderItem(
+                orderId = "draft-id",
+                orderItemId = "item-id",
+                quantity = 3,
+                note = "  Senza sale  ",
+                manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(600),
+            )
+
+            assertSame(UpdateOrderItemResult.Updated, result)
+            val updated = requireNotNull(dao.updatedOrderItem)
+            assertEquals(3, updated.quantity)
+            assertEquals("Senza sale", updated.note)
+            assertEquals(600L, updated.manualUnitPriceCents)
+            assertEquals(600L, updated.finalUnitPriceCents)
+            assertEquals(original.productId, updated.productId)
+            assertEquals(original.productNameSnapshot, updated.productNameSnapshot)
+            assertEquals(original.productPrintedNameSnapshot, updated.productPrintedNameSnapshot)
+            assertEquals(original.categorySnapshot, updated.categorySnapshot)
+            assertEquals(original.baseUnitPriceCents, updated.baseUnitPriceCents)
+            assertEquals(
+                original.automaticExtrasPricingSnapshot,
+                updated.automaticExtrasPricingSnapshot,
+            )
+            assertEquals(FIXED_NOW.toEpochMilli(), dao.updatedDraftTimestamp)
+            assertEquals(1, clock.calls)
+        }
+
+    @Test
+    fun `generic item update rejects wrong order item accepted order and invalid quantity`() =
+        runTest {
+            val item = orderItemEntity(quantity = 1)
+            val draftDao = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(OrderItemWithModifiers(item, emptyList(), emptyList())),
+                ),
+            )
+            val acceptedDao = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(OrderItemWithModifiers(item, emptyList(), emptyList())),
+                ).copy(
+                    order = fullDraft().order.copy(
+                        status = OrderStatus.ACCEPTED,
+                        draftSlot = null,
+                    ),
+                ),
+            )
+
+            assertSame(
+                UpdateOrderItemResult.ItemNotFound,
+                RoomOrderRepository(draftDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                    "draft-id",
+                    "other-item",
+                    1,
+                    null,
+                    null,
+                ),
+            )
+            assertSame(
+                UpdateOrderItemResult.OrderNotEditable,
+                RoomOrderRepository(acceptedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    1,
+                    null,
+                    null,
+                ),
+            )
+            assertSame(
+                UpdateOrderItemResult.InvalidQuantity,
+                RoomOrderRepository(draftDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    0,
+                    null,
+                    null,
+                ),
+            )
+            assertNull(draftDao.updatedOrderItem)
+            assertNull(acceptedDao.updatedOrderItem)
+        }
+
+    @Test
+    fun `generic item update maps write conflict and monetary overflow without timestamp write`() =
+        runTest {
+            val item = orderItemEntity(quantity = 1)
+            val conflictDao = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(OrderItemWithModifiers(item, emptyList(), emptyList())),
+                ),
+                updateOrderItemResult = 0,
+            )
+            val conflictClock = CountingClock(FIXED_NOW)
+
+            assertSame(
+                UpdateOrderItemResult.PersistenceFailure,
+                RoomOrderRepository(conflictDao, conflictClock).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    1,
+                    null,
+                    null,
+                ),
+            )
+            assertEquals(0, conflictClock.calls)
+            assertNull(conflictDao.updatedDraftTimestamp)
+
+            val overflowDao = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(OrderItemWithModifiers(item, emptyList(), emptyList())),
+                ),
+            )
+            assertSame(
+                UpdateOrderItemResult.AmountOverflow,
+                RoomOrderRepository(overflowDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    2,
+                    null,
+                    it.krpng.cassa.core.money.Money.ofCents(Long.MAX_VALUE),
+                ),
+            )
+            assertNull(overflowDao.updatedOrderItem)
+            assertNull(overflowDao.updatedDraftTimestamp)
+        }
+
     private class CountingClock(
         private val instant: Instant,
     ) : ClockProvider {
@@ -262,6 +404,8 @@ class RoomOrderRepositoryTest {
         private val deleteResult: Int = 0,
         private val fullOrder: FullOrder? = null,
         private val activeProduct: ProductEntity? = null,
+        private val updateOrderItemResult: Int = 1,
+        private val updateTimestampResult: Int = 1,
     ) : OrderDao {
         var insertedDraft: OrderEntity? = null
         var deletedDraftId: String? = null
@@ -297,12 +441,12 @@ class RoomOrderRepositoryTest {
 
         override suspend fun updateOrderItem(item: OrderItemEntity): Int {
             updatedOrderItem = item
-            return 1
+            return updateOrderItemResult
         }
 
         override suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int {
             updatedDraftTimestamp = updatedAt
-            return 1
+            return updateTimestampResult
         }
 
         override suspend fun deleteDraft(orderId: String): Int {

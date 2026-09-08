@@ -23,6 +23,7 @@ import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -144,6 +145,60 @@ class RoomOrderRepository @Inject constructor(
         QuickAddStandardResult.PersistenceFailure
     }
 
+    override suspend fun updateOrderItem(
+        orderId: String,
+        orderItemId: String,
+        quantity: Int,
+        note: String?,
+        manualUnitPrice: Money?,
+    ): UpdateOrderItemResult {
+        if (quantity <= 0) return UpdateOrderItemResult.InvalidQuantity
+
+        return try {
+            transactionRunner.runInTransaction {
+                val order = orderDao.getFullOrder(orderId)
+                    ?: return@runInTransaction UpdateOrderItemResult.OrderNotFound
+                if (order.order.status != OrderStatus.DRAFT || order.order.draftSlot != DRAFT_SLOT) {
+                    return@runInTransaction UpdateOrderItemResult.OrderNotEditable
+                }
+                val existing = order.items.firstOrNull { item -> item.item.id == orderItemId }
+                    ?: return@runInTransaction UpdateOrderItemResult.ItemNotFound
+
+                val pricing = PricingCalculator.calculate(
+                    baseUnitPrice = Money.ofCents(existing.item.baseUnitPriceCents),
+                    additionPrices = listOf(
+                        Money.ofCents(existing.item.automaticExtrasTotalCents),
+                    ),
+                    automaticExtrasPricing = true,
+                    manualUnitPrice = manualUnitPrice,
+                    quantity = quantity,
+                )
+                val updatedItem = existing.item.copy(
+                    quantity = quantity,
+                    manualUnitPriceCents = manualUnitPrice?.cents,
+                    finalUnitPriceCents = pricing.finalUnitPrice.cents,
+                    note = note?.trim()?.ifEmpty { null },
+                )
+                if (orderDao.updateOrderItem(updatedItem) != 1) {
+                    throw OrderItemUpdateConflictException()
+                }
+                val updatedAt = clockProvider.now().toEpochMilli()
+                if (orderDao.updateDraftTimestamp(orderId, updatedAt) != 1) {
+                    throw OrderItemUpdateConflictException()
+                }
+                UpdateOrderItemResult.Updated
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: ArithmeticException) {
+            UpdateOrderItemResult.AmountOverflow
+        } catch (_: SQLiteException) {
+            UpdateOrderItemResult.PersistenceFailure
+        } catch (_: OrderItemUpdateConflictException) {
+            UpdateOrderItemResult.PersistenceFailure
+        }
+    }
+
     private fun newDraft(): Order {
         val now = clockProvider.now()
         return Order(
@@ -214,3 +269,5 @@ class RoomOrderRepository @Inject constructor(
 }
 
 private class QuickAddWriteConflictException : IllegalStateException()
+
+private class OrderItemUpdateConflictException : IllegalStateException()

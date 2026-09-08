@@ -16,6 +16,7 @@ import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.time.Instant
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.async
@@ -224,6 +225,73 @@ class RoomOrderRepositoryTest {
         assertEquals(listOf(1), items.map { it.createdSequence })
     }
 
+    @Test
+    fun genericItemUpdatePersistsThroughRoomAndEmitsTheUpdatedSnapshot() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+        repository.quickAddStandard(draft.id, 41)
+        val original = requireNotNull(repository.getById(draft.id)).items.single()
+        repository = RoomOrderRepository(
+            orderDao = database.orderDao(),
+            clockProvider = object : ClockProvider {
+                override fun now(): Instant = UPDATED_NOW
+            },
+            transactionRunner = RoomDatabaseTransactionRunner(database),
+        )
+
+        val result = repository.updateOrderItem(
+            orderId = draft.id,
+            orderItemId = original.id,
+            quantity = 2,
+            note = "  Senza sale  ",
+            manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(600),
+        )
+
+        assertSame(UpdateOrderItemResult.Updated, result)
+        val updatedOrder = requireNotNull(
+            repository.observeById(draft.id).first { order ->
+                order?.items?.singleOrNull()?.quantity == 2
+            },
+        )
+        val updated = updatedOrder.items.single()
+        assertEquals(original.id, updated.id)
+        assertEquals(2, updated.quantity)
+        assertEquals("Senza sale", updated.note)
+        assertEquals(600L, updated.manualUnitPrice?.cents)
+        assertEquals(600L, updated.finalUnitPrice.cents)
+        assertEquals(original.productNameSnapshot, updated.productNameSnapshot)
+        assertEquals(original.productPrintedNameSnapshot, updated.productPrintedNameSnapshot)
+        assertEquals(original.categorySnapshot, updated.categorySnapshot)
+        assertEquals(original.baseUnitPrice, updated.baseUnitPrice)
+        assertEquals(original.automaticExtrasPricingSnapshot, updated.automaticExtrasPricingSnapshot)
+        assertEquals(UPDATED_NOW, updatedOrder.updatedAt)
+    }
+
+    @Test
+    fun genericItemUpdateRejectsWrongItemMissingOrderAndAcceptedOrderInRoom() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+        repository.quickAddStandard(draft.id, 41)
+        val itemId = requireNotNull(repository.getById(draft.id)).items.single().id
+
+        assertSame(
+            UpdateOrderItemResult.ItemNotFound,
+            repository.updateOrderItem(draft.id, "other-item", 1, null, null),
+        )
+        assertSame(
+            UpdateOrderItemResult.OrderNotFound,
+            repository.updateOrderItem("missing-order", itemId, 1, null, null),
+        )
+
+        val accepted = acceptedOrder()
+        database.orderDao().insertDraft(accepted)
+        assertSame(
+            UpdateOrderItemResult.OrderNotEditable,
+            repository.updateOrderItem(accepted.id, itemId, 1, null, null),
+        )
+        assertEquals(1, requireNotNull(repository.getById(draft.id)).items.single().quantity)
+    }
+
     private suspend fun allOrderIds(): List<String> = database.query(
         "SELECT id FROM orders ORDER BY id",
         emptyArray(),
@@ -271,5 +339,6 @@ class RoomOrderRepositoryTest {
 
     private companion object {
         val FIXED_NOW: Instant = Instant.parse("2026-09-07T10:15:30Z")
+        val UPDATED_NOW: Instant = Instant.parse("2026-09-07T11:30:00Z")
     }
 }

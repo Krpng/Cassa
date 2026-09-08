@@ -40,6 +40,7 @@ import it.krpng.cassa.feature.common.CassaBackButton
 fun NewOrderRoute(
     onBack: () -> Unit,
     onProductSelected: (Long) -> Unit = {},
+    onOrderItemSelected: (String, String) -> Unit = { _, _ -> },
     viewModel: NewOrderViewModel = hiltViewModel(),
 ) {
     NewOrderScreen(
@@ -49,6 +50,10 @@ fun NewOrderRoute(
         onSearchQueryChanged = viewModel::updateSearchQuery,
         onFilterSelected = viewModel::selectFilter,
         onProductSelected = onProductSelected,
+        onOrderItemSelected = { orderItemId ->
+            val state = viewModel.uiState.value as? NewOrderUiState.Ready
+            if (state != null) onOrderItemSelected(state.draftId, orderItemId)
+        },
         onQuickAdd = viewModel::quickAdd,
         onDismissQuickAddError = viewModel::dismissQuickAddError,
     )
@@ -62,6 +67,7 @@ fun NewOrderScreen(
     onSearchQueryChanged: (String) -> Unit,
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
+    onOrderItemSelected: (String) -> Unit = {},
     onQuickAdd: (Long) -> Unit,
     onDismissQuickAddError: () -> Unit,
 ) {
@@ -85,6 +91,7 @@ fun NewOrderScreen(
                 onSearchQueryChanged = onSearchQueryChanged,
                 onFilterSelected = onFilterSelected,
                 onProductSelected = onProductSelected,
+                onOrderItemSelected = onOrderItemSelected,
                 onQuickAdd = onQuickAdd,
                 onDismissQuickAddError = onDismissQuickAddError,
                 modifier = Modifier.weight(1f),
@@ -131,6 +138,7 @@ private fun OrderCatalogContent(
     onSearchQueryChanged: (String) -> Unit,
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
+    onOrderItemSelected: (String) -> Unit,
     onQuickAdd: (Long) -> Unit,
     onDismissQuickAddError: () -> Unit,
     modifier: Modifier = Modifier,
@@ -139,7 +147,10 @@ private fun OrderCatalogContent(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CurrentOrderContent(orderLines = state.orderLines)
+        CurrentOrderContent(
+            orderLines = state.orderLines,
+            onOrderItemSelected = onOrderItemSelected,
+        )
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = onSearchQueryChanged,
@@ -225,7 +236,10 @@ private fun OrderCatalogContent(
 }
 
 @Composable
-private fun CurrentOrderContent(orderLines: List<DraftOrderLine>) {
+private fun CurrentOrderContent(
+    orderLines: List<DraftOrderLine>,
+    onOrderItemSelected: (String) -> Unit,
+) {
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -254,9 +268,13 @@ private fun CurrentOrderContent(orderLines: List<DraftOrderLine>) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .clickable(
+                                role = Role.Button,
+                                onClick = { onOrderItemSelected(line.itemId) },
+                            )
                             .semantics {
                                 contentDescription =
-                                    "Riga ordine: ${line.quantity}x ${line.productName}, " +
+                                    "Modifica riga: ${line.quantity}x ${line.productName}, " +
                                         line.lineTotal.formatEur()
                             }
                             .padding(vertical = 4.dp),

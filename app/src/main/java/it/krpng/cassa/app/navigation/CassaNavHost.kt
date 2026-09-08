@@ -18,6 +18,8 @@ import it.krpng.cassa.feature.menu.ProductEditRoute
 import it.krpng.cassa.feature.menu.ProductEditViewModel
 import it.krpng.cassa.feature.order.NewOrderRoute
 import it.krpng.cassa.feature.order.NewOrderViewModel
+import it.krpng.cassa.feature.order.OrderItemDetailRoute
+import it.krpng.cassa.feature.order.OrderItemDetailViewModel
 import it.krpng.cassa.feature.settings.SettingsScreen
 import it.krpng.cassa.feature.todayorders.TodayOrdersScreen
 
@@ -69,7 +71,30 @@ fun CassaNavHost() {
                 },
             ),
         ) {
-            NewOrderRoute(onBack = navController::navigateUp)
+            NewOrderRoute(
+                onBack = navController::navigateUp,
+                onOrderItemSelected = { orderId, orderItemId ->
+                    navController.navigate(
+                        OrderItemDetailDestination.createRoute(orderId, orderItemId),
+                    )
+                },
+            )
+        }
+        composable(
+            route = OrderItemDetailDestination.routePattern,
+            arguments = listOf(
+                navArgument(OrderItemDetailViewModel.ORDER_ID_ARGUMENT) {
+                    type = NavType.StringType
+                },
+                navArgument(OrderItemDetailViewModel.ORDER_ITEM_ID_ARGUMENT) {
+                    type = NavType.StringType
+                },
+            ),
+        ) {
+            OrderItemDetailRoute(
+                onBack = navController::navigateUp,
+                onSaved = navController::navigateUp,
+            )
         }
         composable(CassaDestination.TODAY_ORDERS.route) {
             TodayOrdersScreen(onBack = navController::navigateUp)

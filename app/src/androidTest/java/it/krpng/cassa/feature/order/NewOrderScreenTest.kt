@@ -45,7 +45,8 @@ class NewOrderScreenTest {
     }
 
     @Test
-    fun persistedOrderLinesShowSnapshotQuantityAndLinePriceWithoutEditActions() {
+    fun persistedOrderLineDispatchesItsStableItemIdForEditing() {
+        val selectedItemIds = mutableListOf<String>()
         composeRule.setContent {
             MaterialTheme {
                 NewOrderScreen(
@@ -70,6 +71,7 @@ class NewOrderScreenTest {
                     onSearchQueryChanged = {},
                     onFilterSelected = {},
                     onProductSelected = {},
+                    onOrderItemSelected = { selectedItemIds += it },
                     onQuickAdd = {},
                     onDismissQuickAddError = {},
                 )
@@ -82,6 +84,10 @@ class NewOrderScreenTest {
         composeRule.onNodeWithText("7,50 €").assertIsDisplayed()
         composeRule.onNodeWithText("Aggiungi un prodotto per iniziare l'ordine.")
             .assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(
+            "Modifica riga: 2x Margherita snapshot, 14,00 €",
+        ).performClick()
+        composeRule.runOnIdle { assertEquals(listOf("pizza-id"), selectedItemIds) }
     }
 
     @Test
