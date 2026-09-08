@@ -15,6 +15,8 @@ import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.usecase.AddProductToDraft
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -29,6 +31,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -205,6 +208,50 @@ class NewOrderViewModelTest {
             assertEquals(listOf("draft-id", "draft-id"), repository.observedIds)
         }
 
+    @Test
+    fun `quick add uses the route draft id and does not create another draft`() =
+        runTest(mainDispatcher) {
+            val repository = FakeOrderRepository(MutableStateFlow(draft()))
+            val viewModel = viewModel(repository, "draft-id")
+            advanceUntilIdle()
+
+            viewModel.quickAdd(42)
+            viewModel.quickAdd(42)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf("draft-id" to 42L, "draft-id" to 42L),
+                repository.quickAddCalls,
+            )
+            assertEquals(0, repository.createCalls)
+            assertTrue(
+                (viewModel.uiState.value as NewOrderUiState.Ready)
+                    .quickAddInProgressProductIds.isEmpty(),
+            )
+        }
+
+    @Test
+    fun `quick add maps unavailable product to a dismissible user error`() =
+        runTest(mainDispatcher) {
+            val repository = FakeOrderRepository(MutableStateFlow(draft())).apply {
+                quickAddResult = QuickAddStandardResult.ProductUnavailable
+            }
+            val viewModel = viewModel(repository, "draft-id")
+            advanceUntilIdle()
+
+            viewModel.quickAdd(42)
+            advanceUntilIdle()
+
+            assertEquals(
+                "Il prodotto non è più disponibile.",
+                (viewModel.uiState.value as NewOrderUiState.Ready).quickAddError,
+            )
+
+            viewModel.dismissQuickAddError()
+            advanceUntilIdle()
+            assertNull((viewModel.uiState.value as NewOrderUiState.Ready).quickAddError)
+        }
+
     private fun viewModel(
         repository: OrderRepository,
         draftId: String,
@@ -215,6 +262,7 @@ class NewOrderViewModelTest {
         ),
         orderRepository = repository,
         productRepository = FakeProductRepository(products),
+        addProductToDraft = AddProductToDraft(repository),
     )
 
     private class FakeOrderRepository(
@@ -224,6 +272,9 @@ class NewOrderViewModelTest {
         var createCalls = 0
         var deleteCalls = 0
         var replaceCalls = 0
+        var quickAddResult: QuickAddStandardResult =
+            QuickAddStandardResult.Added("item-id")
+        val quickAddCalls = mutableListOf<Pair<String, Long>>()
 
         override suspend fun getById(orderId: String): Order? = null
 
@@ -249,6 +300,14 @@ class NewOrderViewModelTest {
         override suspend fun replaceDraft(orderId: String): ReplaceDraftResult {
             replaceCalls += 1
             return ReplaceDraftResult.OriginalNotFoundOrNotDraft
+        }
+
+        override suspend fun quickAddStandard(
+            orderId: String,
+            productId: Long,
+        ): QuickAddStandardResult {
+            quickAddCalls += orderId to productId
+            return quickAddResult
         }
     }
 

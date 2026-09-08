@@ -8,6 +8,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import it.krpng.cassa.data.database.CassaDatabase
+import it.krpng.cassa.data.database.DatabaseTransactionRunner
+import it.krpng.cassa.data.database.RoomDatabaseTransactionRunner
 import it.krpng.cassa.data.database.dao.AdditionDao
 import it.krpng.cassa.data.database.dao.IngredientDao
 import it.krpng.cassa.data.database.dao.OrderDao
@@ -38,6 +40,11 @@ object DatabaseModule {
 
     @Provides
     fun provideOrderDao(database: CassaDatabase): OrderDao = database.orderDao()
+
+    @Provides
+    fun provideDatabaseTransactionRunner(
+        database: CassaDatabase,
+    ): DatabaseTransactionRunner = RoomDatabaseTransactionRunner(database)
 
     private const val DATABASE_NAME = "cassa.db"
 }

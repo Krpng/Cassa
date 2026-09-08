@@ -17,6 +17,27 @@ interface OrderRepository {
     suspend fun deleteDraft(orderId: String): DeleteDraftResult
 
     suspend fun replaceDraft(orderId: String): ReplaceDraftResult
+
+    suspend fun quickAddStandard(orderId: String, productId: Long): QuickAddStandardResult
+}
+
+sealed interface QuickAddStandardResult {
+    data class Added(val orderItemId: String) : QuickAddStandardResult
+
+    data class Merged(
+        val orderItemId: String,
+        val quantity: Int,
+    ) : QuickAddStandardResult
+
+    data object OrderNotFound : QuickAddStandardResult
+
+    data object OrderNotEditable : QuickAddStandardResult
+
+    data object ProductUnavailable : QuickAddStandardResult
+
+    data object LimitReached : QuickAddStandardResult
+
+    data object PersistenceFailure : QuickAddStandardResult
 }
 
 sealed interface CreateDraftResult {

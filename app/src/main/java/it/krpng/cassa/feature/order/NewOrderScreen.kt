@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -21,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,7 +39,6 @@ import it.krpng.cassa.feature.common.CassaBackButton
 fun NewOrderRoute(
     onBack: () -> Unit,
     onProductSelected: (Long) -> Unit = {},
-    onQuickAdd: (Long) -> Unit = {},
     viewModel: NewOrderViewModel = hiltViewModel(),
 ) {
     NewOrderScreen(
@@ -47,7 +48,8 @@ fun NewOrderRoute(
         onSearchQueryChanged = viewModel::updateSearchQuery,
         onFilterSelected = viewModel::selectFilter,
         onProductSelected = onProductSelected,
-        onQuickAdd = onQuickAdd,
+        onQuickAdd = viewModel::quickAdd,
+        onDismissQuickAddError = viewModel::dismissQuickAddError,
     )
 }
 
@@ -60,6 +62,7 @@ fun NewOrderScreen(
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
     onQuickAdd: (Long) -> Unit,
+    onDismissQuickAddError: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -82,6 +85,7 @@ fun NewOrderScreen(
                 onFilterSelected = onFilterSelected,
                 onProductSelected = onProductSelected,
                 onQuickAdd = onQuickAdd,
+                onDismissQuickAddError = onDismissQuickAddError,
                 modifier = Modifier.weight(1f),
             )
         } else {
@@ -127,6 +131,7 @@ private fun OrderCatalogContent(
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
     onQuickAdd: (Long) -> Unit,
+    onDismissQuickAddError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -166,6 +171,23 @@ private fun OrderCatalogContent(
                 )
             }
         }
+        state.quickAddError?.let { message ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = message,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = onDismissQuickAddError) {
+                    Text("CHIUDI")
+                }
+            }
+        }
         if (state.catalogItems.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -197,6 +219,8 @@ private fun OrderCatalogContent(
                         item = item,
                         onProductSelected = onProductSelected,
                         onQuickAdd = onQuickAdd,
+                        isQuickAddInProgress = item.productId in
+                            state.quickAddInProgressProductIds,
                     )
                 }
             }
@@ -209,6 +233,7 @@ private fun OrderCatalogResult(
     item: OrderCatalogItem,
     onProductSelected: (Long) -> Unit,
     onQuickAdd: (Long) -> Unit,
+    isQuickAddInProgress: Boolean,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -255,11 +280,22 @@ private fun OrderCatalogResult(
                         contentDescription = "Aggiungi ${item.name}"
                     },
             ) {
-                Text(
-                    text = "+",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                )
+                if (isQuickAddInProgress) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .semantics {
+                                contentDescription = "Aggiunta in corso per ${item.name}"
+                            },
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text(
+                        text = "+",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
         }
         HorizontalDivider()

@@ -9,6 +9,7 @@ import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -283,6 +284,11 @@ class HomeViewModelTest {
             }
             return replaceResult
         }
+
+        override suspend fun quickAddStandard(
+            orderId: String,
+            productId: Long,
+        ): QuickAddStandardResult = error("Not used")
     }
 
     private fun emptyDraft(id: String = "empty-draft-id"): Order = Order(

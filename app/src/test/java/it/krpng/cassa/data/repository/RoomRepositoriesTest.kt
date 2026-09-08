@@ -4,6 +4,7 @@ import it.krpng.cassa.core.datetime.SystemClockProvider
 import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import it.krpng.cassa.data.database.entity.OrderEntity
+import it.krpng.cassa.data.database.entity.OrderItemEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.data.database.relation.FullOrder
@@ -263,6 +264,14 @@ class RoomRepositoriesTest {
         override suspend fun getActiveDraft(): FullOrder? = result
 
         override suspend fun insertDraft(order: OrderEntity): Long = 1
+
+        override suspend fun getActiveProductForQuickAdd(productId: Long): ProductEntity? = null
+
+        override suspend fun insertOrderItem(item: OrderItemEntity) = Unit
+
+        override suspend fun updateOrderItem(item: OrderItemEntity): Int = 0
+
+        override suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int = 0
 
         override suspend fun deleteDraft(orderId: String): Int = 0
     }

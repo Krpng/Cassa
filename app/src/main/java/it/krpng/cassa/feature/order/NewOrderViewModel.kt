@@ -11,7 +11,9 @@ import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
+import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.search.ProductSearchEngine
+import it.krpng.cassa.domain.usecase.AddProductToDraft
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -21,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class OrderCatalogFilter(
@@ -49,6 +52,8 @@ sealed interface NewOrderUiState {
         val searchQuery: String,
         val selectedFilter: OrderCatalogFilter,
         val catalogItems: List<OrderCatalogItem>,
+        val quickAddInProgressProductIds: Set<Long> = emptySet(),
+        val quickAddError: String? = null,
     ) : NewOrderUiState
 
     data object NotFound : NewOrderUiState
@@ -63,10 +68,12 @@ class NewOrderViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val orderRepository: OrderRepository,
     private val productRepository: ProductRepository,
+    private val addProductToDraft: AddProductToDraft,
 ) : ViewModel() {
     private val draftId: String = savedStateHandle.get<String>(DRAFT_ID_ARGUMENT).orEmpty()
     private val searchQuery = MutableStateFlow("")
     private val selectedFilter = MutableStateFlow(OrderCatalogFilter.ALL)
+    private val quickAddOperation = MutableStateFlow(QuickAddOperationState())
 
     private val _uiState = MutableStateFlow<NewOrderUiState>(NewOrderUiState.Loading)
     val uiState: StateFlow<NewOrderUiState> = _uiState.asStateFlow()
@@ -89,6 +96,28 @@ class NewOrderViewModel @Inject constructor(
         selectedFilter.value = filter
     }
 
+    fun quickAdd(productId: Long) {
+        if (_uiState.value !is NewOrderUiState.Ready) return
+
+        quickAddOperation.update { state -> state.start(productId) }
+        viewModelScope.launch {
+            val result = try {
+                addProductToDraft(draftId, productId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                QuickAddStandardResult.PersistenceFailure
+            }
+            quickAddOperation.update { state ->
+                state.finish(productId, result.toUserMessage())
+            }
+        }
+    }
+
+    fun dismissQuickAddError() {
+        quickAddOperation.update { state -> state.copy(error = null) }
+    }
+
     private fun observeOrderAndCatalog() {
         observationJob?.cancel()
         if (draftId.isBlank()) {
@@ -104,7 +133,8 @@ class NewOrderViewModel @Inject constructor(
                     productRepository.observeActive(),
                     searchQuery,
                     selectedFilter,
-                ) { order, products, query, filter ->
+                    quickAddOperation,
+                ) { order, products, query, filter, operation ->
                     when {
                         order == null -> NewOrderUiState.NotFound
                         order.status != OrderStatus.DRAFT -> NewOrderUiState.NotEditable
@@ -114,6 +144,8 @@ class NewOrderViewModel @Inject constructor(
                             searchQuery = query,
                             selectedFilter = filter,
                             catalogItems = products.toCatalogItems(query, filter),
+                            quickAddInProgressProductIds = operation.pendingCounts.keys,
+                            quickAddError = operation.error,
                         )
                     }
                 }
@@ -159,7 +191,43 @@ class NewOrderViewModel @Inject constructor(
             matchedIngredient = matchedIngredient,
         )
 
+    private fun QuickAddStandardResult.toUserMessage(): String? = when (this) {
+        is QuickAddStandardResult.Added,
+        is QuickAddStandardResult.Merged,
+        -> null
+
+        QuickAddStandardResult.OrderNotFound -> "L'ordine non è più disponibile."
+        QuickAddStandardResult.OrderNotEditable ->
+            "Questo ordine non è una bozza modificabile."
+        QuickAddStandardResult.ProductUnavailable ->
+            "Il prodotto non è più disponibile."
+        QuickAddStandardResult.LimitReached ->
+            "Non è possibile aumentare ulteriormente la quantità."
+        QuickAddStandardResult.PersistenceFailure ->
+            "Impossibile aggiungere il prodotto. Riprova."
+    }
+
     companion object {
         const val DRAFT_ID_ARGUMENT = "draftId"
+    }
+}
+
+private data class QuickAddOperationState(
+    val pendingCounts: Map<Long, Int> = emptyMap(),
+    val error: String? = null,
+) {
+    fun start(productId: Long): QuickAddOperationState = copy(
+        pendingCounts = pendingCounts + (productId to ((pendingCounts[productId] ?: 0) + 1)),
+        error = null,
+    )
+
+    fun finish(productId: Long, message: String?): QuickAddOperationState {
+        val remaining = (pendingCounts[productId] ?: 1) - 1
+        val updatedCounts = if (remaining > 0) {
+            pendingCounts + (productId to remaining)
+        } else {
+            pendingCounts - productId
+        }
+        return copy(pendingCounts = updatedCounts, error = message ?: error)
     }
 }

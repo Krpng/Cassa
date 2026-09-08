@@ -5,7 +5,10 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import it.krpng.cassa.data.database.entity.OrderEntity
+import it.krpng.cassa.data.database.entity.OrderItemEntity
+import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.FullOrder
 import it.krpng.cassa.data.database.relation.OrderWithItems
 import kotlinx.coroutines.flow.Flow
@@ -46,6 +49,30 @@ interface OrderDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDraft(order: OrderEntity): Long
+
+    @Query(
+        """
+        SELECT * FROM products
+        WHERE id = :productId AND active = 1
+        LIMIT 1
+        """,
+    )
+    suspend fun getActiveProductForQuickAdd(productId: Long): ProductEntity?
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertOrderItem(item: OrderItemEntity)
+
+    @Update(onConflict = OnConflictStrategy.ABORT)
+    suspend fun updateOrderItem(item: OrderItemEntity): Int
+
+    @Query(
+        """
+        UPDATE orders
+        SET updatedAt = :updatedAt
+        WHERE id = :orderId AND status = 'DRAFT' AND draftSlot = 1
+        """,
+    )
+    suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int
 
     @Query(
         """

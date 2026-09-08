@@ -2,12 +2,14 @@ package it.krpng.cassa.feature.order
 
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -29,6 +31,7 @@ class NewOrderScreenTest {
                     onFilterSelected = {},
                     onProductSelected = {},
                     onQuickAdd = {},
+                    onDismissQuickAddError = {},
                 )
             }
         }
@@ -52,6 +55,7 @@ class NewOrderScreenTest {
                     onFilterSelected = {},
                     onProductSelected = {},
                     onQuickAdd = {},
+                    onDismissQuickAddError = {},
                 )
             }
         }
@@ -74,6 +78,7 @@ class NewOrderScreenTest {
                     onFilterSelected = {},
                     onProductSelected = {},
                     onQuickAdd = {},
+                    onDismissQuickAddError = {},
                 )
             }
         }
@@ -89,6 +94,7 @@ class NewOrderScreenTest {
         var enteredQuery: String? = null
         var selectedFilter: OrderCatalogFilter? = null
         composeRule.setContent {
+            val query = remember { mutableStateOf("") }
             MaterialTheme {
                 NewOrderScreen(
                     state = readyState(
@@ -100,13 +106,17 @@ class NewOrderScreenTest {
                                 matchedIngredient = "Parmigiano Reggiano",
                             ),
                         ),
-                    ),
+                    ).copy(searchQuery = query.value),
                     onBack = {},
                     onRetry = {},
-                    onSearchQueryChanged = { enteredQuery = it },
+                    onSearchQueryChanged = {
+                        enteredQuery = it
+                        query.value = it
+                    },
                     onFilterSelected = { selectedFilter = it },
                     onProductSelected = {},
                     onQuickAdd = {},
+                    onDismissQuickAddError = {},
                 )
             }
         }
@@ -120,7 +130,7 @@ class NewOrderScreenTest {
         composeRule.onNodeWithText("9,00 €").assertIsDisplayed()
         composeRule.onNodeWithText("+").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Ricerca prodotti e ingredienti")
-            .performTextInput("parm")
+            .performTextReplacement("parm")
 
         composeRule.runOnIdle {
             assertEquals(OrderCatalogFilter.DRINKS, selectedFilter)
@@ -150,6 +160,7 @@ class NewOrderScreenTest {
                     onFilterSelected = {},
                     onProductSelected = { openedProductIds += it },
                     onQuickAdd = { quickAddedProductIds += it },
+                    onDismissQuickAddError = {},
                 )
             }
         }
@@ -164,6 +175,49 @@ class NewOrderScreenTest {
         composeRule.runOnIdle {
             assertEquals(listOf(42L), openedProductIds)
             assertEquals(listOf(42L), quickAddedProductIds)
+        }
+    }
+
+    @Test
+    fun quickAddProgressKeepsTheActionAvailableAndErrorCanBeDismissed() {
+        var quickAddClicks = 0
+        var dismissClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        catalogItems = listOf(
+                            OrderCatalogItem(
+                                productId = 42,
+                                name = "Margherita",
+                                price = it.krpng.cassa.core.money.Money.ofCents(700),
+                            ),
+                        ),
+                    ).copy(
+                        quickAddInProgressProductIds = setOf(42),
+                        quickAddError = "Impossibile aggiungere il prodotto. Riprova.",
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = { quickAddClicks += 1 },
+                    onDismissQuickAddError = { dismissClicks += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Aggiunta in corso per Margherita")
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Aggiungi Margherita").performClick()
+        composeRule.onNodeWithText("Impossibile aggiungere il prodotto. Riprova.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("CHIUDI").performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(1, quickAddClicks)
+            assertEquals(1, dismissClicks)
         }
     }
 

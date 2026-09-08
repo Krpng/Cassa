@@ -6,14 +6,21 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import it.krpng.cassa.core.datetime.ClockProvider
 import it.krpng.cassa.data.database.CassaDatabase
+import it.krpng.cassa.data.database.RoomDatabaseTransactionRunner
 import it.krpng.cassa.data.database.dao.DraftReplacementConflictException
 import it.krpng.cassa.data.database.entity.OrderEntity
+import it.krpng.cassa.data.database.entity.ProductEntity
+import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import java.time.Instant
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -40,6 +47,7 @@ class RoomOrderRepositoryTest {
             clockProvider = object : ClockProvider {
                 override fun now(): Instant = FIXED_NOW
             },
+            transactionRunner = RoomDatabaseTransactionRunner(database),
         )
     }
 
@@ -127,6 +135,95 @@ class RoomOrderRepositoryTest {
         assertEquals(accepted.id, repository.getById(accepted.id)?.id)
     }
 
+    @Test
+    fun quickAddPersistsAndMergesStandardProductsForEveryCategory() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+        database.productDao().insert(product(42, "Crocchè", ProductCategory.FRITTURA, 250))
+        database.productDao().insert(product(43, "Acqua", ProductCategory.BIBITA, 150))
+
+        repeat(2) { repository.quickAddStandard(draft.id, 41) }
+        repeat(2) { repository.quickAddStandard(draft.id, 42) }
+        repeat(3) { repository.quickAddStandard(draft.id, 43) }
+
+        val order = requireNotNull(
+            repository.observeById(draft.id).first { observed -> observed?.items?.size == 3 },
+        )
+        assertEquals(3, order.items.size)
+        assertEquals(2, order.items.single { it.productId == 41L }.quantity)
+        assertEquals(2, order.items.single { it.productId == 42L }.quantity)
+        assertEquals(3, order.items.single { it.productId == 43L }.quantity)
+        val pizza = order.items.single { it.productId == 41L }
+        assertEquals("Margherita", pizza.productNameSnapshot)
+        assertEquals("MARGHERITA", pizza.productPrintedNameSnapshot)
+        assertEquals(ProductCategory.PIZZA, pizza.categorySnapshot)
+        assertEquals(700L, pizza.baseUnitPrice.cents)
+        assertEquals(700L, pizza.finalUnitPrice.cents)
+        assertTrue(pizza.additions.isEmpty())
+        assertTrue(pizza.removals.isEmpty())
+        assertEquals(0L, order.total.cents)
+    }
+
+    @Test
+    fun quickAddPreservesSnapshotsAndRejectsUnavailableOrAcceptedWrites() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        val original = product(41, "Margherita", ProductCategory.PIZZA, 700)
+        database.productDao().insert(original)
+
+        assertTrue(repository.quickAddStandard(draft.id, 41) is QuickAddStandardResult.Added)
+        database.productDao().update(
+            original.copy(
+                name = "Margherita nuova",
+                normalizedName = "margherita nuova",
+                printedName = "NUOVA",
+                priceCents = 900,
+                active = false,
+            ),
+        )
+
+        val persisted = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals("Margherita", persisted.productNameSnapshot)
+        assertEquals("MARGHERITA", persisted.productPrintedNameSnapshot)
+        assertEquals(700L, persisted.baseUnitPrice.cents)
+        assertSame(
+            QuickAddStandardResult.ProductUnavailable,
+            repository.quickAddStandard(draft.id, 41),
+        )
+        assertSame(
+            QuickAddStandardResult.ProductUnavailable,
+            repository.quickAddStandard(draft.id, 999),
+        )
+
+        val accepted = acceptedOrder()
+        database.orderDao().insertDraft(accepted)
+        database.productDao().insert(product(42, "Acqua", ProductCategory.BIBITA, 150))
+        assertSame(
+            QuickAddStandardResult.OrderNotEditable,
+            repository.quickAddStandard(accepted.id, 42),
+        )
+        assertTrue(requireNotNull(repository.getById(accepted.id)).items.isEmpty())
+    }
+
+    @Test
+    fun concurrentQuickAddsSerializeWithoutDuplicateStandardLinesOrLostUpdates() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+
+        val results = coroutineScope {
+            listOf(
+                async { repository.quickAddStandard(draft.id, 41) },
+                async { repository.quickAddStandard(draft.id, 41) },
+            ).awaitAll()
+        }
+
+        assertEquals(1, results.count { it is QuickAddStandardResult.Added })
+        assertEquals(1, results.count { it is QuickAddStandardResult.Merged })
+        val items = requireNotNull(repository.getById(draft.id)).items
+        assertEquals(1, items.size)
+        assertEquals(2, items.single().quantity)
+        assertEquals(listOf(1), items.map { it.createdSequence })
+    }
+
     private suspend fun allOrderIds(): List<String> = database.query(
         "SELECT id FROM orders ORDER BY id",
         emptyArray(),
@@ -152,6 +249,24 @@ class RoomOrderRepositoryTest {
         totalCents = 0,
         generalNote = null,
         sourceOrderId = null,
+    )
+
+    private fun product(
+        id: Long,
+        name: String,
+        category: ProductCategory,
+        priceCents: Long,
+    ): ProductEntity = ProductEntity(
+        id = id,
+        name = name,
+        normalizedName = name.lowercase(),
+        printedName = name.uppercase(),
+        category = category,
+        priceCents = priceCents,
+        automaticExtrasPricing = true,
+        active = true,
+        createdAt = FIXED_NOW.toEpochMilli(),
+        updatedAt = FIXED_NOW.toEpochMilli(),
     )
 
     private companion object {
