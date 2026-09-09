@@ -10,10 +10,13 @@ import it.krpng.cassa.data.database.RoomDatabaseTransactionRunner
 import it.krpng.cassa.data.database.dao.DraftReplacementConflictException
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.IngredientEntity
+import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.repository.CreateDraftResult
+import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
@@ -335,12 +338,14 @@ class RoomOrderRepositoryTest {
         assertSame(
             UpdateOrderItemResult.Updated,
             repository.updateOrderItem(
-                draft.id,
-                itemId,
-                2,
-                null,
-                null,
-                listOf(provolaId, basilicoId),
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 2,
+                note = null,
+                manualUnitPrice = null,
+                selectedAdditionIds = listOf(provolaId, basilicoId),
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
             ),
         )
         val increased = requireNotNull(repository.getById(draft.id))
@@ -366,6 +371,84 @@ class RoomOrderRepositoryTest {
         assertEquals(0L, deselected.automaticExtrasTotal.cents)
         assertEquals(700L, deselected.finalUnitPrice.cents)
     }
+
+    @Test
+    fun standardOneCanBecomeCustomizedMultipleAfterConfirmationButStandardTwoCannot() =
+        runBlocking {
+            val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+            database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+            database.productDao().insert(product(42, "Marinara", ProductCategory.PIZZA, 600))
+            assertTrue(repository.quickAddStandard(draft.id, 41) is QuickAddStandardResult.Added)
+            assertTrue(repository.quickAddStandard(draft.id, 42) is QuickAddStandardResult.Added)
+            assertTrue(repository.quickAddStandard(draft.id, 42) is QuickAddStandardResult.Merged)
+            val items = requireNotNull(repository.getById(draft.id)).items
+            val singleItemId = items.single { it.productId == 41L }.id
+            val aggregatedItemId = items.single { it.productId == 42L }.id
+            val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+            val mozzarellaId = database.ingredientDao().insert(ingredient("Mozzarella"))
+            database.productDao().insertProductIngredients(
+                listOf(ProductIngredientEntity(41, mozzarellaId, 0)),
+            )
+
+            assertSame(
+                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = singleItemId,
+                    quantity = 2,
+                    note = null,
+                    manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(1_000),
+                    selectedAdditionIds = listOf(acciugheId),
+                    selectedRemovalIngredientIds = listOf(mozzarellaId),
+                ),
+            )
+            val beforeConfirmation = requireNotNull(repository.getById(draft.id)).items
+                .single { it.id == singleItemId }
+            assertEquals(1, beforeConfirmation.quantity)
+            assertTrue(beforeConfirmation.additions.isEmpty())
+            assertTrue(beforeConfirmation.removals.isEmpty())
+
+            assertSame(
+                UpdateOrderItemResult.Updated,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = singleItemId,
+                    quantity = 2,
+                    note = null,
+                    manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(1_000),
+                    selectedAdditionIds = listOf(acciugheId),
+                    selectedRemovalIngredientIds = listOf(mozzarellaId),
+                    customizationQuantityIntent =
+                        CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                ),
+            )
+            val afterConfirmation = requireNotNull(repository.getById(draft.id))
+            assertEquals(2, afterConfirmation.items.size)
+            val customized = afterConfirmation.items.single { it.id == singleItemId }
+            assertEquals(2, customized.quantity)
+            assertEquals(listOf(acciugheId), customized.additions.map { it.additionId })
+            assertEquals(listOf(mozzarellaId), customized.removals.map { it.ingredientId })
+            assertEquals(1_000L, customized.manualUnitPrice?.cents)
+            assertEquals(1_000L, customized.finalUnitPrice.cents)
+
+            assertSame(
+                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = aggregatedItemId,
+                    quantity = 2,
+                    note = null,
+                    manualUnitPrice = null,
+                    selectedAdditionIds = listOf(acciugheId),
+                    customizationQuantityIntent =
+                        CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                ),
+            )
+            val aggregated = requireNotNull(repository.getById(draft.id)).items
+                .single { it.id == aggregatedItemId }
+            assertEquals(2, aggregated.quantity)
+            assertTrue(aggregated.additions.isEmpty())
+        }
 
     @Test
     fun pizzaAdditionMutationRejectsInactiveNonPizzaAcceptedAndWrongTargetsInRoom() = runBlocking {
@@ -408,6 +491,135 @@ class RoomOrderRepositoryTest {
             it.id == pizzaId
         }.additions.isNotEmpty())
     }
+
+    @Test
+    fun pizzaRemovalsPersistSnapshotsWithoutChangingPriceAndRejectForeignIngredients() =
+        runBlocking {
+            val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+            database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+            assertTrue(repository.quickAddStandard(draft.id, 41) is QuickAddStandardResult.Added)
+            val itemId = requireNotNull(repository.getById(draft.id)).items.single().id
+            val pomodoroId = database.ingredientDao().insert(ingredient("Pomodoro"))
+            val mozzarellaId = database.ingredientDao().insert(ingredient("Mozzarella"))
+            val basilicoId = database.ingredientDao().insert(ingredient("Basilico"))
+            database.productDao().insertProductIngredients(
+                listOf(
+                    ProductIngredientEntity(41, pomodoroId, 0),
+                    ProductIngredientEntity(41, mozzarellaId, 1),
+                ),
+            )
+            val provolaId = database.additionDao().insert(addition("Provola", null, 150))
+            repository = RoomOrderRepository(
+                orderDao = database.orderDao(),
+                clockProvider = object : ClockProvider {
+                    override fun now(): Instant = UPDATED_NOW
+                },
+                transactionRunner = RoomDatabaseTransactionRunner(database),
+            )
+
+            assertSame(
+                UpdateOrderItemResult.Updated,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = itemId,
+                    quantity = 1,
+                    note = "Ben cotta",
+                    manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(1_000),
+                    selectedAdditionIds = listOf(provolaId),
+                    selectedRemovalIngredientIds = listOf(mozzarellaId, pomodoroId),
+                ),
+            )
+
+            val customized = requireNotNull(repository.getById(draft.id)).items.single()
+            assertEquals(listOf(mozzarellaId, pomodoroId), customized.removals.map { it.ingredientId })
+            assertEquals(listOf(0, 1), customized.removals.map { it.displayOrder })
+            assertEquals(listOf("Mozzarella", "Pomodoro"), customized.removals.map { it.nameSnapshot })
+            assertEquals(150L, customized.automaticExtrasTotal.cents)
+            assertEquals(1_000L, customized.finalUnitPrice.cents)
+            assertEquals(1_000L, customized.manualUnitPrice?.cents)
+            assertEquals(UPDATED_NOW, requireNotNull(repository.getById(draft.id)).updatedAt)
+
+            assertSame(
+                UpdateOrderItemResult.Updated,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = itemId,
+                    quantity = 1,
+                    note = "Ben cotta",
+                    manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(1_000),
+                    selectedAdditionIds = listOf(provolaId),
+                    selectedRemovalIngredientIds = listOf(mozzarellaId, pomodoroId),
+                ),
+            )
+            assertEquals(
+                2,
+                requireNotNull(repository.getById(draft.id)).items.single().removals.size,
+            )
+
+            val mozzarella = requireNotNull(database.ingredientDao().getById(mozzarellaId))
+            database.ingredientDao().update(
+                mozzarella.copy(name = "Fiordilatte", normalizedName = "fiordilatte"),
+            )
+            assertEquals(
+                "Mozzarella",
+                requireNotNull(repository.getById(draft.id)).items.single().removals
+                    .first { it.ingredientId == mozzarellaId }
+                    .nameSnapshot,
+            )
+
+            assertSame(
+                UpdateOrderItemResult.IngredientNotRemovable,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = itemId,
+                    quantity = 1,
+                    note = "Ben cotta",
+                    manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(1_000),
+                    selectedAdditionIds = listOf(provolaId),
+                    selectedRemovalIngredientIds = listOf(basilicoId),
+                ),
+            )
+            assertEquals(
+                listOf(mozzarellaId, pomodoroId),
+                requireNotNull(repository.getById(draft.id)).items.single().removals
+                    .map { it.ingredientId },
+            )
+
+            assertSame(
+                UpdateOrderItemResult.Updated,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = itemId,
+                    quantity = 1,
+                    note = "Ben cotta",
+                    manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(1_000),
+                    selectedAdditionIds = listOf(provolaId),
+                    selectedRemovalIngredientIds = emptyList(),
+                ),
+            )
+            val deselected = requireNotNull(repository.getById(draft.id)).items.single()
+            assertTrue(deselected.removals.isEmpty())
+            assertEquals(listOf(provolaId), deselected.additions.map { it.additionId })
+            assertEquals(1_000L, deselected.manualUnitPrice?.cents)
+            assertEquals(1_000L, deselected.finalUnitPrice.cents)
+
+            database.productDao().insert(product(42, "Acqua", ProductCategory.BIBITA, 150))
+            assertTrue(repository.quickAddStandard(draft.id, 42) is QuickAddStandardResult.Added)
+            val drinkItemId = requireNotNull(repository.getById(draft.id)).items
+                .single { it.productId == 42L }
+                .id
+            assertSame(
+                UpdateOrderItemResult.ItemNotPizza,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = drinkItemId,
+                    quantity = 1,
+                    note = null,
+                    manualUnitPrice = null,
+                    selectedRemovalIngredientIds = listOf(pomodoroId),
+                ),
+            )
+        }
 
     private suspend fun allOrderIds(): List<String> = database.query(
         "SELECT id FROM orders ORDER BY id",
@@ -466,6 +678,12 @@ class RoomOrderRepositoryTest {
         active = true,
         createdAt = FIXED_NOW.toEpochMilli(),
         updatedAt = FIXED_NOW.toEpochMilli(),
+    )
+
+    private fun ingredient(name: String): IngredientEntity = IngredientEntity(
+        name = name,
+        normalizedName = name.lowercase(),
+        active = true,
     )
 
     private companion object {

@@ -2,6 +2,7 @@ package it.krpng.cassa.domain.usecase
 
 import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import javax.inject.Inject
 
@@ -15,6 +16,9 @@ class UpdateOrderItem @Inject constructor(
         note: String?,
         manualUnitPrice: Money?,
         selectedAdditionIds: List<Long>? = null,
+        selectedRemovalIngredientIds: List<Long>? = null,
+        customizationQuantityIntent: CustomizationQuantityIntent =
+            CustomizationQuantityIntent.KEEP_CURRENT_SCOPE,
     ): UpdateOrderItemResult = orderRepository.updateOrderItem(
         orderId = orderId,
         orderItemId = orderItemId,
@@ -22,5 +26,7 @@ class UpdateOrderItem @Inject constructor(
         note = note,
         manualUnitPrice = manualUnitPrice,
         selectedAdditionIds = selectedAdditionIds,
+        selectedRemovalIngredientIds = selectedRemovalIngredientIds,
+        customizationQuantityIntent = customizationQuantityIntent,
     )
 }

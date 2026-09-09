@@ -8,8 +8,10 @@ import androidx.room.Transaction
 import androidx.room.Update
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.IngredientEntity
 import it.krpng.cassa.data.database.entity.OrderItemAdditionEntity
 import it.krpng.cassa.data.database.entity.OrderItemEntity
+import it.krpng.cassa.data.database.entity.OrderItemRemovalEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.FullOrder
 import it.krpng.cassa.data.database.relation.OrderWithItems
@@ -85,6 +87,35 @@ interface OrderDao {
         """,
     )
     suspend fun deleteOrderItemAdditions(
+        orderItemId: String,
+        relationIds: List<String>,
+    ): Int
+
+    @Query(
+        """
+        SELECT ingredients.* FROM ingredients
+        INNER JOIN product_ingredients
+            ON product_ingredients.ingredientId = ingredients.id
+        WHERE product_ingredients.productId = :productId
+            AND ingredients.id IN (:ingredientIds)
+        ORDER BY product_ingredients.displayOrder ASC, ingredients.id ASC
+        """,
+    )
+    suspend fun getProductIngredientsByIds(
+        productId: Long,
+        ingredientIds: List<Long>,
+    ): List<IngredientEntity>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertOrderItemRemovals(removals: List<OrderItemRemovalEntity>)
+
+    @Query(
+        """
+        DELETE FROM order_item_removals
+        WHERE orderItemId = :orderItemId AND id IN (:relationIds)
+        """,
+    )
+    suspend fun deleteOrderItemRemovals(
         orderItemId: String,
         relationIds: List<String>,
     ): Int

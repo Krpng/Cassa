@@ -4,8 +4,10 @@ import it.krpng.cassa.core.datetime.ClockProvider
 import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.IngredientEntity
 import it.krpng.cassa.data.database.entity.OrderItemAdditionEntity
 import it.krpng.cassa.data.database.entity.OrderItemEntity
+import it.krpng.cassa.data.database.entity.OrderItemRemovalEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.FullOrder
 import it.krpng.cassa.data.database.relation.OrderItemWithModifiers
@@ -13,6 +15,7 @@ import it.krpng.cassa.data.database.relation.OrderWithItems
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.repository.CreateDraftResult
+import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
@@ -490,6 +493,247 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
+    fun `confirmed customized quantity increase keeps one item and all modifiers`() = runTest {
+        val addition = OrderItemAdditionEntity(
+            id = "addition-relation",
+            orderItemId = "item-id",
+            additionId = 10,
+            additionNameSnapshot = "Provola",
+            additionPrintedNameSnapshot = "PROVOLA",
+            listedPriceCents = 150,
+            chargedPriceCents = 150,
+            displayOrder = 0,
+        )
+        val removal = OrderItemRemovalEntity(
+            id = "removal-relation",
+            orderItemId = "item-id",
+            ingredientId = 20,
+            ingredientNameSnapshot = "Mozzarella",
+            displayOrder = 0,
+        )
+        val item = orderItemEntity(quantity = 1).copy(
+            automaticExtrasTotalCents = 150,
+            finalUnitPriceCents = 900,
+            manualUnitPriceCents = 900,
+        )
+        val unconfirmedDao = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(OrderItemWithModifiers(item, listOf(addition), listOf(removal))),
+            ),
+        )
+
+        assertSame(
+            UpdateOrderItemResult.AmbiguousPizzaQuantity,
+            RoomOrderRepository(unconfirmedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                orderId = "draft-id",
+                orderItemId = "item-id",
+                quantity = 2,
+                note = null,
+                manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(900),
+                selectedAdditionIds = listOf(10),
+                selectedRemovalIngredientIds = listOf(20),
+            ),
+        )
+        assertNull(unconfirmedDao.updatedOrderItem)
+
+        val confirmedDao = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(OrderItemWithModifiers(item, listOf(addition), listOf(removal))),
+            ),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            RoomOrderRepository(confirmedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                orderId = "draft-id",
+                orderItemId = "item-id",
+                quantity = 2,
+                note = null,
+                manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(900),
+                selectedAdditionIds = listOf(10),
+                selectedRemovalIngredientIds = listOf(20),
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertEquals("item-id", confirmedDao.updatedOrderItem?.id)
+        assertEquals(2, confirmedDao.updatedOrderItem?.quantity)
+        assertEquals(900L, confirmedDao.updatedOrderItem?.manualUnitPriceCents)
+        assertEquals(900L, confirmedDao.updatedOrderItem?.finalUnitPriceCents)
+        assertTrue(confirmedDao.insertedOrderItemAdditions.isEmpty())
+        assertTrue(confirmedDao.deletedOrderItemAdditionIds.isEmpty())
+        assertTrue(confirmedDao.insertedOrderItemRemovals.isEmpty())
+        assertTrue(confirmedDao.deletedOrderItemRemovalIds.isEmpty())
+
+        val alreadyCustomized = item.copy(quantity = 2)
+        val unchangedDao = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(
+                    OrderItemWithModifiers(alreadyCustomized, listOf(addition), listOf(removal)),
+                ),
+            ),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            RoomOrderRepository(unchangedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                null,
+                it.krpng.cassa.core.money.Money.ofCents(900),
+                listOf(10),
+                listOf(20),
+            ),
+        )
+
+        val increasedDao = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(
+                    OrderItemWithModifiers(alreadyCustomized, listOf(addition), listOf(removal)),
+                ),
+            ),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            RoomOrderRepository(increasedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                3,
+                null,
+                it.krpng.cassa.core.money.Money.ofCents(900),
+                listOf(10),
+                listOf(20),
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertEquals("item-id", increasedDao.updatedOrderItem?.id)
+        assertEquals(3, increasedDao.updatedOrderItem?.quantity)
+        assertEquals(900L, increasedDao.updatedOrderItem?.manualUnitPriceCents)
+        assertTrue(increasedDao.insertedOrderItemAdditions.isEmpty())
+        assertTrue(increasedDao.insertedOrderItemRemovals.isEmpty())
+
+        val changedModifiersDao = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(
+                    OrderItemWithModifiers(alreadyCustomized, listOf(addition), listOf(removal)),
+                ),
+            ),
+        )
+        assertSame(
+            UpdateOrderItemResult.AmbiguousPizzaQuantity,
+            RoomOrderRepository(changedModifiersDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                3,
+                null,
+                it.krpng.cassa.core.money.Money.ofCents(900),
+                emptyList(),
+                listOf(20),
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertNull(changedModifiersDao.updatedOrderItem)
+    }
+
+    @Test
+    fun `standard quantity one can add an addition and increase to two when confirmed`() = runTest {
+        fun dao() = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(
+                    OrderItemWithModifiers(orderItemEntity(1), emptyList(), emptyList()),
+                ),
+            ),
+            activeAdditions = listOf(additionEntity(10, "Acciughe", null, 150)),
+        )
+
+        val unconfirmedDao = dao()
+        assertSame(
+            UpdateOrderItemResult.AmbiguousPizzaQuantity,
+            RoomOrderRepository(unconfirmedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                null,
+                it.krpng.cassa.core.money.Money.ofCents(1_000),
+                listOf(10),
+            ),
+        )
+        assertNull(unconfirmedDao.updatedOrderItem)
+        assertTrue(unconfirmedDao.insertedOrderItemAdditions.isEmpty())
+
+        val confirmedDao = dao()
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            RoomOrderRepository(confirmedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                null,
+                it.krpng.cassa.core.money.Money.ofCents(1_000),
+                listOf(10),
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertEquals("item-id", confirmedDao.updatedOrderItem?.id)
+        assertEquals(2, confirmedDao.updatedOrderItem?.quantity)
+        assertEquals(1_000L, confirmedDao.updatedOrderItem?.manualUnitPriceCents)
+        assertEquals(1_000L, confirmedDao.updatedOrderItem?.finalUnitPriceCents)
+        assertEquals(listOf(10L), confirmedDao.insertedOrderItemAdditions.map { it.additionId })
+    }
+
+    @Test
+    fun `standard quantity one can add removals and combined modifiers when confirmed`() = runTest {
+        fun dao() = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(
+                    OrderItemWithModifiers(orderItemEntity(1), emptyList(), emptyList()),
+                ),
+            ),
+            activeAdditions = listOf(additionEntity(10, "Acciughe", null, 150)),
+            productIngredients = listOf(
+                IngredientEntity(20, "Mozzarella", "mozzarella", true),
+            ),
+        )
+
+        val removalOnlyDao = dao()
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            RoomOrderRepository(removalOnlyDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                null,
+                null,
+                emptyList(),
+                listOf(20),
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertEquals("item-id", removalOnlyDao.updatedOrderItem?.id)
+        assertEquals(2, removalOnlyDao.updatedOrderItem?.quantity)
+        assertEquals(listOf(20L), removalOnlyDao.insertedOrderItemRemovals.map { it.ingredientId })
+
+        val combinedDao = dao()
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            RoomOrderRepository(combinedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                null,
+                null,
+                listOf(10),
+                listOf(20),
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertEquals("item-id", combinedDao.updatedOrderItem?.id)
+        assertEquals(2, combinedDao.updatedOrderItem?.quantity)
+        assertEquals(listOf(10L), combinedDao.insertedOrderItemAdditions.map { it.additionId })
+        assertEquals(listOf(20L), combinedDao.insertedOrderItemRemovals.map { it.ingredientId })
+    }
+
+    @Test
     fun `pizza addition guards reject non pizza unavailable deferred pricing and ambiguous split`() =
         runTest {
             fun repositoryFor(item: OrderItemEntity, additions: List<AdditionEntity> = emptyList()) =
@@ -537,6 +781,22 @@ class RoomOrderRepositoryTest {
                 ).updateOrderItem("draft-id", "item-id", 2, null, null, listOf(10)),
             )
             assertSame(
+                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+                repositoryFor(
+                    orderItemEntity(2),
+                    listOf(additionEntity(10, "Provola", null, 150)),
+                ).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    2,
+                    null,
+                    null,
+                    listOf(10),
+                    customizationQuantityIntent =
+                        CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                ),
+            )
+            assertSame(
                 UpdateOrderItemResult.Updated,
                 repositoryFor(
                     orderItemEntity(2),
@@ -564,6 +824,7 @@ class RoomOrderRepositoryTest {
         private val fullOrder: FullOrder? = null,
         private val activeProduct: ProductEntity? = null,
         private val activeAdditions: List<AdditionEntity> = emptyList(),
+        private val productIngredients: List<IngredientEntity> = emptyList(),
         private val updateOrderItemResult: Int = 1,
         private val updateTimestampResult: Int = 1,
     ) : OrderDao {
@@ -575,6 +836,8 @@ class RoomOrderRepositoryTest {
         var updatedDraftTimestamp: Long? = null
         val insertedOrderItemAdditions = mutableListOf<OrderItemAdditionEntity>()
         val deletedOrderItemAdditionIds = mutableListOf<String>()
+        val insertedOrderItemRemovals = mutableListOf<OrderItemRemovalEntity>()
+        val deletedOrderItemRemovalIds = mutableListOf<String>()
 
         override suspend fun getWithItems(orderId: String): OrderWithItems? = null
 
@@ -621,6 +884,25 @@ class RoomOrderRepositoryTest {
             relationIds: List<String>,
         ): Int {
             deletedOrderItemAdditionIds += relationIds
+            return relationIds.size
+        }
+
+        override suspend fun getProductIngredientsByIds(
+            productId: Long,
+            ingredientIds: List<Long>,
+        ): List<IngredientEntity> = productIngredients.filter { it.id in ingredientIds }
+
+        override suspend fun insertOrderItemRemovals(
+            removals: List<OrderItemRemovalEntity>,
+        ) {
+            insertedOrderItemRemovals += removals
+        }
+
+        override suspend fun deleteOrderItemRemovals(
+            orderItemId: String,
+            relationIds: List<String>,
+        ): Int {
+            deletedOrderItemRemovalIds += relationIds
             return relationIds.size
         }
 

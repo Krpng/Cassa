@@ -193,6 +193,8 @@ class DraftRecoveryViewModelTest {
             note: String?,
             manualUnitPrice: Money?,
             selectedAdditionIds: List<Long>?,
+            selectedRemovalIngredientIds: List<Long>?,
+            customizationQuantityIntent: it.krpng.cassa.domain.repository.CustomizationQuantityIntent,
         ): UpdateOrderItemResult = error("Not used")
     }
 

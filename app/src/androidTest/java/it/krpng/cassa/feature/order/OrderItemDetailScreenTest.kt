@@ -210,6 +210,51 @@ class OrderItemDetailScreenTest {
         }
 
         composeRule.onNodeWithText("AGGIUNTE").assertDoesNotExist()
+        composeRule.onNodeWithText("RIMOZIONI").assertDoesNotExist()
+    }
+
+    @Test
+    fun pizzaRemovalsShowOnlyProvidedCompositionAndExposeAccessibleToggle() {
+        var toggledId: Long? = null
+        composeRule.setContent {
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = true,
+                        productName = "Margherita",
+                        automaticUnitPrice = Money.ofCents(700),
+                        category = ProductCategory.PIZZA,
+                        canEditRemovals = true,
+                        removalOptions = listOf(
+                            PizzaRemovalOption(20, "Pomodoro", true),
+                            PizzaRemovalOption(21, "Mozzarella", false),
+                        ),
+                        selectedRemovalIngredientIds = listOf(20),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                    onRemovalToggled = { toggledId = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("RIMOZIONI").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Rimozione Pomodoro, selezionata")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Rimozione Mozzarella, non selezionata")
+            .performScrollTo()
+            .performClick()
+
+        composeRule.runOnIdle { assertEquals(21L, toggledId) }
     }
 
     @Test
@@ -288,7 +333,7 @@ class OrderItemDetailScreenTest {
 
         composeRule.onNodeWithText("Questa riga contiene 2 pizze.", substring = true)
             .assertIsDisplayed()
-        composeRule.onNodeWithText("Applica le aggiunte a tutte?").assertIsDisplayed()
+        composeRule.onNodeWithText("Applica le personalizzazioni a tutte?").assertIsDisplayed()
         composeRule.onNodeWithText("ANNULLA").performClick()
         composeRule.runOnIdle { assertEquals(1, cancelled) }
 

@@ -107,29 +107,33 @@ class HomeViewModel @Inject constructor(
 
     fun confirmReplaceDraft() {
         val current = _uiState.value
-        val draftId = current.newOrderConflict?.draftId ?: return
-        if (!current.showReplaceConfirmation || newOrderJob?.isActive == true) return
+        val conflict = current.newOrderConflict ?: return
+        if (!current.showReplaceConfirmation || current.isNewOrderOperationInProgress) return
 
         _uiState.update {
             it.copy(
-                showReplaceConfirmation = true,
+                newOrderConflict = null,
+                showReplaceConfirmation = false,
                 isNewOrderOperationInProgress = true,
                 errorMessage = null,
             )
         }
         newOrderJob = viewModelScope.launch {
             try {
-                when (val result = orderRepository.replaceDraft(draftId)) {
+                when (val result = orderRepository.replaceDraft(conflict.draftId)) {
                     is ReplaceDraftResult.Created -> openDraft(result.draft.id)
                     ReplaceDraftResult.OriginalNotFoundOrNotDraft ->
-                        showOperationError("L'ordine in corso non è più disponibile.")
+                        showReplacementError(
+                            conflict,
+                            "L'ordine in corso non è più disponibile.",
+                        )
                     ReplaceDraftResult.Conflict ->
-                        showOperationError("Esiste già un altro ordine in corso.")
+                        showReplacementError(conflict, "Esiste già un altro ordine in corso.")
                 }
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                showOperationError("Impossibile sostituire l'ordine in corso.")
+                showReplacementError(conflict, "Impossibile sostituire l'ordine in corso.")
             }
         }
     }
@@ -188,6 +192,17 @@ class HomeViewModel @Inject constructor(
     private fun showOperationError(message: String) {
         _uiState.update {
             it.copy(
+                showReplaceConfirmation = false,
+                isNewOrderOperationInProgress = false,
+                errorMessage = message,
+            )
+        }
+    }
+
+    private fun showReplacementError(conflict: HomeDraftSummary, message: String) {
+        _uiState.update {
+            it.copy(
+                newOrderConflict = conflict,
                 showReplaceConfirmation = false,
                 isNewOrderOperationInProgress = false,
                 errorMessage = message,

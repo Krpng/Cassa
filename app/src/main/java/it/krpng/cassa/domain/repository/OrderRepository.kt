@@ -28,7 +28,15 @@ interface OrderRepository {
         note: String?,
         manualUnitPrice: Money?,
         selectedAdditionIds: List<Long>? = null,
+        selectedRemovalIngredientIds: List<Long>? = null,
+        customizationQuantityIntent: CustomizationQuantityIntent =
+            CustomizationQuantityIntent.KEEP_CURRENT_SCOPE,
     ): UpdateOrderItemResult
+}
+
+enum class CustomizationQuantityIntent {
+    KEEP_CURRENT_SCOPE,
+    APPLY_TO_ALL_UNITS_CONFIRMED,
 }
 
 sealed interface UpdateOrderItemResult {
@@ -43,6 +51,8 @@ sealed interface UpdateOrderItemResult {
     data object ItemNotPizza : UpdateOrderItemResult
 
     data object AdditionUnavailable : UpdateOrderItemResult
+
+    data object IngredientNotRemovable : UpdateOrderItemResult
 
     data object AmbiguousPizzaQuantity : UpdateOrderItemResult
 

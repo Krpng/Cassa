@@ -158,24 +158,34 @@ class HomeViewModelTest {
                 replaceResult = ReplaceDraftResult.Created(replacement),
             )
             val viewModel = HomeViewModel(repository)
+            val events = mutableListOf<HomeNavigationEvent>()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                viewModel.navigationEvents.collect(events::add)
+            }
 
             viewModel.startNewOrder()
             advanceUntilIdle()
             viewModel.requestReplaceDraft()
             assertTrue(viewModel.uiState.value.showReplaceConfirmation)
 
-            val event = async(UnconfinedTestDispatcher(testScheduler)) {
-                viewModel.navigationEvents.first()
-            }
             viewModel.confirmReplaceDraft()
             viewModel.confirmReplaceDraft()
+            assertFalse(viewModel.uiState.value.showReplaceConfirmation)
+            assertNull(viewModel.uiState.value.newOrderConflict)
             advanceUntilIdle()
 
-            assertEquals(HomeNavigationEvent.OpenDraft("replacement-id"), event.await())
+            assertEquals(listOf(HomeNavigationEvent.OpenDraft("replacement-id")), events)
             assertEquals(listOf("draft-id"), repository.replacedIds)
             assertEquals(1, repository.replaceCalls)
             assertEquals(0, repository.createCalls)
             assertEquals(0, repository.deleteCalls)
+
+            repository.activeDrafts.value = draftWithItems()
+            advanceUntilIdle()
+
+            assertNull(viewModel.uiState.value.newOrderConflict)
+            assertFalse(viewModel.uiState.value.showReplaceConfirmation)
+            assertEquals(listOf(HomeNavigationEvent.OpenDraft("replacement-id")), events)
         }
 
     @Test
@@ -200,6 +210,9 @@ class HomeViewModelTest {
             assertEquals(1, repository.replaceCalls)
             assertEquals(0, repository.createCalls)
             assertEquals(0, repository.deleteCalls)
+
+            viewModel.requestReplaceDraft()
+            assertTrue(viewModel.uiState.value.showReplaceConfirmation)
         }
 
     @Test
@@ -298,6 +311,8 @@ class HomeViewModelTest {
             note: String?,
             manualUnitPrice: Money?,
             selectedAdditionIds: List<Long>?,
+            selectedRemovalIngredientIds: List<Long>?,
+            customizationQuantityIntent: it.krpng.cassa.domain.repository.CustomizationQuantityIntent,
         ): UpdateOrderItemResult = error("Not used")
     }
 

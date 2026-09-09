@@ -5,8 +5,10 @@ import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.IngredientEntity
 import it.krpng.cassa.data.database.entity.OrderItemAdditionEntity
 import it.krpng.cassa.data.database.entity.OrderItemEntity
+import it.krpng.cassa.data.database.entity.OrderItemRemovalEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.data.database.relation.FullOrder
@@ -282,6 +284,20 @@ class RoomRepositoriesTest {
         ) = Unit
 
         override suspend fun deleteOrderItemAdditions(
+            orderItemId: String,
+            relationIds: List<String>,
+        ): Int = 0
+
+        override suspend fun getProductIngredientsByIds(
+            productId: Long,
+            ingredientIds: List<Long>,
+        ): List<IngredientEntity> = emptyList()
+
+        override suspend fun insertOrderItemRemovals(
+            removals: List<OrderItemRemovalEntity>,
+        ) = Unit
+
+        override suspend fun deleteOrderItemRemovals(
             orderItemId: String,
             relationIds: List<String>,
         ): Int = 0

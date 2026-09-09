@@ -65,6 +65,7 @@ fun OrderItemDetailRoute(
         onManualPriceChanged = viewModel::updateManualPrice,
         onSave = viewModel::save,
         onAdditionToggled = viewModel::toggleAddition,
+        onRemovalToggled = viewModel::toggleRemoval,
         onCancelQuantityIncrease = viewModel::cancelQuantityIncrease,
         onConfirmQuantityIncrease = viewModel::confirmQuantityIncrease,
     )
@@ -83,6 +84,7 @@ fun OrderItemDetailScreen(
     onManualPriceChanged: (String) -> Unit,
     onSave: () -> Unit,
     onAdditionToggled: (Long) -> Unit = {},
+    onRemovalToggled: (Long) -> Unit = {},
     onCancelQuantityIncrease: () -> Unit = {},
     onConfirmQuantityIncrease: () -> Unit = {},
 ) {
@@ -300,6 +302,69 @@ fun OrderItemDetailScreen(
                     }
                 }
             }
+            item {
+                Text(
+                    text = "RIMOZIONI",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            state.removalMessage?.let { message ->
+                item {
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            if (state.removalOptions.isEmpty()) {
+                item {
+                    Text(
+                        text = "Nessun ingrediente rimovibile.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            } else {
+                items(
+                    count = state.removalOptions.size,
+                    key = { index -> state.removalOptions[index].id },
+                ) { index ->
+                    val option = state.removalOptions[index]
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .toggleable(
+                                value = option.isSelected,
+                                enabled = state.canEditRemovals && !state.isSaving,
+                                role = Role.Checkbox,
+                                onValueChange = { onRemovalToggled(option.id) },
+                            )
+                            .semantics {
+                                contentDescription = if (option.isSelected) {
+                                    "Rimozione ${option.name}, selezionata"
+                                } else {
+                                    "Rimozione ${option.name}, non selezionata"
+                                }
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Checkbox(
+                            checked = option.isSelected,
+                            onCheckedChange = null,
+                            enabled = state.canEditRemovals && !state.isSaving,
+                        )
+                        Text(
+                            text = option.name,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                    }
+                }
+            }
         }
         if (state.manualPriceInput == null) {
             item {
@@ -336,11 +401,11 @@ fun OrderItemDetailScreen(
     if (state.showQuantityIncreaseConfirmation) {
         AlertDialog(
             onDismissRequest = onCancelQuantityIncrease,
-            title = { Text("Applica le aggiunte a tutte?") },
+            title = { Text("Applica le personalizzazioni a tutte?") },
             text = {
                 Text(
                     "La riga diventerà ${state.quantityInput}x ${state.productName}. " +
-                        "Le aggiunte selezionate saranno applicate a tutte le " +
+                        "Le aggiunte e rimozioni selezionate saranno applicate a tutte le " +
                         "${state.quantityInput} pizze.",
                 )
             },

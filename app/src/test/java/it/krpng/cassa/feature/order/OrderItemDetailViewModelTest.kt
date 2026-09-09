@@ -3,15 +3,21 @@ package it.krpng.cassa.feature.order
 import androidx.lifecycle.SavedStateHandle
 import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.domain.model.Addition
+import it.krpng.cassa.domain.model.Ingredient
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.OrderItem
 import it.krpng.cassa.domain.model.OrderItemAddition
+import it.krpng.cassa.domain.model.OrderItemRemoval
 import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductCategory
+import it.krpng.cassa.domain.model.ProductIngredient
 import it.krpng.cassa.domain.repository.CreateDraftResult
+import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.AdditionRepository
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
@@ -90,6 +96,7 @@ class OrderItemDetailViewModelTest {
                     3,
                     "Senza sale",
                     Money.ofCents(600),
+                    emptyList(),
                     emptyList(),
                 ),
                 repository.updates.single(),
@@ -216,15 +223,22 @@ class OrderItemDetailViewModelTest {
     fun `non pizza and ambiguous or deferred pizza additions cannot be edited`() =
         runTest(dispatcher) {
             val active = FakeAdditionRepository(listOf(addition(10, "Provola", 150)))
-            val nonPizza = draft().copy(
-                items = draft().items.map { item ->
-                    item.copy(categorySnapshot = ProductCategory.FRITTURA, quantity = 1)
-                },
-            )
-            val nonPizzaViewModel = viewModel(FakeOrderRepository(nonPizza), additionRepository = active)
-            advanceUntilIdle()
-            assertTrue(nonPizzaViewModel.uiState.value.additionOptions.isEmpty())
-            assertFalse(nonPizzaViewModel.uiState.value.canEditAdditions)
+            listOf(ProductCategory.FRITTURA, ProductCategory.BIBITA).forEach { category ->
+                val nonPizza = draft().copy(
+                    items = draft().items.map { item ->
+                        item.copy(categorySnapshot = category, quantity = 1)
+                    },
+                )
+                val nonPizzaViewModel = viewModel(
+                    FakeOrderRepository(nonPizza),
+                    additionRepository = active,
+                )
+                advanceUntilIdle()
+                assertTrue(nonPizzaViewModel.uiState.value.additionOptions.isEmpty())
+                assertFalse(nonPizzaViewModel.uiState.value.canEditAdditions)
+                assertTrue(nonPizzaViewModel.uiState.value.removalOptions.isEmpty())
+                assertFalse(nonPizzaViewModel.uiState.value.canEditRemovals)
+            }
 
             val aggregated = draft().copy(
                 items = draft().items.map { item -> item.copy(note = null) },
@@ -259,6 +273,27 @@ class OrderItemDetailViewModelTest {
         }
 
     @Test
+    fun `pizza with no catalog ingredients exposes an empty removal state without inventing data`() =
+        runTest(dispatcher) {
+            val singlePizza = draft().copy(
+                items = draft().items.map { item -> item.copy(quantity = 1, note = null) },
+            )
+            val products = FakeProductRepository(
+                listOf(productWithIngredients(productId = 42, ingredients = emptyList())),
+            )
+
+            val viewModel = viewModel(
+                FakeOrderRepository(singlePizza),
+                productRepository = products,
+            )
+            advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value.canEditRemovals)
+            assertTrue(viewModel.uiState.value.removalOptions.isEmpty())
+            assertTrue(viewModel.uiState.value.selectedRemovalIngredientIds.isEmpty())
+        }
+
+    @Test
     fun `increasing customized pizza quantity requires confirmation and cancel does not write`() =
         runTest(dispatcher) {
             val repository = FakeOrderRepository(draftWithAddition(quantity = 1))
@@ -285,6 +320,49 @@ class OrderItemDetailViewModelTest {
             assertEquals(1, repository.updates.size)
             assertEquals(2, repository.updates.single().quantity)
             assertEquals(listOf(10L), repository.updates.single().selectedAdditionIds)
+            assertEquals(
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                repository.updates.single().customizationQuantityIntent,
+            )
+        }
+
+    @Test
+    fun `new customization on persisted standard quantity one can increase after confirmation`() =
+        runTest(dispatcher) {
+            val standardOne = draft().copy(
+                items = draft().items.map { item ->
+                    item.copy(
+                        quantity = 1,
+                        automaticExtrasTotal = Money.ZERO,
+                        finalUnitPrice = item.baseUnitPrice,
+                        note = null,
+                    )
+                },
+            )
+            val repository = FakeOrderRepository(standardOne)
+            val additions = FakeAdditionRepository(listOf(addition(10, "Acciughe", 150)))
+            val viewModel = viewModel(repository, additionRepository = additions)
+            advanceUntilIdle()
+
+            viewModel.toggleAddition(10)
+            viewModel.updateQuantity("2")
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value.showQuantityIncreaseConfirmation)
+            assertTrue(repository.updates.isEmpty())
+
+            viewModel.confirmQuantityIncrease()
+            advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value.isSaved)
+            assertEquals(1, repository.updates.size)
+            assertEquals(2, repository.updates.single().quantity)
+            assertEquals(listOf(10L), repository.updates.single().selectedAdditionIds)
+            assertEquals(
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                repository.updates.single().customizationQuantityIntent,
+            )
         }
 
     @Test
@@ -311,12 +389,152 @@ class OrderItemDetailViewModelTest {
 
             assertTrue(increased.uiState.value.showQuantityIncreaseConfirmation)
             assertTrue(increasedRepository.updates.isEmpty())
+
+            increased.confirmQuantityIncrease()
+            advanceUntilIdle()
+
+            assertTrue(increased.uiState.value.isSaved)
+            assertEquals(1, increasedRepository.updates.size)
+            assertEquals(3, increasedRepository.updates.single().quantity)
+            assertEquals(listOf(10L), increasedRepository.updates.single().selectedAdditionIds)
+            assertEquals(
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                increasedRepository.updates.single().customizationQuantityIntent,
+            )
+        }
+
+    @Test
+    fun `pizza exposes only its ingredients in composition order and saves removals`() =
+        runTest(dispatcher) {
+            val singlePizza = draft().copy(
+                items = draft().items.map { item -> item.copy(quantity = 1, note = null) },
+            )
+            val repository = FakeOrderRepository(singlePizza)
+            val product = productWithIngredients(
+                productId = 42,
+                ingredients = listOf(
+                    productIngredient(21, "Mozzarella", displayOrder = 1),
+                    productIngredient(20, "Pomodoro", displayOrder = 0),
+                ),
+            )
+            val unrelated = productWithIngredients(
+                productId = 99,
+                ingredients = listOf(productIngredient(22, "Basilico", displayOrder = 0)),
+            )
+            val viewModel = viewModel(
+                repository = repository,
+                productRepository = FakeProductRepository(listOf(product, unrelated)),
+            )
+            advanceUntilIdle()
+
+            val initial = viewModel.uiState.value
+            assertTrue(initial.canEditRemovals)
+            assertEquals(listOf(20L, 21L), initial.removalOptions.map { it.id })
+
+            viewModel.toggleRemoval(21)
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertEquals(listOf(21L), repository.updates.single().selectedRemovalIngredientIds)
+            assertTrue(viewModel.uiState.value.isSaved)
+        }
+
+    @Test
+    fun `persisted removal reopens selected with its historical snapshot name`() =
+        runTest(dispatcher) {
+            val persisted = OrderItemRemoval(
+                id = "removal-id",
+                ingredientId = 20,
+                nameSnapshot = "Pomodoro storico",
+                displayOrder = 0,
+            )
+            val repository = FakeOrderRepository(
+                draft().copy(
+                    items = draft().items.map { item ->
+                        item.copy(quantity = 1, note = null, removals = listOf(persisted))
+                    },
+                ),
+            )
+            val products = FakeProductRepository(
+                listOf(
+                    productWithIngredients(
+                        42,
+                        listOf(productIngredient(20, "Pomodoro nuovo", displayOrder = 0)),
+                    ),
+                ),
+            )
+
+            val reopened = viewModel(repository, productRepository = products)
+            advanceUntilIdle()
+
+            val state = reopened.uiState.value
+            assertEquals(listOf(20L), state.selectedRemovalIngredientIds)
+            assertTrue(state.removalOptions.single().isSelected)
+            assertEquals("Pomodoro storico", state.removalOptions.single().name)
+        }
+
+    @Test
+    fun `standard pizza quantity two blocks removals then confirmation protects customized increase`() =
+        runTest(dispatcher) {
+            val repository = FakeOrderRepository(
+                draft().copy(items = draft().items.map { item -> item.copy(note = null) }),
+            )
+            val products = FakeProductRepository(
+                listOf(
+                    productWithIngredients(
+                        42,
+                        listOf(productIngredient(20, "Pomodoro", displayOrder = 0)),
+                    ),
+                ),
+            )
+            val viewModel = viewModel(repository, productRepository = products)
+            advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.canEditRemovals)
+            assertTrue(viewModel.uiState.value.removalMessage.orEmpty().contains("contiene 2 pizze"))
+
+            viewModel.updateQuantity("1")
+            assertTrue(viewModel.uiState.value.canEditRemovals)
+
+            val customizedRepository = FakeOrderRepository(
+                draft().copy(
+                    items = draft().items.map { item -> item.copy(quantity = 1, note = null) },
+                ),
+            )
+            val customized = viewModel(
+                customizedRepository,
+                productRepository = products,
+            )
+            advanceUntilIdle()
+            customized.toggleRemoval(20)
+            customized.updateQuantity("2")
+            customized.save()
+            advanceUntilIdle()
+
+            assertTrue(customized.uiState.value.showQuantityIncreaseConfirmation)
+            assertTrue(customizedRepository.updates.isEmpty())
+
+            customized.cancelQuantityIncrease()
+            assertTrue(customizedRepository.updates.isEmpty())
+            customized.save()
+            customized.confirmQuantityIncrease()
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(20L),
+                customizedRepository.updates.single().selectedRemovalIngredientIds,
+            )
+            assertEquals(
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                customizedRepository.updates.single().customizationQuantityIntent,
+            )
         }
 
     private fun viewModel(
         repository: OrderRepository,
         itemId: String = "item-id",
         additionRepository: AdditionRepository = FakeAdditionRepository(),
+        productRepository: ProductRepository = FakeProductRepository(),
     ): OrderItemDetailViewModel = OrderItemDetailViewModel(
         savedStateHandle = SavedStateHandle(
             mapOf(
@@ -326,6 +544,7 @@ class OrderItemDetailViewModelTest {
         ),
         orderRepository = repository,
         additionRepository = additionRepository,
+        productRepository = productRepository,
         updateOrderItem = UpdateOrderItem(repository),
     )
 
@@ -347,6 +566,29 @@ class OrderItemDetailViewModelTest {
             error("Not used")
 
         override suspend fun deactivate(additionId: Long, updatedAt: Instant): Boolean =
+            error("Not used")
+    }
+
+    private class FakeProductRepository(
+        private val products: List<Product> = emptyList(),
+    ) : ProductRepository {
+        override fun observeAll(): Flow<List<Product>> = MutableStateFlow(products)
+
+        override fun observeActive(): Flow<List<Product>> = MutableStateFlow(
+            products.filter(Product::active),
+        )
+
+        override suspend fun getById(productId: Long): Product? =
+            products.firstOrNull { it.id == productId }
+
+        override suspend fun create(product: Product): Long = error("Not used")
+
+        override suspend fun update(product: Product): Boolean = error("Not used")
+
+        override suspend fun activate(productId: Long, updatedAt: Instant): Boolean =
+            error("Not used")
+
+        override suspend fun deactivate(productId: Long, updatedAt: Instant): Boolean =
             error("Not used")
     }
 
@@ -388,6 +630,8 @@ class OrderItemDetailViewModelTest {
             note: String?,
             manualUnitPrice: Money?,
             selectedAdditionIds: List<Long>?,
+            selectedRemovalIngredientIds: List<Long>?,
+            customizationQuantityIntent: CustomizationQuantityIntent,
         ): UpdateOrderItemResult {
             updates += UpdateCall(
                 orderId,
@@ -396,6 +640,8 @@ class OrderItemDetailViewModelTest {
                 note,
                 manualUnitPrice,
                 selectedAdditionIds,
+                selectedRemovalIngredientIds,
+                customizationQuantityIntent,
             )
             if (updateResult == UpdateOrderItemResult.Updated) {
                 order = order?.copy(
@@ -427,6 +673,9 @@ class OrderItemDetailViewModelTest {
         val note: String?,
         val manualPrice: Money?,
         val selectedAdditionIds: List<Long>? = null,
+        val selectedRemovalIngredientIds: List<Long>? = null,
+        val customizationQuantityIntent: CustomizationQuantityIntent =
+            CustomizationQuantityIntent.KEEP_CURRENT_SCOPE,
     )
 
     private fun addition(id: Long, name: String, priceCents: Long): Addition = Addition(
@@ -438,6 +687,37 @@ class OrderItemDetailViewModelTest {
         active = true,
         createdAt = Instant.EPOCH,
         updatedAt = Instant.EPOCH,
+    )
+
+    private fun productIngredient(
+        id: Long,
+        name: String,
+        displayOrder: Int,
+    ): ProductIngredient = ProductIngredient(
+        ingredient = Ingredient(
+            id = id,
+            name = name,
+            normalizedName = name.lowercase(),
+            active = true,
+        ),
+        displayOrder = displayOrder,
+    )
+
+    private fun productWithIngredients(
+        productId: Long,
+        ingredients: List<ProductIngredient>,
+    ): Product = Product(
+        id = productId,
+        name = "Margherita",
+        normalizedName = "margherita",
+        printedName = "MARGHERITA",
+        category = ProductCategory.PIZZA,
+        price = Money.ofCents(700),
+        automaticExtrasPricing = true,
+        active = true,
+        createdAt = Instant.EPOCH,
+        updatedAt = Instant.EPOCH,
+        ingredients = ingredients,
     )
 
     private fun draftWithAddition(quantity: Int): Order {

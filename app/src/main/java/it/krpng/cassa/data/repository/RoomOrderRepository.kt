@@ -11,8 +11,10 @@ import it.krpng.cassa.data.database.dao.DraftReplacementConflictException
 import it.krpng.cassa.data.database.dao.ReplaceDraftDatabaseResult
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.IngredientEntity
 import it.krpng.cassa.data.database.entity.OrderItemAdditionEntity
 import it.krpng.cassa.data.database.entity.OrderItemEntity
+import it.krpng.cassa.data.database.entity.OrderItemRemovalEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.OrderItemWithModifiers
 import it.krpng.cassa.domain.model.Order
@@ -22,6 +24,7 @@ import it.krpng.cassa.domain.pricing.OrderLineMergeCandidate
 import it.krpng.cassa.domain.pricing.OrderLineMergePolicy
 import it.krpng.cassa.domain.pricing.PricingCalculator
 import it.krpng.cassa.domain.repository.CreateDraftResult
+import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
@@ -155,6 +158,8 @@ class RoomOrderRepository @Inject constructor(
         note: String?,
         manualUnitPrice: Money?,
         selectedAdditionIds: List<Long>?,
+        selectedRemovalIngredientIds: List<Long>?,
+        customizationQuantityIntent: CustomizationQuantityIntent,
     ): UpdateOrderItemResult {
         if (quantity <= 0) return UpdateOrderItemResult.InvalidQuantity
 
@@ -168,11 +173,18 @@ class RoomOrderRepository @Inject constructor(
                 val existing = order.items.firstOrNull { item -> item.item.id == orderItemId }
                     ?: return@runInTransaction UpdateOrderItemResult.ItemNotFound
 
+                validateCustomizationQuantityTransition(
+                    existing = existing,
+                    requestedQuantity = quantity,
+                    requestedAdditionIds = selectedAdditionIds,
+                    requestedRemovalIngredientIds = selectedRemovalIngredientIds,
+                    intent = customizationQuantityIntent,
+                )?.let { rejection -> return@runInTransaction rejection }
+
                 val additionUpdate = selectedAdditionIds?.let { requestedIds ->
                     prepareAdditionUpdate(
                         existing = existing,
                         requestedAdditionIds = requestedIds,
-                        requestedQuantity = quantity,
                     )
                 }
                 if (additionUpdate is AdditionUpdatePreparation.Rejected) {
@@ -180,6 +192,18 @@ class RoomOrderRepository @Inject constructor(
                 }
                 val preparedAdditions =
                     (additionUpdate as? AdditionUpdatePreparation.Ready)?.update
+
+                val removalUpdate = selectedRemovalIngredientIds?.let { requestedIds ->
+                    prepareRemovalUpdate(
+                        existing = existing,
+                        requestedIngredientIds = requestedIds,
+                    )
+                }
+                if (removalUpdate is RemovalUpdatePreparation.Rejected) {
+                    return@runInTransaction removalUpdate.result
+                }
+                val preparedRemovals =
+                    (removalUpdate as? RemovalUpdatePreparation.Ready)?.update
 
                 val pricing = calculateUpdatedPricing(
                     existing = existing,
@@ -208,6 +232,20 @@ class RoomOrderRepository @Inject constructor(
                         orderDao.insertOrderItemAdditions(update.entitiesToInsert)
                     }
                 }
+                preparedRemovals?.let { update ->
+                    if (update.relationIdsToDelete.isNotEmpty()) {
+                        val deleted = orderDao.deleteOrderItemRemovals(
+                            orderItemId = orderItemId,
+                            relationIds = update.relationIdsToDelete,
+                        )
+                        if (deleted != update.relationIdsToDelete.size) {
+                            throw OrderItemUpdateConflictException()
+                        }
+                    }
+                    if (update.entitiesToInsert.isNotEmpty()) {
+                        orderDao.insertOrderItemRemovals(update.entitiesToInsert)
+                    }
+                }
                 if (orderDao.updateOrderItem(updatedItem) != 1) {
                     throw OrderItemUpdateConflictException()
                 }
@@ -231,7 +269,6 @@ class RoomOrderRepository @Inject constructor(
     private suspend fun prepareAdditionUpdate(
         existing: OrderItemWithModifiers,
         requestedAdditionIds: List<Long>,
-        requestedQuantity: Int,
     ): AdditionUpdatePreparation {
         if (existing.item.categorySnapshot != ProductCategory.PIZZA) {
             return AdditionUpdatePreparation.Rejected(UpdateOrderItemResult.ItemNotPizza)
@@ -253,15 +290,6 @@ class RoomOrderRepository @Inject constructor(
         val currentIds = canonicalByAdditionId.keys
         val selectionChanged = requestedIds != currentIds
 
-        if (
-            selectionChanged &&
-            requestedQuantity > 1 &&
-            existing.isAggregatedStandardPizza()
-        ) {
-            return AdditionUpdatePreparation.Rejected(
-                UpdateOrderItemResult.AmbiguousPizzaQuantity,
-            )
-        }
         if (selectionChanged && !existing.item.automaticExtrasPricingSnapshot) {
             return AdditionUpdatePreparation.Rejected(
                 UpdateOrderItemResult.AutomaticExtrasPricingNotSupported,
@@ -311,6 +339,74 @@ class RoomOrderRepository @Inject constructor(
         )
     }
 
+    private suspend fun prepareRemovalUpdate(
+        existing: OrderItemWithModifiers,
+        requestedIngredientIds: List<Long>,
+    ): RemovalUpdatePreparation {
+        if (existing.item.categorySnapshot != ProductCategory.PIZZA) {
+            return RemovalUpdatePreparation.Rejected(UpdateOrderItemResult.ItemNotPizza)
+        }
+        if (requestedIngredientIds.size != requestedIngredientIds.distinct().size) {
+            return RemovalUpdatePreparation.Rejected(
+                UpdateOrderItemResult.IngredientNotRemovable,
+            )
+        }
+
+        val requestedIds = requestedIngredientIds.toSet()
+        val sortedExisting = existing.removals.sortedWith(compareBy({ it.displayOrder }, { it.id }))
+        val canonicalByIngredientId = linkedMapOf<Long, OrderItemRemovalEntity>()
+        val duplicateRelationIds = mutableListOf<String>()
+        sortedExisting.forEach { relation ->
+            val ingredientId = relation.ingredientId ?: return@forEach
+            if (canonicalByIngredientId.putIfAbsent(ingredientId, relation) != null) {
+                duplicateRelationIds += relation.id
+            }
+        }
+        val currentIds = canonicalByIngredientId.keys
+        val selectionChanged = requestedIds != currentIds
+
+        val idsToAdd = requestedIngredientIds.filterNot(currentIds::contains)
+        val ingredientsToAdd = if (idsToAdd.isEmpty()) {
+            emptyList()
+        } else {
+            val productId = existing.item.productId
+                ?: return RemovalUpdatePreparation.Rejected(
+                    UpdateOrderItemResult.IngredientNotRemovable,
+                )
+            val productIngredients = orderDao.getProductIngredientsByIds(productId, idsToAdd)
+            val byId = productIngredients.associateBy(IngredientEntity::id)
+            if (byId.keys != idsToAdd.toSet()) {
+                return RemovalUpdatePreparation.Rejected(
+                    UpdateOrderItemResult.IngredientNotRemovable,
+                )
+            }
+            idsToAdd.map { ingredientId -> checkNotNull(byId[ingredientId]) }
+        }
+
+        val removedRelationIds = canonicalByIngredientId
+            .filterKeys { ingredientId -> ingredientId !in requestedIds }
+            .values
+            .map(OrderItemRemovalEntity::id)
+        var nextDisplayOrder = sortedExisting.maxOfOrNull { it.displayOrder } ?: -1
+        val entitiesToInsert = ingredientsToAdd.map { ingredient ->
+            if (nextDisplayOrder == Int.MAX_VALUE) {
+                return RemovalUpdatePreparation.Rejected(UpdateOrderItemResult.AmountOverflow)
+            }
+            nextDisplayOrder += 1
+            ingredient.toOrderItemRemoval(
+                orderItemId = existing.item.id,
+                displayOrder = nextDisplayOrder,
+            )
+        }
+
+        return RemovalUpdatePreparation.Ready(
+            RemovalUpdate(
+                relationIdsToDelete = duplicateRelationIds + removedRelationIds,
+                entitiesToInsert = entitiesToInsert,
+            ),
+        )
+    }
+
     private fun calculateUpdatedPricing(
         existing: OrderItemWithModifiers,
         preparedAdditions: AdditionUpdate?,
@@ -336,12 +432,38 @@ class RoomOrderRepository @Inject constructor(
         )
     }
 
-    private fun OrderItemWithModifiers.isAggregatedStandardPizza(): Boolean =
-        item.quantity > 1 &&
-            additions.isEmpty() &&
-            removals.isEmpty() &&
-            item.note.isNullOrBlank() &&
-            item.manualUnitPriceCents == null
+    private fun validateCustomizationQuantityTransition(
+        existing: OrderItemWithModifiers,
+        requestedQuantity: Int,
+        requestedAdditionIds: List<Long>?,
+        requestedRemovalIngredientIds: List<Long>?,
+        intent: CustomizationQuantityIntent,
+    ): UpdateOrderItemResult? {
+        val existingAdditionIds = existing.additions.mapNotNull { it.additionId }.toSet()
+        val existingRemovalIds = existing.removals.mapNotNull { it.ingredientId }.toSet()
+        val resultingAdditionIds = requestedAdditionIds?.toSet() ?: existingAdditionIds
+        val resultingRemovalIds = requestedRemovalIngredientIds?.toSet() ?: existingRemovalIds
+        val modifierSelectionChanged =
+            resultingAdditionIds != existingAdditionIds || resultingRemovalIds != existingRemovalIds
+        val resultingCustomization =
+            resultingAdditionIds.isNotEmpty() || resultingRemovalIds.isNotEmpty()
+
+        if (
+            existing.item.quantity > 1 &&
+            requestedQuantity > 1 &&
+            modifierSelectionChanged
+        ) {
+            return UpdateOrderItemResult.AmbiguousPizzaQuantity
+        }
+        if (
+            requestedQuantity > existing.item.quantity &&
+            resultingCustomization &&
+            intent != CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED
+        ) {
+            return UpdateOrderItemResult.AmbiguousPizzaQuantity
+        }
+        return null
+    }
 
     private fun AdditionEntity.toOrderItemAddition(
         orderItemId: String,
@@ -354,6 +476,17 @@ class RoomOrderRepository @Inject constructor(
         additionPrintedNameSnapshot = printedName ?: name,
         listedPriceCents = priceCents,
         chargedPriceCents = priceCents,
+        displayOrder = displayOrder,
+    )
+
+    private fun IngredientEntity.toOrderItemRemoval(
+        orderItemId: String,
+        displayOrder: Int,
+    ): OrderItemRemovalEntity = OrderItemRemovalEntity(
+        id = UUID.randomUUID().toString(),
+        orderItemId = orderItemId,
+        ingredientId = id,
+        ingredientNameSnapshot = name,
         displayOrder = displayOrder,
     )
 
@@ -440,4 +573,15 @@ private data class AdditionUpdate(
     val resultingEntities: List<OrderItemAdditionEntity>,
     val relationIdsToDelete: List<String>,
     val entitiesToInsert: List<OrderItemAdditionEntity>,
+)
+
+private sealed interface RemovalUpdatePreparation {
+    data class Ready(val update: RemovalUpdate) : RemovalUpdatePreparation
+
+    data class Rejected(val result: UpdateOrderItemResult) : RemovalUpdatePreparation
+}
+
+private data class RemovalUpdate(
+    val relationIdsToDelete: List<String>,
+    val entitiesToInsert: List<OrderItemRemovalEntity>,
 )

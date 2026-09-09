@@ -9,9 +9,12 @@ import it.krpng.cassa.domain.model.Addition
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.OrderItem
 import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.repository.AdditionRepository
+import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import it.krpng.cassa.domain.usecase.UpdateOrderItem
 import javax.inject.Inject
@@ -31,6 +34,12 @@ data class PizzaAdditionOption(
     val isSelected: Boolean,
 )
 
+data class PizzaRemovalOption(
+    val id: Long,
+    val name: String,
+    val isSelected: Boolean,
+)
+
 data class OrderItemDetailUiState(
     val isLoading: Boolean = true,
     val canSave: Boolean = false,
@@ -45,8 +54,12 @@ data class OrderItemDetailUiState(
     val selectedAdditionIds: List<Long> = emptyList(),
     val canEditAdditions: Boolean = false,
     val additionMessage: String? = null,
+    val removalOptions: List<PizzaRemovalOption> = emptyList(),
+    val selectedRemovalIngredientIds: List<Long> = emptyList(),
+    val canEditRemovals: Boolean = false,
+    val removalMessage: String? = null,
     val automaticExtrasPricingEnabled: Boolean = false,
-    val hasExistingNonAdditionCustomization: Boolean = false,
+    val hasExistingNonModifierCustomization: Boolean = false,
     val showQuantityIncreaseConfirmation: Boolean = false,
     val isSaving: Boolean = false,
     val isSaved: Boolean = false,
@@ -59,6 +72,7 @@ class OrderItemDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val orderRepository: OrderRepository,
     private val additionRepository: AdditionRepository,
+    private val productRepository: ProductRepository,
     private val updateOrderItem: UpdateOrderItem,
 ) : ViewModel() {
     private val orderId = savedStateHandle.get<String>(ORDER_ID_ARGUMENT).orEmpty()
@@ -69,6 +83,7 @@ class OrderItemDetailViewModel @Inject constructor(
     private var observationJob: Job? = null
     private var fieldsInitialized = false
     private var hasLocalAdditionChanges = false
+    private var hasLocalRemovalChanges = false
 
     init {
         load()
@@ -84,7 +99,7 @@ class OrderItemDetailViewModel @Inject constructor(
                 quantityInput = value,
                 validationErrors = state.validationErrors.copy(quantity = null),
                 errorMessage = null,
-            ).withAdditionAvailability()
+            ).withModifierAvailability()
         }
     }
 
@@ -141,7 +156,26 @@ class OrderItemDetailViewModel @Inject constructor(
                     option.copy(isSelected = option.id in selectedIds)
                 },
                 errorMessage = null,
-            ).withAdditionAvailability()
+            ).withModifierAvailability()
+        }
+    }
+
+    fun toggleRemoval(ingredientId: Long) {
+        _uiState.update { state ->
+            if (!state.canEditRemovals || state.isSaving) return@update state
+            hasLocalRemovalChanges = true
+            val selectedIds = if (ingredientId in state.selectedRemovalIngredientIds) {
+                state.selectedRemovalIngredientIds - ingredientId
+            } else {
+                state.selectedRemovalIngredientIds + ingredientId
+            }
+            state.copy(
+                selectedRemovalIngredientIds = selectedIds,
+                removalOptions = state.removalOptions.map { option ->
+                    option.copy(isSelected = option.id in selectedIds)
+                },
+                errorMessage = null,
+            ).withModifierAvailability()
         }
     }
 
@@ -204,15 +238,17 @@ class OrderItemDetailViewModel @Inject constructor(
         observationJob?.cancel()
         fieldsInitialized = false
         hasLocalAdditionChanges = false
+        hasLocalRemovalChanges = false
         _uiState.value = OrderItemDetailUiState()
         observationJob = viewModelScope.launch {
             try {
                 combine(
                     orderRepository.observeById(orderId),
                     additionRepository.observeActive(),
-                ) { order, additions -> order to additions }
-                    .collect { (order, additions) ->
-                        applyObservedState(order, additions)
+                    productRepository.observeAll(),
+                ) { order, additions, products -> Triple(order, additions, products) }
+                    .collect { (order, additions, products) ->
+                        applyObservedState(order, additions, products)
                     }
             } catch (error: CancellationException) {
                 throw error
@@ -222,7 +258,11 @@ class OrderItemDetailViewModel @Inject constructor(
         }
     }
 
-    private fun applyObservedState(order: Order?, additions: List<Addition>) {
+    private fun applyObservedState(
+        order: Order?,
+        additions: List<Addition>,
+        products: List<Product>,
+    ) {
         when {
             order == null -> showUnavailable("Ordine non disponibile.")
             order.status != OrderStatus.DRAFT ->
@@ -233,13 +273,17 @@ class OrderItemDetailViewModel @Inject constructor(
                 if (item == null) {
                     showUnavailable("Riga ordine non disponibile.")
                 } else {
-                    showEditable(item, additions)
+                    showEditable(item, additions, products)
                 }
             }
         }
     }
 
-    private fun showEditable(item: OrderItem, activeAdditions: List<Addition>) {
+    private fun showEditable(
+        item: OrderItem,
+        activeAdditions: List<Addition>,
+        products: List<Product>,
+    ) {
         val persistedSelectedIds = item.additions.mapNotNull { addition -> addition.additionId }
         val selectedIds = if (hasLocalAdditionChanges) {
             _uiState.value.selectedAdditionIds
@@ -247,8 +291,16 @@ class OrderItemDetailViewModel @Inject constructor(
             persistedSelectedIds
         }
         val isPizza = item.categorySnapshot == ProductCategory.PIZZA
-        val hasExistingNonAdditionCustomization = item.removals.isNotEmpty() ||
-            !item.note.isNullOrBlank() || item.manualUnitPrice != null
+        val persistedRemovalIds = item.removals.mapNotNull { removal -> removal.ingredientId }
+        val selectedRemovalIds = if (hasLocalRemovalChanges) {
+            _uiState.value.selectedRemovalIngredientIds
+        } else {
+            persistedRemovalIds
+        }
+        val hasExistingNonModifierCustomization = !item.note.isNullOrBlank() ||
+            item.manualUnitPrice != null ||
+            item.additions.any { addition -> addition.additionId == null } ||
+            item.removals.any { removal -> removal.ingredientId == null }
         val options = if (isPizza) {
             activeAdditions.map { addition ->
                 PizzaAdditionOption(
@@ -258,6 +310,37 @@ class OrderItemDetailViewModel @Inject constructor(
                     isSelected = addition.id in selectedIds,
                 )
             }
+        } else {
+            emptyList()
+        }
+        val persistedRemovalNames = item.removals
+            .mapNotNull { removal -> removal.ingredientId?.let { it to removal.nameSnapshot } }
+            .toMap()
+        val productIngredients = products
+            .firstOrNull { product -> product.id == item.productId }
+            ?.ingredients
+            .orEmpty()
+            .sortedWith(compareBy({ it.displayOrder }, { it.ingredient.id }))
+        val removalOptions = if (isPizza) {
+            val fromComposition = productIngredients.map { productIngredient ->
+                PizzaRemovalOption(
+                    id = productIngredient.ingredient.id,
+                    name = persistedRemovalNames[productIngredient.ingredient.id]
+                        ?: productIngredient.ingredient.name,
+                    isSelected = productIngredient.ingredient.id in selectedRemovalIds,
+                )
+            }
+            val compositionIds = fromComposition.map { option -> option.id }.toSet()
+            val historicalSelections = item.removals.mapNotNull { removal ->
+                val ingredientId = removal.ingredientId ?: return@mapNotNull null
+                if (ingredientId in compositionIds) return@mapNotNull null
+                PizzaRemovalOption(
+                    id = ingredientId,
+                    name = removal.nameSnapshot,
+                    isSelected = ingredientId in selectedRemovalIds,
+                )
+            }
+            fromComposition + historicalSelections
         } else {
             emptyList()
         }
@@ -272,8 +355,10 @@ class OrderItemDetailViewModel @Inject constructor(
                 originalQuantity = item.quantity,
                 additionOptions = options,
                 selectedAdditionIds = selectedIds,
+                removalOptions = removalOptions,
+                selectedRemovalIngredientIds = selectedRemovalIds,
                 automaticExtrasPricingEnabled = item.automaticExtrasPricingSnapshot,
-                hasExistingNonAdditionCustomization = hasExistingNonAdditionCustomization,
+                hasExistingNonModifierCustomization = hasExistingNonModifierCustomization,
             )
             val initialized = if (fieldsInitialized) {
                 common
@@ -285,7 +370,7 @@ class OrderItemDetailViewModel @Inject constructor(
                     manualPriceInput = item.manualUnitPrice?.toInputString(),
                 )
             }
-            initialized.withAdditionAvailability()
+            initialized.withModifierAvailability()
         }
     }
 
@@ -298,7 +383,8 @@ class OrderItemDetailViewModel @Inject constructor(
             !quantityIncreaseConfirmed &&
             fields.quantity > state.originalQuantity &&
             state.category == ProductCategory.PIZZA &&
-            state.selectedAdditionIds.isNotEmpty()
+            (state.selectedAdditionIds.isNotEmpty() ||
+                state.selectedRemovalIngredientIds.isNotEmpty())
         ) {
             _uiState.update { current ->
                 current.copy(showQuantityIncreaseConfirmation = true)
@@ -327,6 +413,18 @@ class OrderItemDetailViewModel @Inject constructor(
                         _uiState.value.selectedAdditionIds
                     } else {
                         null
+                    },
+                    selectedRemovalIngredientIds = if (
+                        _uiState.value.category == ProductCategory.PIZZA
+                    ) {
+                        _uiState.value.selectedRemovalIngredientIds
+                    } else {
+                        null
+                    },
+                    customizationQuantityIntent = if (quantityIncreaseConfirmed) {
+                        CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED
+                    } else {
+                        CustomizationQuantityIntent.KEEP_CURRENT_SCOPE
                     },
                 )
             } catch (error: CancellationException) {
@@ -379,6 +477,15 @@ class OrderItemDetailViewModel @Inject constructor(
                     )
                 }
 
+            UpdateOrderItemResult.IngredientNotRemovable ->
+                _uiState.update { state ->
+                    state.copy(
+                        isSaving = false,
+                        errorMessage =
+                            "Uno degli ingredienti selezionati non appartiene più al prodotto.",
+                    )
+                }
+
             UpdateOrderItemResult.AmbiguousPizzaQuantity ->
                 _uiState.update { state ->
                     state.copy(
@@ -414,15 +521,13 @@ class OrderItemDetailViewModel @Inject constructor(
         )
     }
 
-    private fun OrderItemDetailUiState.withAdditionAvailability(): OrderItemDetailUiState {
+    private fun OrderItemDetailUiState.withModifierAvailability(): OrderItemDetailUiState {
         if (category != ProductCategory.PIZZA) {
-            return copy(canEditAdditions = false, additionMessage = null)
-        }
-        if (!automaticExtrasPricingEnabled) {
             return copy(
                 canEditAdditions = false,
-                additionMessage =
-                    "Le aggiunte per questa pizza saranno gestite nel passaggio dedicato.",
+                additionMessage = null,
+                canEditRemovals = false,
+                removalMessage = null,
             )
         }
 
@@ -430,18 +535,28 @@ class OrderItemDetailViewModel @Inject constructor(
         val isUncustomizedMultiple = quantity != null &&
             quantity > 1 &&
             selectedAdditionIds.isEmpty() &&
-            !hasExistingNonAdditionCustomization
-        return if (isUncustomizedMultiple) {
-            copy(
-                canEditAdditions = false,
-                additionMessage = "Questa riga contiene $quantity pizze. " +
-                    "Le aggiunte possono essere modificate da questa schermata " +
-                    "solo quando la quantità è 1.",
-            )
+            selectedRemovalIngredientIds.isEmpty() &&
+            !hasExistingNonModifierCustomization
+        val hasCustomization = selectedAdditionIds.isNotEmpty() ||
+            selectedRemovalIngredientIds.isNotEmpty() ||
+            hasExistingNonModifierCustomization
+        val canEditModifiers = quantity == 1 || hasCustomization
+        val quantityMessage = if (isUncustomizedMultiple) {
+            "Questa riga contiene $quantity pizze. Le personalizzazioni possono essere " +
+                "modificate da questa schermata solo quando la quantità è 1."
         } else {
-            copy(canEditAdditions = quantity == 1 || selectedAdditionIds.isNotEmpty() ||
-                hasExistingNonAdditionCustomization, additionMessage = null)
+            null
         }
+        return copy(
+            canEditAdditions = automaticExtrasPricingEnabled && canEditModifiers,
+            additionMessage = when {
+                !automaticExtrasPricingEnabled ->
+                    "Le aggiunte per questa pizza saranno gestite nel passaggio dedicato."
+                else -> quantityMessage
+            },
+            canEditRemovals = canEditModifiers,
+            removalMessage = quantityMessage,
+        )
     }
 
     private fun Money.toInputString(): String =
