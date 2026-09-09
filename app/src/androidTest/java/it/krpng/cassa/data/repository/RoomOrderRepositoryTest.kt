@@ -373,6 +373,72 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
+    fun automaticExtrasPricingSnapshotDisablesChargesAndSurvivesCatalogChanges() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(
+            product(
+                id = 41,
+                name = "Pizza senza extra automatici",
+                category = ProductCategory.PIZZA,
+                priceCents = 800,
+                automaticExtrasPricing = false,
+            ),
+        )
+        assertTrue(repository.quickAddStandard(draft.id, 41) is QuickAddStandardResult.Added)
+        val itemId = requireNotNull(repository.getById(draft.id)).items.single().id
+        val provolaId = database.additionDao().insert(addition("Provola", null, 100))
+        val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+        val freeId = database.additionDao().insert(addition("Origano", null, 0))
+
+        val catalogProduct = requireNotNull(database.productDao().getWithIngredients(41)).product
+        database.productDao().update(catalogProduct.copy(automaticExtrasPricing = true))
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 1,
+                note = null,
+                manualUnitPrice = null,
+                selectedAdditionIds = listOf(provolaId, acciugheId, freeId),
+            ),
+        )
+        val priced = requireNotNull(repository.getById(draft.id)).items.single()
+        assertFalse(priced.automaticExtrasPricingSnapshot)
+        assertEquals(listOf(100L, 150L, 0L), priced.additions.map { it.listedPrice.cents })
+        assertEquals(listOf(0L, 0L, 0L), priced.additions.map { it.chargedPrice.cents })
+        assertEquals(0L, priced.automaticExtrasTotal.cents)
+        assertEquals(800L, priced.finalUnitPrice.cents)
+
+        val catalogAddition = requireNotNull(database.additionDao().getById(provolaId))
+        database.additionDao().update(catalogAddition.copy(priceCents = 250))
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 1,
+                note = null,
+                manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(950),
+                selectedAdditionIds = listOf(provolaId, acciugheId, freeId),
+            ),
+        )
+        val manual = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(100L, manual.additions.first().listedPrice.cents)
+        assertEquals(0L, manual.additions.first().chargedPrice.cents)
+        assertEquals(950L, manual.finalUnitPrice.cents)
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(draft.id, itemId, 1, null, null, emptyList()),
+        )
+        val deselected = requireNotNull(repository.getById(draft.id)).items.single()
+        assertTrue(deselected.additions.isEmpty())
+        assertEquals(800L, deselected.finalUnitPrice.cents)
+    }
+
+    @Test
     fun standardOneCanBecomeCustomizedMultipleAfterConfirmationButStandardTwoCannot() =
         runBlocking {
             val draft = (repository.createDraft() as CreateDraftResult.Created).draft
@@ -653,6 +719,7 @@ class RoomOrderRepositoryTest {
         name: String,
         category: ProductCategory,
         priceCents: Long,
+        automaticExtrasPricing: Boolean = true,
     ): ProductEntity = ProductEntity(
         id = id,
         name = name,
@@ -660,7 +727,7 @@ class RoomOrderRepositoryTest {
         printedName = name.uppercase(),
         category = category,
         priceCents = priceCents,
-        automaticExtrasPricing = true,
+        automaticExtrasPricing = automaticExtrasPricing,
         active = true,
         createdAt = FIXED_NOW.toEpochMilli(),
         updatedAt = FIXED_NOW.toEpochMilli(),

@@ -54,6 +54,20 @@ class PricingCalculatorTest {
     }
 
     @Test
+    fun `charged addition price follows automatic extras flag exactly`() {
+        val listedPrice = Money.ofCents(150)
+
+        assertEquals(
+            listedPrice,
+            PricingCalculator.chargedAdditionPrice(listedPrice, true),
+        )
+        assertEquals(
+            Money.ZERO,
+            PricingCalculator.chargedAdditionPrice(listedPrice, false),
+        )
+    }
+
+    @Test
     fun `PRICE-004 manual override has absolute precedence`() {
         val result = calculate(
             baseCents = 700,

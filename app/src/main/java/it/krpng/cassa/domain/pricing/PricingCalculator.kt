@@ -10,6 +10,11 @@ data class PricingResult(
 )
 
 object PricingCalculator {
+    fun chargedAdditionPrice(
+        listedPrice: Money,
+        automaticExtrasPricing: Boolean,
+    ): Money = if (automaticExtrasPricing) listedPrice else Money.ZERO
+
     fun calculate(
         baseUnitPrice: Money,
         additionPrices: List<Money>,
@@ -17,10 +22,8 @@ object PricingCalculator {
         manualUnitPrice: Money?,
         quantity: Int,
     ): PricingResult {
-        val automaticExtrasTotal = if (automaticExtrasPricing) {
-            additionPrices.fold(Money.ZERO, Money::plus)
-        } else {
-            Money.ZERO
+        val automaticExtrasTotal = additionPrices.fold(Money.ZERO) { total, listedPrice ->
+            total + chargedAdditionPrice(listedPrice, automaticExtrasPricing)
         }
         val automaticUnitPrice = baseUnitPrice + automaticExtrasTotal
         val finalUnitPrice = manualUnitPrice ?: automaticUnitPrice

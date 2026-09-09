@@ -220,7 +220,7 @@ class OrderItemDetailViewModelTest {
     }
 
     @Test
-    fun `non pizza and ambiguous or deferred pizza additions cannot be edited`() =
+    fun `non pizza and ambiguous pizza additions are blocked while no-auto additions remain editable`() =
         runTest(dispatcher) {
             val active = FakeAdditionRepository(listOf(addition(10, "Provola", 150)))
             listOf(ProductCategory.FRITTURA, ProductCategory.BIBITA).forEach { category ->
@@ -268,8 +268,11 @@ class OrderItemDetailViewModelTest {
                 additionRepository = active,
             )
             advanceUntilIdle()
-            assertFalse(deferredViewModel.uiState.value.canEditAdditions)
-            assertTrue(deferredViewModel.uiState.value.additionMessage.orEmpty().contains("dedicato"))
+            assertTrue(deferredViewModel.uiState.value.canEditAdditions)
+            assertTrue(
+                deferredViewModel.uiState.value.additionMessage.orEmpty()
+                    .contains("non modificano automaticamente il prezzo"),
+            )
         }
 
     @Test

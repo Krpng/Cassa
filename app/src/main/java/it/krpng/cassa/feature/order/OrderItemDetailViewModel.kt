@@ -495,14 +495,6 @@ class OrderItemDetailViewModel @Inject constructor(
                     )
                 }
 
-            UpdateOrderItemResult.AutomaticExtrasPricingNotSupported ->
-                _uiState.update { state ->
-                    state.copy(
-                        isSaving = false,
-                        errorMessage = "Gestione aggiunte non disponibile per questa pizza.",
-                    )
-                }
-
             UpdateOrderItemResult.PersistenceFailure ->
                 _uiState.update { state ->
                     state.copy(
@@ -548,11 +540,12 @@ class OrderItemDetailViewModel @Inject constructor(
             null
         }
         return copy(
-            canEditAdditions = automaticExtrasPricingEnabled && canEditModifiers,
+            canEditAdditions = canEditModifiers,
             additionMessage = when {
+                quantityMessage != null -> quantityMessage
                 !automaticExtrasPricingEnabled ->
-                    "Le aggiunte per questa pizza saranno gestite nel passaggio dedicato."
-                else -> quantityMessage
+                    "Le aggiunte non modificano automaticamente il prezzo di questo prodotto."
+                else -> null
             },
             canEditRemovals = canEditModifiers,
             removalMessage = quantityMessage,

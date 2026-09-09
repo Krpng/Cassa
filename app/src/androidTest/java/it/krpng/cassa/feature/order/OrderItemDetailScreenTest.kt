@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -182,6 +183,48 @@ class OrderItemDetailScreenTest {
             .performClick()
 
         composeRule.runOnIdle { assertEquals(11L, toggledId) }
+    }
+
+    @Test
+    fun disabledAutomaticExtrasExplainNoChargeWithoutDisablingSelection() {
+        var toggledId: Long? = null
+        composeRule.setContent {
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = true,
+                        productName = "Pizza configurata",
+                        automaticUnitPrice = Money.ofCents(800),
+                        category = ProductCategory.PIZZA,
+                        canEditAdditions = true,
+                        additionMessage =
+                            "Le aggiunte non modificano automaticamente il prezzo di questo prodotto.",
+                        additionOptions = listOf(
+                            PizzaAdditionOption(10, "Provola", Money.ofCents(100), false),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                    onAdditionToggled = { toggledId = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText(
+            "Le aggiunte non modificano automaticamente il prezzo di questo prodotto.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Aggiunta Provola, non selezionata")
+            .assertIsEnabled()
+            .performClick()
+        composeRule.runOnIdle { assertEquals(10L, toggledId) }
     }
 
     @Test

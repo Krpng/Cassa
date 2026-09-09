@@ -56,8 +56,6 @@ sealed interface UpdateOrderItemResult {
 
     data object AmbiguousPizzaQuantity : UpdateOrderItemResult
 
-    data object AutomaticExtrasPricingNotSupported : UpdateOrderItemResult
-
     data object InvalidQuantity : UpdateOrderItemResult
 
     data object AmountOverflow : UpdateOrderItemResult

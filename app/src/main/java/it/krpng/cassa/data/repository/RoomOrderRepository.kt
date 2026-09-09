@@ -288,14 +288,6 @@ class RoomOrderRepository @Inject constructor(
             }
         }
         val currentIds = canonicalByAdditionId.keys
-        val selectionChanged = requestedIds != currentIds
-
-        if (selectionChanged && !existing.item.automaticExtrasPricingSnapshot) {
-            return AdditionUpdatePreparation.Rejected(
-                UpdateOrderItemResult.AutomaticExtrasPricingNotSupported,
-            )
-        }
-
         val idsToAdd = requestedAdditionIds.filterNot(currentIds::contains)
         val additionsToAdd = if (idsToAdd.isEmpty()) {
             emptyList()
@@ -323,6 +315,7 @@ class RoomOrderRepository @Inject constructor(
             addition.toOrderItemAddition(
                 orderItemId = existing.item.id,
                 displayOrder = nextDisplayOrder,
+                automaticExtrasPricing = existing.item.automaticExtrasPricingSnapshot,
             )
         }
         val retained = sortedExisting.filter { relation ->
@@ -412,7 +405,7 @@ class RoomOrderRepository @Inject constructor(
         preparedAdditions: AdditionUpdate?,
         manualUnitPrice: Money?,
         quantity: Int,
-    ) = if (preparedAdditions == null || !existing.item.automaticExtrasPricingSnapshot) {
+    ) = if (preparedAdditions == null) {
         PricingCalculator.calculate(
             baseUnitPrice = Money.ofCents(existing.item.baseUnitPriceCents),
             additionPrices = listOf(Money.ofCents(existing.item.automaticExtrasTotalCents)),
@@ -426,7 +419,7 @@ class RoomOrderRepository @Inject constructor(
             additionPrices = preparedAdditions.resultingEntities.map { relation ->
                 Money.ofCents(relation.listedPriceCents)
             },
-            automaticExtrasPricing = true,
+            automaticExtrasPricing = existing.item.automaticExtrasPricingSnapshot,
             manualUnitPrice = manualUnitPrice,
             quantity = quantity,
         )
@@ -468,6 +461,7 @@ class RoomOrderRepository @Inject constructor(
     private fun AdditionEntity.toOrderItemAddition(
         orderItemId: String,
         displayOrder: Int,
+        automaticExtrasPricing: Boolean,
     ): OrderItemAdditionEntity = OrderItemAdditionEntity(
         id = UUID.randomUUID().toString(),
         orderItemId = orderItemId,
@@ -475,7 +469,10 @@ class RoomOrderRepository @Inject constructor(
         additionNameSnapshot = name,
         additionPrintedNameSnapshot = printedName ?: name,
         listedPriceCents = priceCents,
-        chargedPriceCents = priceCents,
+        chargedPriceCents = PricingCalculator.chargedAdditionPrice(
+            listedPrice = Money.ofCents(priceCents),
+            automaticExtrasPricing = automaticExtrasPricing,
+        ).cents,
         displayOrder = displayOrder,
     )
 
