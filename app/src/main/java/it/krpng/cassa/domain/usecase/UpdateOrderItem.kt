@@ -14,11 +14,13 @@ class UpdateOrderItem @Inject constructor(
         quantity: Int,
         note: String?,
         manualUnitPrice: Money?,
+        selectedAdditionIds: List<Long>? = null,
     ): UpdateOrderItemResult = orderRepository.updateOrderItem(
         orderId = orderId,
         orderItemId = orderItemId,
         quantity = quantity,
         note = note,
         manualUnitPrice = manualUnitPrice,
+        selectedAdditionIds = selectedAdditionIds,
     )
 }

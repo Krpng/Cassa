@@ -297,6 +297,7 @@ class HomeViewModelTest {
             quantity: Int,
             note: String?,
             manualUnitPrice: Money?,
+            selectedAdditionIds: List<Long>?,
         ): UpdateOrderItemResult = error("Not used")
     }
 

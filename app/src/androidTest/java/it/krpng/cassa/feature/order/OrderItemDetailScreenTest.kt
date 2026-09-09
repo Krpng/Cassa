@@ -5,13 +5,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextReplacement
 import it.krpng.cassa.core.money.Money
+import it.krpng.cassa.domain.model.ProductCategory
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -61,10 +64,11 @@ class OrderItemDetailScreenTest {
         composeRule.onNodeWithContentDescription("Indietro").performClick()
         composeRule.onNodeWithContentDescription("Quantità riga").performTextReplacement("3")
         composeRule.onNodeWithContentDescription("Nota riga").performTextReplacement("Senza ghiaccio")
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(6)
         composeRule.onNodeWithText("MODIFICA PREZZO").performClick()
         composeRule.onNodeWithContentDescription("Prezzo manuale unitario")
             .performTextReplacement("2,00")
-        composeRule.onNodeWithText("SALVA").performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("SALVA").assertIsDisplayed().performClick()
 
         composeRule.runOnIdle {
             assertEquals(1, saved)
@@ -133,5 +137,162 @@ class OrderItemDetailScreenTest {
         composeRule.onNodeWithText("Riga ordine non disponibile.").assertIsDisplayed()
         composeRule.onNodeWithText("RIPROVA").assertIsDisplayed()
         composeRule.onNodeWithText("SALVA").assertDoesNotExist()
+    }
+
+    @Test
+    fun pizzaAdditionsShowSelectionAndAcceptZeroPriceWithAccessibleToggle() {
+        var toggledId: Long? = null
+        composeRule.setContent {
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = true,
+                        productName = "Margherita",
+                        automaticUnitPrice = Money.ofCents(700),
+                        category = ProductCategory.PIZZA,
+                        canEditAdditions = true,
+                        additionOptions = listOf(
+                            PizzaAdditionOption(10, "Provola", Money.ofCents(150), true),
+                            PizzaAdditionOption(11, "Basilico", Money.ZERO, false),
+                        ),
+                        selectedAdditionIds = listOf(10),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                    onAdditionToggled = { toggledId = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("AGGIUNTE").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("0,00 €").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Aggiunta Provola, selezionata")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Aggiunta Basilico, non selezionata")
+            .performScrollTo()
+            .performClick()
+
+        composeRule.runOnIdle { assertEquals(11L, toggledId) }
+    }
+
+    @Test
+    fun nonPizzaDoesNotRenderAdditionControls() {
+        composeRule.setContent {
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = true,
+                        productName = "Crocchè",
+                        automaticUnitPrice = Money.ofCents(250),
+                        category = ProductCategory.FRITTURA,
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("AGGIUNTE").assertDoesNotExist()
+    }
+
+    @Test
+    fun stickySaveRemainsVisibleWhileLastAdditionCanBeReached() {
+        composeRule.setContent {
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = true,
+                        productName = "Margherita",
+                        automaticUnitPrice = Money.ofCents(700),
+                        category = ProductCategory.PIZZA,
+                        canEditAdditions = true,
+                        additionOptions = (1L..30L).map { id ->
+                            PizzaAdditionOption(id, "Aggiunta $id", Money.ofCents(100), false)
+                        },
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("SALVA").assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(36)
+        composeRule.onNodeWithContentDescription("Aggiunta Aggiunta 30, non selezionata")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("SALVA").assertIsDisplayed()
+    }
+
+    @Test
+    fun aggregatedPizzaExplainsDisabledAdditionsAndConfirmationActionsAreExplicit() {
+        var cancelled = 0
+        var continued = 0
+        composeRule.setContent {
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = true,
+                        productName = "Margherita",
+                        automaticUnitPrice = Money.ofCents(700),
+                        quantityInput = "2",
+                        category = ProductCategory.PIZZA,
+                        canEditAdditions = false,
+                        additionMessage = "Questa riga contiene 2 pizze. " +
+                            "Le aggiunte possono essere modificate da questa schermata " +
+                            "solo quando la quantità è 1.",
+                        additionOptions = listOf(
+                            PizzaAdditionOption(10, "Provola", Money.ofCents(150), false),
+                        ),
+                        showQuantityIncreaseConfirmation = true,
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                    onCancelQuantityIncrease = { cancelled += 1 },
+                    onConfirmQuantityIncrease = { continued += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Questa riga contiene 2 pizze.", substring = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Applica le aggiunte a tutte?").assertIsDisplayed()
+        composeRule.onNodeWithText("ANNULLA").performClick()
+        composeRule.runOnIdle { assertEquals(1, cancelled) }
+
+        composeRule.onNodeWithText("CONTINUA").performClick()
+        composeRule.runOnIdle { assertEquals(1, continued) }
     }
 }

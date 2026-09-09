@@ -7,6 +7,8 @@ import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
 import it.krpng.cassa.data.database.entity.OrderEntity
+import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.OrderItemAdditionEntity
 import it.krpng.cassa.data.database.entity.OrderItemEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.FullOrder
@@ -64,6 +66,28 @@ interface OrderDao {
 
     @Update(onConflict = OnConflictStrategy.ABORT)
     suspend fun updateOrderItem(item: OrderItemEntity): Int
+
+    @Query(
+        """
+        SELECT * FROM additions
+        WHERE active = 1 AND id IN (:additionIds)
+        """,
+    )
+    suspend fun getActiveAdditionsByIds(additionIds: List<Long>): List<AdditionEntity>
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertOrderItemAdditions(additions: List<OrderItemAdditionEntity>)
+
+    @Query(
+        """
+        DELETE FROM order_item_additions
+        WHERE orderItemId = :orderItemId AND id IN (:relationIds)
+        """,
+    )
+    suspend fun deleteOrderItemAdditions(
+        orderItemId: String,
+        relationIds: List<String>,
+    ): Int
 
     @Query(
         """

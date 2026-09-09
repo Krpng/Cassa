@@ -27,6 +27,7 @@ interface OrderRepository {
         quantity: Int,
         note: String?,
         manualUnitPrice: Money?,
+        selectedAdditionIds: List<Long>? = null,
     ): UpdateOrderItemResult
 }
 
@@ -38,6 +39,14 @@ sealed interface UpdateOrderItemResult {
     data object OrderNotEditable : UpdateOrderItemResult
 
     data object ItemNotFound : UpdateOrderItemResult
+
+    data object ItemNotPizza : UpdateOrderItemResult
+
+    data object AdditionUnavailable : UpdateOrderItemResult
+
+    data object AmbiguousPizzaQuantity : UpdateOrderItemResult
+
+    data object AutomaticExtrasPricingNotSupported : UpdateOrderItemResult
 
     data object InvalidQuantity : UpdateOrderItemResult
 

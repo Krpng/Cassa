@@ -3,6 +3,8 @@ package it.krpng.cassa.data.repository
 import it.krpng.cassa.core.datetime.ClockProvider
 import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.entity.OrderEntity
+import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.OrderItemAdditionEntity
 import it.krpng.cassa.data.database.entity.OrderItemEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.FullOrder
@@ -386,6 +388,163 @@ class RoomOrderRepositoryTest {
             assertNull(overflowDao.updatedDraftTimestamp)
         }
 
+    @Test
+    fun `pizza additions persist ordered snapshots including zero price and recalculate item`() =
+        runTest {
+            val item = orderItemEntity(quantity = 1)
+            val dao = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(OrderItemWithModifiers(item, emptyList(), emptyList())),
+                ),
+                activeAdditions = listOf(
+                    additionEntity(10, "Provola", null, 150),
+                    additionEntity(11, "Basilico", "BASILICO", 0),
+                ),
+            )
+            val clock = CountingClock(FIXED_NOW)
+
+            val result = RoomOrderRepository(dao, clock).updateOrderItem(
+                orderId = "draft-id",
+                orderItemId = "item-id",
+                quantity = 1,
+                note = null,
+                manualUnitPrice = null,
+                selectedAdditionIds = listOf(10, 11),
+            )
+
+            assertSame(UpdateOrderItemResult.Updated, result)
+            assertEquals(2, dao.insertedOrderItemAdditions.size)
+            val provola = dao.insertedOrderItemAdditions[0]
+            assertEquals(10L, provola.additionId)
+            assertEquals("Provola", provola.additionNameSnapshot)
+            assertEquals("Provola", provola.additionPrintedNameSnapshot)
+            assertEquals(150L, provola.listedPriceCents)
+            assertEquals(150L, provola.chargedPriceCents)
+            assertEquals(0, provola.displayOrder)
+            val basilico = dao.insertedOrderItemAdditions[1]
+            assertEquals(0L, basilico.listedPriceCents)
+            assertEquals(0L, basilico.chargedPriceCents)
+            assertEquals(1, basilico.displayOrder)
+            assertEquals(150L, dao.updatedOrderItem?.automaticExtrasTotalCents)
+            assertEquals(850L, dao.updatedOrderItem?.finalUnitPriceCents)
+            assertEquals(1, clock.calls)
+        }
+
+    @Test
+    fun `pizza addition selection is idempotent and deselection removes only relation`() = runTest {
+        val relation = OrderItemAdditionEntity(
+            id = "relation-id",
+            orderItemId = "item-id",
+            additionId = 10,
+            additionNameSnapshot = "Provola storica",
+            additionPrintedNameSnapshot = "PROVOLA STORICA",
+            listedPriceCents = 150,
+            chargedPriceCents = 150,
+            displayOrder = 3,
+        )
+        val item = orderItemEntity(quantity = 1).copy(
+            automaticExtrasTotalCents = 150,
+            finalUnitPriceCents = 600,
+            manualUnitPriceCents = 600,
+        )
+        val unchangedDao = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(OrderItemWithModifiers(item, listOf(relation), emptyList())),
+            ),
+        )
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            RoomOrderRepository(unchangedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                1,
+                null,
+                it.krpng.cassa.core.money.Money.ofCents(600),
+                listOf(10),
+            ),
+        )
+        assertTrue(unchangedDao.insertedOrderItemAdditions.isEmpty())
+        assertTrue(unchangedDao.deletedOrderItemAdditionIds.isEmpty())
+        assertEquals(600L, unchangedDao.updatedOrderItem?.finalUnitPriceCents)
+
+        val removeDao = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(OrderItemWithModifiers(item, listOf(relation), emptyList())),
+            ),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            RoomOrderRepository(removeDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                "draft-id",
+                "item-id",
+                1,
+                null,
+                null,
+                emptyList(),
+            ),
+        )
+        assertEquals(listOf("relation-id"), removeDao.deletedOrderItemAdditionIds)
+        assertEquals(0L, removeDao.updatedOrderItem?.automaticExtrasTotalCents)
+        assertEquals(700L, removeDao.updatedOrderItem?.finalUnitPriceCents)
+    }
+
+    @Test
+    fun `pizza addition guards reject non pizza unavailable deferred pricing and ambiguous split`() =
+        runTest {
+            fun repositoryFor(item: OrderItemEntity, additions: List<AdditionEntity> = emptyList()) =
+                RoomOrderRepository(
+                    FakeOrderDao(
+                        fullOrder = fullDraft(
+                            items = listOf(
+                                OrderItemWithModifiers(item, emptyList(), emptyList()),
+                            ),
+                        ),
+                        activeAdditions = additions,
+                    ),
+                    CountingClock(FIXED_NOW),
+                )
+
+            assertSame(
+                UpdateOrderItemResult.ItemNotPizza,
+                repositoryFor(
+                    orderItemEntity(1).copy(categorySnapshot = ProductCategory.BIBITA),
+                ).updateOrderItem("draft-id", "item-id", 1, null, null, listOf(10)),
+            )
+            assertSame(
+                UpdateOrderItemResult.AdditionUnavailable,
+                repositoryFor(orderItemEntity(1)).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    1,
+                    null,
+                    null,
+                    listOf(10),
+                ),
+            )
+            assertSame(
+                UpdateOrderItemResult.AutomaticExtrasPricingNotSupported,
+                repositoryFor(
+                    orderItemEntity(1).copy(automaticExtrasPricingSnapshot = false),
+                    listOf(additionEntity(10, "Provola", null, 150)),
+                ).updateOrderItem("draft-id", "item-id", 1, null, null, listOf(10)),
+            )
+            assertSame(
+                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+                repositoryFor(
+                    orderItemEntity(2),
+                    listOf(additionEntity(10, "Provola", null, 150)),
+                ).updateOrderItem("draft-id", "item-id", 2, null, null, listOf(10)),
+            )
+            assertSame(
+                UpdateOrderItemResult.Updated,
+                repositoryFor(
+                    orderItemEntity(2),
+                    listOf(additionEntity(10, "Provola", null, 150)),
+                ).updateOrderItem("draft-id", "item-id", 1, null, null, listOf(10)),
+            )
+        }
+
     private class CountingClock(
         private val instant: Instant,
     ) : ClockProvider {
@@ -404,6 +563,7 @@ class RoomOrderRepositoryTest {
         private val deleteResult: Int = 0,
         private val fullOrder: FullOrder? = null,
         private val activeProduct: ProductEntity? = null,
+        private val activeAdditions: List<AdditionEntity> = emptyList(),
         private val updateOrderItemResult: Int = 1,
         private val updateTimestampResult: Int = 1,
     ) : OrderDao {
@@ -413,6 +573,8 @@ class RoomOrderRepositoryTest {
         var insertedOrderItem: OrderItemEntity? = null
         var updatedOrderItem: OrderItemEntity? = null
         var updatedDraftTimestamp: Long? = null
+        val insertedOrderItemAdditions = mutableListOf<OrderItemAdditionEntity>()
+        val deletedOrderItemAdditionIds = mutableListOf<String>()
 
         override suspend fun getWithItems(orderId: String): OrderWithItems? = null
 
@@ -442,6 +604,24 @@ class RoomOrderRepositoryTest {
         override suspend fun updateOrderItem(item: OrderItemEntity): Int {
             updatedOrderItem = item
             return updateOrderItemResult
+        }
+
+        override suspend fun getActiveAdditionsByIds(
+            additionIds: List<Long>,
+        ): List<AdditionEntity> = activeAdditions.filter { it.id in additionIds && it.active }
+
+        override suspend fun insertOrderItemAdditions(
+            additions: List<OrderItemAdditionEntity>,
+        ) {
+            insertedOrderItemAdditions += additions
+        }
+
+        override suspend fun deleteOrderItemAdditions(
+            orderItemId: String,
+            relationIds: List<String>,
+        ): Int {
+            deletedOrderItemAdditionIds += relationIds
+            return relationIds.size
         }
 
         override suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int {
@@ -488,6 +668,22 @@ class RoomOrderRepositoryTest {
         category = ProductCategory.PIZZA,
         priceCents = priceCents,
         automaticExtrasPricing = automaticExtrasPricing,
+        active = true,
+        createdAt = 1_000,
+        updatedAt = 2_000,
+    )
+
+    private fun additionEntity(
+        id: Long,
+        name: String,
+        printedName: String?,
+        priceCents: Long,
+    ): AdditionEntity = AdditionEntity(
+        id = id,
+        name = name,
+        normalizedName = name.lowercase(),
+        printedName = printedName,
+        priceCents = priceCents,
         active = true,
         createdAt = 1_000,
         updatedAt = 2_000,

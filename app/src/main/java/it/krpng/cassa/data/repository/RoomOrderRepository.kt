@@ -10,10 +10,13 @@ import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.DraftReplacementConflictException
 import it.krpng.cassa.data.database.dao.ReplaceDraftDatabaseResult
 import it.krpng.cassa.data.database.entity.OrderEntity
+import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.OrderItemAdditionEntity
 import it.krpng.cassa.data.database.entity.OrderItemEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.OrderItemWithModifiers
 import it.krpng.cassa.domain.model.Order
+import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.pricing.OrderLineMergeCandidate
 import it.krpng.cassa.domain.pricing.OrderLineMergePolicy
@@ -151,6 +154,7 @@ class RoomOrderRepository @Inject constructor(
         quantity: Int,
         note: String?,
         manualUnitPrice: Money?,
+        selectedAdditionIds: List<Long>?,
     ): UpdateOrderItemResult {
         if (quantity <= 0) return UpdateOrderItemResult.InvalidQuantity
 
@@ -164,21 +168,46 @@ class RoomOrderRepository @Inject constructor(
                 val existing = order.items.firstOrNull { item -> item.item.id == orderItemId }
                     ?: return@runInTransaction UpdateOrderItemResult.ItemNotFound
 
-                val pricing = PricingCalculator.calculate(
-                    baseUnitPrice = Money.ofCents(existing.item.baseUnitPriceCents),
-                    additionPrices = listOf(
-                        Money.ofCents(existing.item.automaticExtrasTotalCents),
-                    ),
-                    automaticExtrasPricing = true,
+                val additionUpdate = selectedAdditionIds?.let { requestedIds ->
+                    prepareAdditionUpdate(
+                        existing = existing,
+                        requestedAdditionIds = requestedIds,
+                        requestedQuantity = quantity,
+                    )
+                }
+                if (additionUpdate is AdditionUpdatePreparation.Rejected) {
+                    return@runInTransaction additionUpdate.result
+                }
+                val preparedAdditions =
+                    (additionUpdate as? AdditionUpdatePreparation.Ready)?.update
+
+                val pricing = calculateUpdatedPricing(
+                    existing = existing,
+                    preparedAdditions = preparedAdditions,
                     manualUnitPrice = manualUnitPrice,
                     quantity = quantity,
                 )
                 val updatedItem = existing.item.copy(
                     quantity = quantity,
+                    automaticExtrasTotalCents = pricing.automaticExtrasTotal.cents,
                     manualUnitPriceCents = manualUnitPrice?.cents,
                     finalUnitPriceCents = pricing.finalUnitPrice.cents,
                     note = note?.trim()?.ifEmpty { null },
                 )
+                preparedAdditions?.let { update ->
+                    if (update.relationIdsToDelete.isNotEmpty()) {
+                        val deleted = orderDao.deleteOrderItemAdditions(
+                            orderItemId = orderItemId,
+                            relationIds = update.relationIdsToDelete,
+                        )
+                        if (deleted != update.relationIdsToDelete.size) {
+                            throw OrderItemUpdateConflictException()
+                        }
+                    }
+                    if (update.entitiesToInsert.isNotEmpty()) {
+                        orderDao.insertOrderItemAdditions(update.entitiesToInsert)
+                    }
+                }
                 if (orderDao.updateOrderItem(updatedItem) != 1) {
                     throw OrderItemUpdateConflictException()
                 }
@@ -198,6 +227,135 @@ class RoomOrderRepository @Inject constructor(
             UpdateOrderItemResult.PersistenceFailure
         }
     }
+
+    private suspend fun prepareAdditionUpdate(
+        existing: OrderItemWithModifiers,
+        requestedAdditionIds: List<Long>,
+        requestedQuantity: Int,
+    ): AdditionUpdatePreparation {
+        if (existing.item.categorySnapshot != ProductCategory.PIZZA) {
+            return AdditionUpdatePreparation.Rejected(UpdateOrderItemResult.ItemNotPizza)
+        }
+        if (requestedAdditionIds.size != requestedAdditionIds.distinct().size) {
+            return AdditionUpdatePreparation.Rejected(UpdateOrderItemResult.AdditionUnavailable)
+        }
+
+        val requestedIds = requestedAdditionIds.toSet()
+        val sortedExisting = existing.additions.sortedWith(compareBy({ it.displayOrder }, { it.id }))
+        val canonicalByAdditionId = linkedMapOf<Long, OrderItemAdditionEntity>()
+        val duplicateRelationIds = mutableListOf<String>()
+        sortedExisting.forEach { relation ->
+            val additionId = relation.additionId ?: return@forEach
+            if (canonicalByAdditionId.putIfAbsent(additionId, relation) != null) {
+                duplicateRelationIds += relation.id
+            }
+        }
+        val currentIds = canonicalByAdditionId.keys
+        val selectionChanged = requestedIds != currentIds
+
+        if (
+            selectionChanged &&
+            requestedQuantity > 1 &&
+            existing.isAggregatedStandardPizza()
+        ) {
+            return AdditionUpdatePreparation.Rejected(
+                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+            )
+        }
+        if (selectionChanged && !existing.item.automaticExtrasPricingSnapshot) {
+            return AdditionUpdatePreparation.Rejected(
+                UpdateOrderItemResult.AutomaticExtrasPricingNotSupported,
+            )
+        }
+
+        val idsToAdd = requestedAdditionIds.filterNot(currentIds::contains)
+        val additionsToAdd = if (idsToAdd.isEmpty()) {
+            emptyList()
+        } else {
+            val activeAdditions = orderDao.getActiveAdditionsByIds(idsToAdd)
+            val byId = activeAdditions.associateBy(AdditionEntity::id)
+            if (byId.keys != idsToAdd.toSet()) {
+                return AdditionUpdatePreparation.Rejected(
+                    UpdateOrderItemResult.AdditionUnavailable,
+                )
+            }
+            idsToAdd.map { additionId -> checkNotNull(byId[additionId]) }
+        }
+
+        val removedRelationIds = canonicalByAdditionId
+            .filterKeys { additionId -> additionId !in requestedIds }
+            .values
+            .map(OrderItemAdditionEntity::id)
+        var nextDisplayOrder = sortedExisting.maxOfOrNull { it.displayOrder } ?: -1
+        val entitiesToInsert = additionsToAdd.map { addition ->
+            if (nextDisplayOrder == Int.MAX_VALUE) {
+                return AdditionUpdatePreparation.Rejected(UpdateOrderItemResult.AmountOverflow)
+            }
+            nextDisplayOrder += 1
+            addition.toOrderItemAddition(
+                orderItemId = existing.item.id,
+                displayOrder = nextDisplayOrder,
+            )
+        }
+        val retained = sortedExisting.filter { relation ->
+            relation.additionId == null ||
+                (relation.additionId in requestedIds && relation.id !in duplicateRelationIds)
+        }
+
+        return AdditionUpdatePreparation.Ready(
+            AdditionUpdate(
+                resultingEntities = retained + entitiesToInsert,
+                relationIdsToDelete = duplicateRelationIds + removedRelationIds,
+                entitiesToInsert = entitiesToInsert,
+            ),
+        )
+    }
+
+    private fun calculateUpdatedPricing(
+        existing: OrderItemWithModifiers,
+        preparedAdditions: AdditionUpdate?,
+        manualUnitPrice: Money?,
+        quantity: Int,
+    ) = if (preparedAdditions == null || !existing.item.automaticExtrasPricingSnapshot) {
+        PricingCalculator.calculate(
+            baseUnitPrice = Money.ofCents(existing.item.baseUnitPriceCents),
+            additionPrices = listOf(Money.ofCents(existing.item.automaticExtrasTotalCents)),
+            automaticExtrasPricing = true,
+            manualUnitPrice = manualUnitPrice,
+            quantity = quantity,
+        )
+    } else {
+        PricingCalculator.calculate(
+            baseUnitPrice = Money.ofCents(existing.item.baseUnitPriceCents),
+            additionPrices = preparedAdditions.resultingEntities.map { relation ->
+                Money.ofCents(relation.listedPriceCents)
+            },
+            automaticExtrasPricing = true,
+            manualUnitPrice = manualUnitPrice,
+            quantity = quantity,
+        )
+    }
+
+    private fun OrderItemWithModifiers.isAggregatedStandardPizza(): Boolean =
+        item.quantity > 1 &&
+            additions.isEmpty() &&
+            removals.isEmpty() &&
+            item.note.isNullOrBlank() &&
+            item.manualUnitPriceCents == null
+
+    private fun AdditionEntity.toOrderItemAddition(
+        orderItemId: String,
+        displayOrder: Int,
+    ): OrderItemAdditionEntity = OrderItemAdditionEntity(
+        id = UUID.randomUUID().toString(),
+        orderItemId = orderItemId,
+        additionId = id,
+        additionNameSnapshot = name,
+        additionPrintedNameSnapshot = printedName ?: name,
+        listedPriceCents = priceCents,
+        chargedPriceCents = priceCents,
+        displayOrder = displayOrder,
+    )
 
     private fun newDraft(): Order {
         val now = clockProvider.now()
@@ -271,3 +429,15 @@ class RoomOrderRepository @Inject constructor(
 private class QuickAddWriteConflictException : IllegalStateException()
 
 private class OrderItemUpdateConflictException : IllegalStateException()
+
+private sealed interface AdditionUpdatePreparation {
+    data class Ready(val update: AdditionUpdate) : AdditionUpdatePreparation
+
+    data class Rejected(val result: UpdateOrderItemResult) : AdditionUpdatePreparation
+}
+
+private data class AdditionUpdate(
+    val resultingEntities: List<OrderItemAdditionEntity>,
+    val relationIdsToDelete: List<String>,
+    val entitiesToInsert: List<OrderItemAdditionEntity>,
+)

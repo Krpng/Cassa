@@ -4,6 +4,8 @@ import it.krpng.cassa.core.datetime.SystemClockProvider
 import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import it.krpng.cassa.data.database.entity.OrderEntity
+import it.krpng.cassa.data.database.entity.AdditionEntity
+import it.krpng.cassa.data.database.entity.OrderItemAdditionEntity
 import it.krpng.cassa.data.database.entity.OrderItemEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.entity.ProductIngredientEntity
@@ -270,6 +272,19 @@ class RoomRepositoriesTest {
         override suspend fun insertOrderItem(item: OrderItemEntity) = Unit
 
         override suspend fun updateOrderItem(item: OrderItemEntity): Int = 0
+
+        override suspend fun getActiveAdditionsByIds(
+            additionIds: List<Long>,
+        ): List<AdditionEntity> = emptyList()
+
+        override suspend fun insertOrderItemAdditions(
+            additions: List<OrderItemAdditionEntity>,
+        ) = Unit
+
+        override suspend fun deleteOrderItemAdditions(
+            orderItemId: String,
+            relationIds: List<String>,
+        ): Int = 0
 
         override suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int = 0
 
