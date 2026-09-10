@@ -14,6 +14,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeUp
 import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.domain.model.ProductCategory
 import org.junit.Assert.assertEquals
@@ -55,6 +58,9 @@ class OrderItemDetailScreenTest {
                     onManualPriceChanged = {
                         state.value = state.value.copy(manualPriceInput = it)
                     },
+                    onResetManualPrice = {
+                        state.value = state.value.copy(manualPriceInput = null)
+                    },
                     onSave = { saved += 1 },
                 )
             }
@@ -70,6 +76,12 @@ class OrderItemDetailScreenTest {
         composeRule.onNodeWithText(
             "Prezzo manuale attivo: sostituisce il prezzo automatico per ogni unità.",
         ).assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(8)
+        composeRule.onNodeWithText("RIPRISTINA PREZZO AUTOMATICO")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.onNodeWithText("RIPRISTINA PREZZO AUTOMATICO").assertDoesNotExist()
+        composeRule.onNodeWithText("MODIFICA PREZZO").performClick()
         composeRule.onNodeWithContentDescription("Prezzo manuale unitario")
             .performTextReplacement("2,00")
         composeRule.onNodeWithText("SALVA").assertIsDisplayed().performClick()
@@ -81,7 +93,7 @@ class OrderItemDetailScreenTest {
     }
 
     @Test
-    fun invalidStateShowsErrorsAndDoesNotExposeAutomaticPriceReset() {
+    fun automaticPriceDoesNotExposeResetAction() {
         composeRule.setContent {
             MaterialTheme {
                 OrderItemDetailScreen(
@@ -91,10 +103,8 @@ class OrderItemDetailScreenTest {
                         productName = "Crocchè",
                         automaticUnitPrice = Money.ofCents(250),
                         quantityInput = "0",
-                        manualPriceInput = "7,123",
                         validationErrors = OrderItemFormErrors(
                             quantity = "Quantità non valida.",
-                            manualPrice = "Prezzo non valido.",
                         ),
                     ),
                     onBack = {},
@@ -111,7 +121,6 @@ class OrderItemDetailScreenTest {
         }
 
         composeRule.onNodeWithText("Quantità non valida.").assertIsDisplayed()
-        composeRule.onNodeWithText("Prezzo non valido.").assertIsDisplayed()
         composeRule.onNodeWithText("RIPRISTINA PREZZO AUTOMATICO").assertDoesNotExist()
     }
 
@@ -335,6 +344,94 @@ class OrderItemDetailScreenTest {
         composeRule.onNodeWithText("SALVA").assertIsDisplayed()
         composeRule.onNode(hasScrollAction()).performScrollToIndex(36)
         composeRule.onNodeWithContentDescription("Aggiunta Aggiunta 30, non selezionata")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("SALVA").assertIsDisplayed()
+    }
+
+    @Test
+    fun rapidScrollingWithOverlappingAdditionAndRemovalIdsKeepsSelectionAndScreenStable() {
+        composeRule.setContent {
+            val state = remember {
+                mutableStateOf(
+                    OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = true,
+                        productName = "Margherita",
+                        automaticUnitPrice = Money.ofCents(700),
+                        category = ProductCategory.PIZZA,
+                        canEditAdditions = true,
+                        canEditRemovals = true,
+                        additionOptions = (1L..30L).map { id ->
+                            PizzaAdditionOption(
+                                id = id,
+                                name = "Aggiunta $id",
+                                price = Money.ofCents(100),
+                                isSelected = false,
+                            )
+                        },
+                        removalOptions = listOf(
+                            PizzaRemovalOption(2, "Mozzarella", false),
+                            PizzaRemovalOption(31, "Pomodoro", false),
+                        ),
+                    ),
+                )
+            }
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = state.value,
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                    onAdditionToggled = { toggledId ->
+                        state.value = state.value.copy(
+                            additionOptions = state.value.additionOptions.map { option ->
+                                if (option.id == toggledId) {
+                                    option.copy(isSelected = !option.isSelected)
+                                } else {
+                                    option
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("SALVA").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Aggiunta Aggiunta 2, non selezionata")
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithContentDescription("Aggiunta Aggiunta 2, selezionata")
+            .assertIsDisplayed()
+
+        repeat(5) {
+            composeRule.onNode(hasScrollAction()).performTouchInput {
+                swipeUp(durationMillis = 50)
+            }
+        }
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(38)
+        composeRule.onNodeWithContentDescription("Rimozione Mozzarella, non selezionata")
+            .assertIsDisplayed()
+        repeat(5) {
+            composeRule.onNode(hasScrollAction()).performTouchInput {
+                swipeDown(durationMillis = 50)
+            }
+        }
+
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(7)
+        composeRule.onNodeWithContentDescription("Aggiunta Aggiunta 1, non selezionata")
+            .assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(36)
+        composeRule.onNodeWithContentDescription("Aggiunta Aggiunta 30, non selezionata")
+            .assertIsDisplayed()
+        composeRule.onNode(hasScrollAction()).performScrollToIndex(8)
+        composeRule.onNodeWithContentDescription("Aggiunta Aggiunta 2, selezionata")
             .assertIsDisplayed()
         composeRule.onNodeWithText("SALVA").assertIsDisplayed()
     }

@@ -63,6 +63,7 @@ fun OrderItemDetailRoute(
         onNoteChanged = viewModel::updateNote,
         onStartManualPriceEdit = viewModel::startManualPriceEdit,
         onManualPriceChanged = viewModel::updateManualPrice,
+        onResetManualPrice = viewModel::resetManualPrice,
         onSave = viewModel::save,
         onAdditionToggled = viewModel::toggleAddition,
         onRemovalToggled = viewModel::toggleRemoval,
@@ -83,6 +84,7 @@ fun OrderItemDetailScreen(
     onStartManualPriceEdit: () -> Unit,
     onManualPriceChanged: (String) -> Unit,
     onSave: () -> Unit,
+    onResetManualPrice: () -> Unit = {},
     onAdditionToggled: (Long) -> Unit = {},
     onRemovalToggled: (Long) -> Unit = {},
     onCancelQuantityIncrease: () -> Unit = {},
@@ -263,7 +265,7 @@ fun OrderItemDetailScreen(
             } else {
                 items(
                     count = state.additionOptions.size,
-                    key = { index -> state.additionOptions[index].id },
+                    key = { index -> "addition:${state.additionOptions[index].id}" },
                 ) { index ->
                     val option = state.additionOptions[index]
                     Row(
@@ -328,7 +330,7 @@ fun OrderItemDetailScreen(
             } else {
                 items(
                     count = state.removalOptions.size,
-                    key = { index -> state.removalOptions[index].id },
+                    key = { index -> "removal:${state.removalOptions[index].id}" },
                 ) { index ->
                     val option = state.removalOptions[index]
                     Row(
@@ -400,6 +402,17 @@ fun OrderItemDetailScreen(
                         { Text(error) }
                     },
                 )
+            }
+            item {
+                OutlinedButton(
+                    onClick = onResetManualPrice,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                    enabled = !state.isSaving,
+                ) {
+                    Text("RIPRISTINA PREZZO AUTOMATICO")
+                }
             }
         }
         }

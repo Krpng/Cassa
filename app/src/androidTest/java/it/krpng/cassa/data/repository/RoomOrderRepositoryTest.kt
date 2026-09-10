@@ -355,7 +355,7 @@ class RoomOrderRepositoryTest {
         repository = RoomOrderRepository(
             orderDao = database.orderDao(),
             clockProvider = object : ClockProvider {
-                override fun now(): Instant = FIXED_NOW
+                override fun now(): Instant = RESET_NOW
             },
             transactionRunner = RoomDatabaseTransactionRunner(database),
         )
@@ -382,6 +382,31 @@ class RoomOrderRepositoryTest {
         assertEquals(0L, zeroOverride.manualUnitPrice?.cents)
         assertEquals(0L, zeroOverride.finalUnitPrice.cents)
         assertEquals(0L, (zeroOverride.finalUnitPrice * zeroOverride.quantity).cents)
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 3,
+                note = zeroOverride.note,
+                manualUnitPrice = null,
+                selectedAdditionIds = listOf(provolaId, acciugheId),
+                selectedRemovalIngredientIds = listOf(mozzarellaId),
+            ),
+        )
+        val resetOrder = requireNotNull(repository.getById(draft.id))
+        val reset = resetOrder.items.single()
+        assertEquals(itemId, reset.id)
+        assertEquals(3, reset.quantity)
+        assertNull(reset.manualUnitPrice)
+        assertEquals(250L, reset.automaticExtrasTotal.cents)
+        assertEquals(850L, reset.finalUnitPrice.cents)
+        assertEquals(2_550L, (reset.finalUnitPrice * reset.quantity).cents)
+        assertEquals(listOf(provolaId, acciugheId), reset.additions.map { it.additionId })
+        assertEquals(listOf(mozzarellaId), reset.removals.map { it.ingredientId })
+        assertEquals("Molto ben cotta", reset.note)
+        assertEquals(RESET_NOW, resetOrder.updatedAt)
     }
 
     @Test
@@ -543,11 +568,21 @@ class RoomOrderRepositoryTest {
 
         assertSame(
             UpdateOrderItemResult.Updated,
-            repository.updateOrderItem(draft.id, itemId, 1, null, null, emptyList()),
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 1,
+                note = null,
+                manualUnitPrice = null,
+                selectedAdditionIds = listOf(provolaId, acciugheId, freeId),
+            ),
         )
-        val deselected = requireNotNull(repository.getById(draft.id)).items.single()
-        assertTrue(deselected.additions.isEmpty())
-        assertEquals(800L, deselected.finalUnitPrice.cents)
+        val reset = requireNotNull(repository.getById(draft.id)).items.single()
+        assertNull(reset.manualUnitPrice)
+        assertEquals(listOf(provolaId, acciugheId, freeId), reset.additions.map { it.additionId })
+        assertEquals(listOf(0L, 0L, 0L), reset.additions.map { it.chargedPrice.cents })
+        assertEquals(0L, reset.automaticExtrasTotal.cents)
+        assertEquals(800L, reset.finalUnitPrice.cents)
     }
 
     @Test
@@ -868,5 +903,6 @@ class RoomOrderRepositoryTest {
     private companion object {
         val FIXED_NOW: Instant = Instant.parse("2026-09-07T10:15:30Z")
         val UPDATED_NOW: Instant = Instant.parse("2026-09-07T11:30:00Z")
+        val RESET_NOW: Instant = Instant.parse("2026-09-07T12:45:00Z")
     }
 }

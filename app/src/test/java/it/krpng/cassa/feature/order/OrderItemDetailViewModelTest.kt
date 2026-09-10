@@ -111,6 +111,51 @@ class OrderItemDetailViewModelTest {
         }
 
     @Test
+    fun `reset manual price updates the form then save restores automatic price`() =
+        runTest(dispatcher) {
+            val itemWithManualPrice = draft().items.single().copy(
+                quantity = 3,
+                manualUnitPrice = Money.ofCents(550),
+                finalUnitPrice = Money.ofCents(550),
+            )
+            val repository = FakeOrderRepository(
+                draft().copy(items = listOf(itemWithManualPrice)),
+            )
+            val viewModel = viewModel(repository)
+            advanceUntilIdle()
+
+            assertEquals("5,50", viewModel.uiState.value.manualPriceInput)
+
+            viewModel.resetManualPrice()
+
+            assertNull(viewModel.uiState.value.manualPriceInput)
+            assertTrue(repository.updates.isEmpty())
+
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertEquals(1, repository.updates.size)
+            assertNull(repository.updates.single().manualPrice)
+            val reopened = viewModel(repository)
+            advanceUntilIdle()
+            assertNull(reopened.uiState.value.manualPriceInput)
+            assertEquals(Money.ofCents(800), reopened.uiState.value.automaticUnitPrice)
+        }
+
+    @Test
+    fun `reset is a safe no-op when no manual override is active`() = runTest(dispatcher) {
+        val repository = FakeOrderRepository(draft())
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.manualPriceInput)
+        viewModel.resetManualPrice()
+
+        assertNull(viewModel.uiState.value.manualPriceInput)
+        assertTrue(repository.updates.isEmpty())
+    }
+
+    @Test
     fun `invalid fields block repository writes`() = runTest(dispatcher) {
         val repository = FakeOrderRepository(draft())
         val viewModel = viewModel(repository)

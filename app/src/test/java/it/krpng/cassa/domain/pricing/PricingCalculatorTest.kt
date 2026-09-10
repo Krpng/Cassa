@@ -114,18 +114,30 @@ class PricingCalculatorTest {
     @Test
     fun `PRICE-005 clearing manual override restores automatic price`() {
         val withOverride = calculate(
-            baseCents = 700,
-            additionCents = listOf(200, 200),
-            manualUnitPriceCents = 1_000,
+            baseCents = 600,
+            additionCents = listOf(100, 150),
+            manualUnitPriceCents = 550,
+            quantity = 3,
+        )
+        val zeroOverride = calculate(
+            baseCents = 600,
+            additionCents = listOf(100, 150),
+            manualUnitPriceCents = 0,
+            quantity = 3,
         )
         val afterReset = calculate(
-            baseCents = 700,
-            additionCents = listOf(200, 200),
+            baseCents = 600,
+            additionCents = listOf(100, 150),
             manualUnitPriceCents = null,
+            quantity = 3,
         )
 
-        assertEquals(Money.ofCents(1_000), withOverride.finalUnitPrice)
-        assertEquals(Money.ofCents(1_100), afterReset.finalUnitPrice)
+        assertEquals(Money.ofCents(550), withOverride.finalUnitPrice)
+        assertEquals(Money.ofCents(1_650), withOverride.lineTotal)
+        assertEquals(Money.ZERO, zeroOverride.finalUnitPrice)
+        assertEquals(Money.ZERO, zeroOverride.lineTotal)
+        assertEquals(Money.ofCents(850), afterReset.finalUnitPrice)
+        assertEquals(Money.ofCents(2_550), afterReset.lineTotal)
     }
 
     @Test

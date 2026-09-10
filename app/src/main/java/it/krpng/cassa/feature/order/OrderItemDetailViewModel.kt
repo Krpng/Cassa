@@ -141,6 +141,20 @@ class OrderItemDetailViewModel @Inject constructor(
         }
     }
 
+    fun resetManualPrice() {
+        _uiState.update { state ->
+            if (state.manualPriceInput == null || state.isSaving) {
+                state
+            } else {
+                state.copy(
+                    manualPriceInput = null,
+                    validationErrors = state.validationErrors.copy(manualPrice = null),
+                    errorMessage = null,
+                )
+            }
+        }
+    }
+
     fun toggleAddition(additionId: Long) {
         _uiState.update { state ->
             if (!state.canEditAdditions || state.isSaving) return@update state
