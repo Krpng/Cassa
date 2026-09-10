@@ -378,6 +378,13 @@ fun OrderItemDetailScreen(
             }
         } else {
             item {
+                Text(
+                    text = "Prezzo manuale attivo: sostituisce il prezzo automatico per ogni unità.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            item {
                 OutlinedTextField(
                     value = state.manualPriceInput,
                     onValueChange = onManualPriceChanged,

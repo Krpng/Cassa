@@ -67,6 +67,9 @@ class OrderItemDetailScreenTest {
         composeRule.onNodeWithContentDescription("Nota riga").performTextReplacement("Senza ghiaccio")
         composeRule.onNode(hasScrollAction()).performScrollToIndex(6)
         composeRule.onNodeWithText("MODIFICA PREZZO").performClick()
+        composeRule.onNodeWithText(
+            "Prezzo manuale attivo: sostituisce il prezzo automatico per ogni unità.",
+        ).assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Prezzo manuale unitario")
             .performTextReplacement("2,00")
         composeRule.onNodeWithText("SALVA").assertIsDisplayed().performClick()

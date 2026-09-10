@@ -22,7 +22,13 @@ class OrderItemFormValidatorTest {
 
     @Test
     fun `valid manual price accepts comma dot and zero in exact cents`() {
-        listOf("0" to 0L, "6,00" to 600L, "6.5" to 650L).forEach { (input, cents) ->
+        listOf(
+            "0" to 0L,
+            "5" to 500L,
+            "5,5" to 550L,
+            "5,50" to 550L,
+            "5.50" to 550L,
+        ).forEach { (input, cents) ->
             val result = OrderItemFormValidator.validate("1", " Ben cotta ", input)
                 as OrderItemFormValidationResult.Valid
 
@@ -51,5 +57,18 @@ class OrderItemFormValidatorTest {
         ) as OrderItemFormValidationResult.Invalid
 
         assertTrue(result.errors.manualPrice != null)
+    }
+
+    @Test
+    fun `negative malformed and overprecision manual prices are rejected`() {
+        listOf("-1", "cinque", "5,501", "5.5.0", "").forEach { input ->
+            val result = OrderItemFormValidator.validate(
+                quantityInput = "1",
+                note = "",
+                manualPriceInput = input,
+            ) as OrderItemFormValidationResult.Invalid
+
+            assertTrue(input, result.errors.manualPrice != null)
+        }
     }
 }

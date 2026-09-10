@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import it.krpng.cassa.core.datetime.ClockProvider
+import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.data.database.CassaDatabase
 import it.krpng.cassa.data.database.RoomDatabaseTransactionRunner
 import it.krpng.cassa.data.database.dao.DraftReplacementConflictException
@@ -270,6 +271,117 @@ class RoomOrderRepositoryTest {
         assertEquals(original.baseUnitPrice, updated.baseUnitPrice)
         assertEquals(original.automaticExtrasPricingSnapshot, updated.automaticExtrasPricingSnapshot)
         assertEquals(UPDATED_NOW, updatedOrder.updatedAt)
+    }
+
+    @Test
+    fun manualUnitPriceOverridesChangingAutomaticComponentsAndSurvivesRoomReopen() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 600))
+        assertTrue(repository.quickAddStandard(draft.id, 41) is QuickAddStandardResult.Added)
+        val itemId = requireNotNull(repository.getById(draft.id)).items.single().id
+        val provolaId = database.additionDao().insert(addition("Provola", null, 100))
+        val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+        val mozzarellaId = database.ingredientDao().insert(ingredient("Mozzarella"))
+        database.productDao().insertProductIngredients(
+            listOf(ProductIngredientEntity(41, mozzarellaId, 0)),
+        )
+        repository = RoomOrderRepository(
+            orderDao = database.orderDao(),
+            clockProvider = object : ClockProvider {
+                override fun now(): Instant = UPDATED_NOW
+            },
+            transactionRunner = RoomDatabaseTransactionRunner(database),
+        )
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 1,
+                note = "Ben cotta",
+                manualUnitPrice = Money.ofCents(550),
+                selectedAdditionIds = listOf(provolaId),
+                selectedRemovalIngredientIds = listOf(mozzarellaId),
+            ),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 1,
+                note = "Molto ben cotta",
+                manualUnitPrice = Money.ofCents(550),
+                selectedAdditionIds = listOf(provolaId, acciugheId),
+                selectedRemovalIngredientIds = listOf(mozzarellaId),
+            ),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 3,
+                note = "Molto ben cotta",
+                manualUnitPrice = Money.ofCents(550),
+                selectedAdditionIds = listOf(provolaId, acciugheId),
+                selectedRemovalIngredientIds = listOf(mozzarellaId),
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+
+        val persisted = requireNotNull(repository.getById(draft.id))
+        val item = persisted.items.single()
+        assertEquals(itemId, item.id)
+        assertEquals(3, item.quantity)
+        assertEquals(250L, item.automaticExtrasTotal.cents)
+        assertEquals(550L, item.manualUnitPrice?.cents)
+        assertEquals(550L, item.finalUnitPrice.cents)
+        assertEquals(1_650L, (item.finalUnitPrice * item.quantity).cents)
+        assertEquals(listOf(100L, 150L), item.additions.map { it.chargedPrice.cents })
+        assertEquals(listOf(mozzarellaId), item.removals.map { it.ingredientId })
+        assertEquals("Molto ben cotta", item.note)
+        assertEquals(UPDATED_NOW, persisted.updatedAt)
+
+        val catalogProduct = requireNotNull(database.productDao().getWithIngredients(41)).product
+        database.productDao().update(
+            catalogProduct.copy(priceCents = 900, automaticExtrasPricing = false),
+        )
+        val catalogAddition = requireNotNull(database.additionDao().getById(provolaId))
+        database.additionDao().update(catalogAddition.copy(priceCents = 400))
+
+        repository = RoomOrderRepository(
+            orderDao = database.orderDao(),
+            clockProvider = object : ClockProvider {
+                override fun now(): Instant = FIXED_NOW
+            },
+            transactionRunner = RoomDatabaseTransactionRunner(database),
+        )
+        val reopened = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(600L, reopened.baseUnitPrice.cents)
+        assertTrue(reopened.automaticExtrasPricingSnapshot)
+        assertEquals(listOf(100L, 150L), reopened.additions.map { it.listedPrice.cents })
+        assertEquals(550L, reopened.manualUnitPrice?.cents)
+        assertEquals(550L, reopened.finalUnitPrice.cents)
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 3,
+                note = reopened.note,
+                manualUnitPrice = Money.ZERO,
+                selectedAdditionIds = listOf(provolaId, acciugheId),
+                selectedRemovalIngredientIds = listOf(mozzarellaId),
+            ),
+        )
+        val zeroOverride = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(0L, zeroOverride.manualUnitPrice?.cents)
+        assertEquals(0L, zeroOverride.finalUnitPrice.cents)
+        assertEquals(0L, (zeroOverride.finalUnitPrice * zeroOverride.quantity).cents)
     }
 
     @Test

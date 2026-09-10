@@ -72,12 +72,29 @@ class PricingCalculatorTest {
         val result = calculate(
             baseCents = 700,
             additionCents = listOf(200, 200),
-            manualUnitPriceCents = 1_000,
+            manualUnitPriceCents = 550,
+            quantity = 3,
         )
 
         assertEquals(Money.ofCents(1_100), result.automaticUnitPrice)
-        assertEquals(Money.ofCents(1_000), result.finalUnitPrice)
-        assertEquals(Money.ofCents(1_000), result.lineTotal)
+        assertEquals(Money.ofCents(550), result.finalUnitPrice)
+        assertEquals(Money.ofCents(1_650), result.lineTotal)
+    }
+
+    @Test
+    fun `zero manual price is an active override rather than absence`() {
+        listOf(true, false).forEach { automaticExtrasPricing ->
+            val result = calculate(
+                baseCents = 700,
+                additionCents = listOf(200),
+                automaticExtrasPricing = automaticExtrasPricing,
+                manualUnitPriceCents = 0,
+                quantity = 3,
+            )
+
+            assertEquals(Money.ZERO, result.finalUnitPrice)
+            assertEquals(Money.ZERO, result.lineTotal)
+        }
     }
 
     @Test
