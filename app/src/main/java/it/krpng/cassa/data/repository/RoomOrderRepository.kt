@@ -176,6 +176,8 @@ class RoomOrderRepository @Inject constructor(
                 validateCustomizationQuantityTransition(
                     existing = existing,
                     requestedQuantity = quantity,
+                    requestedNote = note,
+                    requestedManualUnitPrice = manualUnitPrice,
                     requestedAdditionIds = selectedAdditionIds,
                     requestedRemovalIngredientIds = selectedRemovalIngredientIds,
                     intent = customizationQuantityIntent,
@@ -428,23 +430,35 @@ class RoomOrderRepository @Inject constructor(
     private fun validateCustomizationQuantityTransition(
         existing: OrderItemWithModifiers,
         requestedQuantity: Int,
+        requestedNote: String?,
+        requestedManualUnitPrice: Money?,
         requestedAdditionIds: List<Long>?,
         requestedRemovalIngredientIds: List<Long>?,
         intent: CustomizationQuantityIntent,
     ): UpdateOrderItemResult? {
+        if (existing.item.categorySnapshot != ProductCategory.PIZZA) return null
+
         val existingAdditionIds = existing.additions.mapNotNull { it.additionId }.toSet()
         val existingRemovalIds = existing.removals.mapNotNull { it.ingredientId }.toSet()
         val resultingAdditionIds = requestedAdditionIds?.toSet() ?: existingAdditionIds
         val resultingRemovalIds = requestedRemovalIngredientIds?.toSet() ?: existingRemovalIds
         val modifierSelectionChanged =
             resultingAdditionIds != existingAdditionIds || resultingRemovalIds != existingRemovalIds
+        val existingCustomization =
+            existingAdditionIds.isNotEmpty() ||
+                existingRemovalIds.isNotEmpty() ||
+                !existing.item.note.isNullOrBlank() ||
+                existing.item.manualUnitPriceCents != null
         val resultingCustomization =
-            resultingAdditionIds.isNotEmpty() || resultingRemovalIds.isNotEmpty()
+            resultingAdditionIds.isNotEmpty() ||
+                resultingRemovalIds.isNotEmpty() ||
+                !requestedNote.isNullOrBlank() ||
+                requestedManualUnitPrice != null
 
         if (
             existing.item.quantity > 1 &&
             requestedQuantity > 1 &&
-            modifierSelectionChanged
+            (modifierSelectionChanged || (!existingCustomization && resultingCustomization))
         ) {
             return UpdateOrderItemResult.AmbiguousPizzaQuantity
         }

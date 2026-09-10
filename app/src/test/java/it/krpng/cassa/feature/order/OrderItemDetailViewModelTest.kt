@@ -87,6 +87,13 @@ class OrderItemDetailViewModelTest {
             viewModel.save()
             advanceUntilIdle()
 
+            assertTrue(viewModel.uiState.value.showQuantityIncreaseConfirmation)
+            assertTrue(repository.updates.isEmpty())
+
+            viewModel.confirmQuantityIncrease()
+            viewModel.confirmQuantityIncrease()
+            advanceUntilIdle()
+
             assertTrue(viewModel.uiState.value.isSaved)
             assertEquals(1, repository.updates.size)
             assertEquals(
@@ -98,6 +105,7 @@ class OrderItemDetailViewModelTest {
                     Money.ofCents(600),
                     emptyList(),
                     emptyList(),
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
                 ),
                 repository.updates.single(),
             )
@@ -410,6 +418,62 @@ class OrderItemDetailViewModelTest {
             assertEquals(
                 CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
                 repository.updates.single().customizationQuantityIntent,
+            )
+        }
+
+    @Test
+    fun `note and zero manual price count as customization for quantity confirmation`() =
+        runTest(dispatcher) {
+            val standardOne = draft().copy(
+                items = draft().items.map { item ->
+                    item.copy(
+                        quantity = 1,
+                        note = null,
+                        manualUnitPrice = null,
+                    )
+                },
+            )
+            val noteRepository = FakeOrderRepository(standardOne)
+            val noteViewModel = viewModel(noteRepository)
+            advanceUntilIdle()
+
+            noteViewModel.updateNote("Ben cotta")
+            noteViewModel.updateQuantity("2")
+            noteViewModel.save()
+            advanceUntilIdle()
+
+            assertTrue(noteViewModel.uiState.value.showQuantityIncreaseConfirmation)
+            assertTrue(noteRepository.updates.isEmpty())
+
+            noteViewModel.confirmQuantityIncrease()
+            advanceUntilIdle()
+
+            assertEquals("Ben cotta", noteRepository.updates.single().note)
+            assertEquals(
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                noteRepository.updates.single().customizationQuantityIntent,
+            )
+
+            val manualRepository = FakeOrderRepository(standardOne)
+            val manualViewModel = viewModel(manualRepository)
+            advanceUntilIdle()
+
+            manualViewModel.startManualPriceEdit()
+            manualViewModel.updateManualPrice("0")
+            manualViewModel.updateQuantity("2")
+            manualViewModel.save()
+            advanceUntilIdle()
+
+            assertTrue(manualViewModel.uiState.value.showQuantityIncreaseConfirmation)
+            assertTrue(manualRepository.updates.isEmpty())
+
+            manualViewModel.confirmQuantityIncrease()
+            advanceUntilIdle()
+
+            assertEquals(Money.ZERO, manualRepository.updates.single().manualPrice)
+            assertEquals(
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                manualRepository.updates.single().customizationQuantityIntent,
             )
         }
 

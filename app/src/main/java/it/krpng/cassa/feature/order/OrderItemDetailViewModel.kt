@@ -398,7 +398,9 @@ class OrderItemDetailViewModel @Inject constructor(
             fields.quantity > state.originalQuantity &&
             state.category == ProductCategory.PIZZA &&
             (state.selectedAdditionIds.isNotEmpty() ||
-                state.selectedRemovalIngredientIds.isNotEmpty())
+                state.selectedRemovalIngredientIds.isNotEmpty() ||
+                fields.note != null ||
+                fields.manualUnitPrice != null)
         ) {
             _uiState.update { current ->
                 current.copy(showQuantityIncreaseConfirmation = true)

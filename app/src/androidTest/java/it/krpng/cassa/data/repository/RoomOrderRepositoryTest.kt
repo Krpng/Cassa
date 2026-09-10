@@ -337,6 +337,8 @@ class RoomOrderRepositoryTest {
             quantity = 2,
             note = "  Senza sale  ",
             manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(600),
+            customizationQuantityIntent =
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
         )
 
         assertSame(UpdateOrderItemResult.Updated, result)
@@ -748,6 +750,76 @@ class RoomOrderRepositoryTest {
             assertEquals(2, aggregated.quantity)
             assertTrue(aggregated.additions.isEmpty())
         }
+
+    @Test
+    fun noteAndZeroManualPriceCustomizedQuantityKeepOneStableRoomItem() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(43, "Margherita", ProductCategory.PIZZA, 700))
+        assertTrue(repository.quickAddStandard(draft.id, 43) is QuickAddStandardResult.Added)
+        val itemId = requireNotNull(repository.getById(draft.id)).items.single().id
+
+        assertSame(
+            UpdateOrderItemResult.AmbiguousPizzaQuantity,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 2,
+                note = "Ben cotta",
+                manualUnitPrice = Money.ZERO,
+            ),
+        )
+        val beforeConfirmation = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(itemId, beforeConfirmation.id)
+        assertEquals(1, beforeConfirmation.quantity)
+        assertNull(beforeConfirmation.note)
+        assertNull(beforeConfirmation.manualUnitPrice)
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 2,
+                note = "Ben cotta",
+                manualUnitPrice = Money.ZERO,
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        val customizedTwo = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(itemId, customizedTwo.id)
+        assertEquals(2, customizedTwo.quantity)
+        assertEquals("Ben cotta", customizedTwo.note)
+        assertEquals(0L, customizedTwo.manualUnitPrice?.cents)
+
+        assertSame(
+            UpdateOrderItemResult.AmbiguousPizzaQuantity,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 3,
+                note = "Ben cotta",
+                manualUnitPrice = Money.ZERO,
+            ),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 3,
+                note = "Ben cotta",
+                manualUnitPrice = Money.ZERO,
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        val customizedThree = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(itemId, customizedThree.id)
+        assertEquals(3, customizedThree.quantity)
+        assertEquals("Ben cotta", customizedThree.note)
+        assertEquals(0L, customizedThree.manualUnitPrice?.cents)
+    }
 
     @Test
     fun pizzaAdditionMutationRejectsInactiveNonPizzaAcceptedAndWrongTargetsInRoom() = runBlocking {

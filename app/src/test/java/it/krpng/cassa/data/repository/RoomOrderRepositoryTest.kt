@@ -335,6 +335,8 @@ class RoomOrderRepositoryTest {
                 quantity = 3,
                 note = "  Senza sale  ",
                 manualUnitPrice = it.krpng.cassa.core.money.Money.ofCents(600),
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
             )
 
             assertSame(UpdateOrderItemResult.Updated, result)
@@ -448,6 +450,8 @@ class RoomOrderRepositoryTest {
                     2,
                     null,
                     it.krpng.cassa.core.money.Money.ofCents(Long.MAX_VALUE),
+                    customizationQuantityIntent =
+                        CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
                 ),
             )
             assertNull(overflowDao.updatedOrderItem)
@@ -766,6 +770,139 @@ class RoomOrderRepositoryTest {
         )
         assertNull(changedModifiersDao.updatedOrderItem)
     }
+
+    @Test
+    fun `note and zero manual price require confirmation when pizza quantity increases`() = runTest {
+        fun repositoryFor(item: OrderItemEntity) = FakeOrderDao(
+            fullOrder = fullDraft(
+                items = listOf(OrderItemWithModifiers(item, emptyList(), emptyList())),
+            ),
+        ).let { dao -> RoomOrderRepository(dao, CountingClock(FIXED_NOW)) to dao }
+
+        val standard = orderItemEntity(quantity = 1)
+        val (unconfirmedNoteRepository, unconfirmedNoteDao) = repositoryFor(standard)
+        assertSame(
+            UpdateOrderItemResult.AmbiguousPizzaQuantity,
+            unconfirmedNoteRepository.updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                "Ben cotta",
+                null,
+            ),
+        )
+        assertNull(unconfirmedNoteDao.updatedOrderItem)
+
+        val (confirmedNoteRepository, confirmedNoteDao) = repositoryFor(standard)
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            confirmedNoteRepository.updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                "Ben cotta",
+                null,
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertEquals("item-id", confirmedNoteDao.updatedOrderItem?.id)
+        assertEquals(2, confirmedNoteDao.updatedOrderItem?.quantity)
+        assertEquals("Ben cotta", confirmedNoteDao.updatedOrderItem?.note)
+
+        val (unconfirmedManualRepository, unconfirmedManualDao) = repositoryFor(standard)
+        assertSame(
+            UpdateOrderItemResult.AmbiguousPizzaQuantity,
+            unconfirmedManualRepository.updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                null,
+                Money.ZERO,
+            ),
+        )
+        assertNull(unconfirmedManualDao.updatedOrderItem)
+
+        val (confirmedManualRepository, confirmedManualDao) = repositoryFor(standard)
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            confirmedManualRepository.updateOrderItem(
+                "draft-id",
+                "item-id",
+                2,
+                null,
+                Money.ZERO,
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertEquals("item-id", confirmedManualDao.updatedOrderItem?.id)
+        assertEquals(2, confirmedManualDao.updatedOrderItem?.quantity)
+        assertEquals(0L, confirmedManualDao.updatedOrderItem?.manualUnitPriceCents)
+    }
+
+    @Test
+    fun `aggregated standard cannot become customized but existing note customization can grow`() =
+        runTest {
+            val aggregatedStandard = orderItemEntity(quantity = 2)
+            val blockedDao = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(
+                        OrderItemWithModifiers(aggregatedStandard, emptyList(), emptyList()),
+                    ),
+                ),
+            )
+            assertSame(
+                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+                RoomOrderRepository(blockedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    2,
+                    "Ben cotta",
+                    null,
+                    customizationQuantityIntent =
+                        CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                ),
+            )
+            assertNull(blockedDao.updatedOrderItem)
+
+            val noteCustomized = aggregatedStandard.copy(note = "Ben cotta")
+            fun customizedDao() = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(
+                        OrderItemWithModifiers(noteCustomized, emptyList(), emptyList()),
+                    ),
+                ),
+            )
+            val unconfirmedDao = customizedDao()
+            assertSame(
+                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+                RoomOrderRepository(unconfirmedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    3,
+                    "Ben cotta",
+                    null,
+                ),
+            )
+            assertNull(unconfirmedDao.updatedOrderItem)
+
+            val confirmedDao = customizedDao()
+            assertSame(
+                UpdateOrderItemResult.Updated,
+                RoomOrderRepository(confirmedDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    3,
+                    "Ben cotta",
+                    null,
+                    customizationQuantityIntent =
+                        CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                ),
+            )
+            assertEquals("item-id", confirmedDao.updatedOrderItem?.id)
+            assertEquals(3, confirmedDao.updatedOrderItem?.quantity)
+        }
 
     @Test
     fun `standard quantity one can add an addition and increase to two when confirmed`() = runTest {
