@@ -218,6 +218,68 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
+    fun `quick add never merges into a customized pizza candidate`() = runTest {
+        val customizedCandidates = listOf(
+            OrderItemWithModifiers(
+                item = orderItemEntity(quantity = 1),
+                additions = listOf(
+                    OrderItemAdditionEntity(
+                        id = "addition-relation",
+                        orderItemId = "item-id",
+                        additionId = 10,
+                        additionNameSnapshot = "Provola",
+                        additionPrintedNameSnapshot = "PROVOLA",
+                        listedPriceCents = 150,
+                        chargedPriceCents = 150,
+                        displayOrder = 0,
+                    ),
+                ),
+                removals = emptyList(),
+            ),
+            OrderItemWithModifiers(
+                item = orderItemEntity(quantity = 1),
+                additions = emptyList(),
+                removals = listOf(
+                    OrderItemRemovalEntity(
+                        id = "removal-relation",
+                        orderItemId = "item-id",
+                        ingredientId = 20,
+                        ingredientNameSnapshot = "Mozzarella",
+                        displayOrder = 0,
+                    ),
+                ),
+            ),
+            OrderItemWithModifiers(
+                item = orderItemEntity(quantity = 1).copy(note = "Ben cotta"),
+                additions = emptyList(),
+                removals = emptyList(),
+            ),
+            OrderItemWithModifiers(
+                item = orderItemEntity(quantity = 1).copy(
+                    manualUnitPriceCents = 1_000,
+                    finalUnitPriceCents = 1_000,
+                ),
+                additions = emptyList(),
+                removals = emptyList(),
+            ),
+        )
+
+        customizedCandidates.forEach { customized ->
+            val dao = FakeOrderDao(
+                fullOrder = fullDraft(items = listOf(customized)),
+                activeProduct = productEntity(),
+            )
+
+            val result = RoomOrderRepository(dao, CountingClock(FIXED_NOW))
+                .quickAddStandard("draft-id", 42)
+
+            assertTrue(result is QuickAddStandardResult.Added)
+            assertNull(dao.updatedOrderItem)
+            assertEquals(2, dao.insertedOrderItem?.createdSequence)
+        }
+    }
+
+    @Test
     fun `quick add rejects accepted missing and unavailable records before writing`() = runTest {
         val acceptedDao = FakeOrderDao(
             fullOrder = fullDraft().copy(

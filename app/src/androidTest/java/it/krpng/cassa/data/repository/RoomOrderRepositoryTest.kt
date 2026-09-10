@@ -232,6 +232,92 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
+    fun separatelyAddedIdenticalCustomizedPizzasRemainTwoRowsInRoom() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+        val provolaId = database.additionDao().insert(addition("Provola", null, 150))
+
+        val first = repository.quickAddStandard(draft.id, 41) as QuickAddStandardResult.Added
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = first.orderItemId,
+                quantity = 1,
+                note = null,
+                manualUnitPrice = null,
+                selectedAdditionIds = listOf(provolaId),
+            ),
+        )
+        val second = repository.quickAddStandard(draft.id, 41) as QuickAddStandardResult.Added
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = second.orderItemId,
+                quantity = 1,
+                note = null,
+                manualUnitPrice = null,
+                selectedAdditionIds = listOf(provolaId),
+            ),
+        )
+
+        val items = requireNotNull(repository.getById(draft.id)).items
+        assertEquals(2, items.size)
+        assertEquals(2, items.map { it.id }.toSet().size)
+        assertEquals(listOf(1, 2), items.map { it.createdSequence }.sorted())
+        items.forEach { item ->
+            assertEquals(1, item.quantity)
+            assertEquals(listOf(provolaId), item.additions.map { it.additionId })
+            assertEquals(850L, item.finalUnitPrice.cents)
+        }
+    }
+
+    @Test
+    fun noteAndManualPriceKeepCustomizedPizzasOutOfStandardAutoMerge() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+
+        val noted = repository.quickAddStandard(draft.id, 41) as QuickAddStandardResult.Added
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = noted.orderItemId,
+                quantity = 1,
+                note = "Ben cotta",
+                manualUnitPrice = null,
+            ),
+        )
+        val manual = repository.quickAddStandard(draft.id, 41) as QuickAddStandardResult.Added
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = manual.orderItemId,
+                quantity = 1,
+                note = null,
+                manualUnitPrice = Money.ofCents(1_000),
+            ),
+        )
+
+        assertTrue(repository.quickAddStandard(draft.id, 41) is QuickAddStandardResult.Added)
+        val items = requireNotNull(repository.getById(draft.id)).items
+        assertEquals(3, items.size)
+        assertEquals("Ben cotta", items.single { it.id == noted.orderItemId }.note)
+        assertEquals(1_000L, items.single { it.id == manual.orderItemId }.manualUnitPrice?.cents)
+        assertEquals(
+            1,
+            items.count { item ->
+                item.note == null &&
+                    item.manualUnitPrice == null &&
+                    item.additions.isEmpty() &&
+                    item.removals.isEmpty()
+            },
+        )
+    }
+
+    @Test
     fun genericItemUpdatePersistsThroughRoomAndEmitsTheUpdatedSnapshot() = runBlocking {
         val draft = (repository.createDraft() as CreateDraftResult.Created).draft
         database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
