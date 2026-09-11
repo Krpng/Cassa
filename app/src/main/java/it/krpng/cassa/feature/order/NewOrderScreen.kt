@@ -1,5 +1,6 @@
 package it.krpng.cassa.feature.order
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -41,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.feature.common.CassaBackButton
+import it.krpng.cassa.ui.theme.customizedPizzaRowBackground
 
 @Composable
 fun NewOrderRoute(
@@ -316,7 +319,17 @@ private fun CurrentOrderContent(
                     key = DraftOrderLine::itemId,
                 ) { line ->
                     val mutating = line.itemId in lineMutationInProgressItemIds
-                    Column(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (line.isCustomizedPizza) {
+                                    MaterialTheme.colorScheme.customizedPizzaRowBackground
+                                } else {
+                                    Color.Transparent
+                                },
+                            ),
+                    ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -365,9 +378,13 @@ private fun CurrentOrderContent(
                                         onClick = { onOrderItemSelected(line.itemId) },
                                     )
                                     .semantics {
-                                        contentDescription =
-                                            "Apri dettaglio riga: ${line.quantity}x " +
-                                                "${line.productName}, ${line.lineTotal.formatEur()}"
+                                        contentDescription = buildString {
+                                            append("Apri dettaglio riga: ${line.quantity}x ")
+                                            append("${line.productName}, ${line.lineTotal.formatEur()}")
+                                            if (line.isCustomizedPizza) {
+                                                append(", personalizzata")
+                                            }
+                                        }
                                     }
                                     .padding(vertical = 4.dp),
                             ) {

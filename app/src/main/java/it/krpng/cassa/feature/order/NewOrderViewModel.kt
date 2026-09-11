@@ -9,6 +9,8 @@ import it.krpng.cassa.core.normalization.TextNormalizer
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.pricing.OrderLineMergeCandidate
+import it.krpng.cassa.domain.pricing.OrderLineMergePolicy
 import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
@@ -18,6 +20,7 @@ import it.krpng.cassa.domain.search.ProductSearchEngine
 import it.krpng.cassa.domain.usecase.AddProductToDraft
 import it.krpng.cassa.domain.usecase.ChangeQuantity
 import it.krpng.cassa.domain.usecase.RemoveOrderItem
+import it.krpng.cassa.domain.model.OrderItem
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -52,6 +55,7 @@ data class DraftOrderLine(
     val quantity: Int,
     val productName: String,
     val lineTotal: Money,
+    val isCustomizedPizza: Boolean = false,
 )
 
 sealed interface NewOrderUiState {
@@ -231,6 +235,7 @@ class NewOrderViewModel @Inject constructor(
                                         quantity = item.quantity,
                                         productName = item.productNameSnapshot,
                                         lineTotal = item.finalUnitPrice * item.quantity,
+                                        isCustomizedPizza = item.isCustomizedPizzaRow(),
                                     )
                                 },
                             searchQuery = query,
@@ -329,6 +334,18 @@ class NewOrderViewModel @Inject constructor(
         const val DRAFT_ID_ARGUMENT = "draftId"
     }
 }
+
+internal fun OrderItem.isCustomizedPizzaRow(): Boolean =
+    OrderLineMergePolicy.isCustomizedPizza(
+        OrderLineMergeCandidate(
+            productId = productId ?: 0L,
+            category = categorySnapshot,
+            hasAdditions = additions.isNotEmpty(),
+            hasRemovals = removals.isNotEmpty(),
+            note = note,
+            manualUnitPrice = manualUnitPrice,
+        ),
+    )
 
 private data class QuickAddOperationState(
     val pendingCounts: Map<Long, Int> = emptyMap(),

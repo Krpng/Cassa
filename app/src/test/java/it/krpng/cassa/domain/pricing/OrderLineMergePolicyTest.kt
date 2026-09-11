@@ -70,6 +70,85 @@ class OrderLineMergePolicyTest {
     }
 
     @Test
+    fun `customized pizza highlight requires pizza category and customization`() {
+        assertFalse(OrderLineMergePolicy.isCustomizedPizza(pizza(productId = 1)))
+        assertFalse(
+            OrderLineMergePolicy.isCustomized(
+                pizza(productId = 1, note = "   "),
+            ),
+        )
+        assertFalse(
+            OrderLineMergePolicy.isCustomizedPizza(
+                pizza(productId = 1, note = "   "),
+            ),
+        )
+        assertFalse(
+            OrderLineMergePolicy.isCustomized(
+                pizza(productId = 1, manualUnitPrice = null),
+            ),
+        )
+
+        assertTrue(
+            OrderLineMergePolicy.isCustomizedPizza(
+                pizza(productId = 1, hasAdditions = true),
+            ),
+        )
+        assertTrue(
+            OrderLineMergePolicy.isCustomizedPizza(
+                pizza(productId = 1, hasRemovals = true),
+            ),
+        )
+        assertTrue(
+            OrderLineMergePolicy.isCustomizedPizza(
+                pizza(productId = 1, note = "Senza tagliare"),
+            ),
+        )
+        assertTrue(
+            OrderLineMergePolicy.isCustomizedPizza(
+                pizza(productId = 1, manualUnitPrice = Money.ofCents(1_000)),
+            ),
+        )
+        assertTrue(
+            OrderLineMergePolicy.isCustomizedPizza(
+                pizza(productId = 1, manualUnitPrice = Money.ZERO),
+            ),
+        )
+        assertTrue(
+            OrderLineMergePolicy.isCustomized(
+                pizza(productId = 1, manualUnitPrice = Money.ZERO),
+            ),
+        )
+
+        assertFalse(
+            OrderLineMergePolicy.isCustomizedPizza(
+                standard(
+                    productId = 10,
+                    category = ProductCategory.BIBITA,
+                    note = "Con ghiaccio",
+                ),
+            ),
+        )
+        assertFalse(
+            OrderLineMergePolicy.isCustomizedPizza(
+                standard(
+                    productId = 20,
+                    category = ProductCategory.FRITTURA,
+                    manualUnitPrice = Money.ZERO,
+                ),
+            ),
+        )
+        assertTrue(
+            OrderLineMergePolicy.isCustomized(
+                standard(
+                    productId = 20,
+                    category = ProductCategory.FRITTURA,
+                    manualUnitPrice = Money.ZERO,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `ORDER-002 repeated standard drink can merge`() {
         val existing = standard(productId = 10, category = ProductCategory.BIBITA)
         val incoming = standard(productId = 10, category = ProductCategory.BIBITA)

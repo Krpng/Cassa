@@ -476,10 +476,16 @@ class RoomOrderRepository @Inject constructor(
     }
 
     private fun OrderItemWithModifiers.isCustomized(): Boolean =
-        additions.isNotEmpty() ||
-            removals.isNotEmpty() ||
-            !item.note.isNullOrBlank() ||
-            item.manualUnitPriceCents != null
+        OrderLineMergePolicy.isCustomized(
+            OrderLineMergeCandidate(
+                productId = item.productId ?: 0L,
+                category = item.categorySnapshot,
+                hasAdditions = additions.isNotEmpty(),
+                hasRemovals = removals.isNotEmpty(),
+                note = item.note,
+                manualUnitPrice = item.manualUnitPriceCents?.let(Money::ofCents),
+            ),
+        )
 
     private suspend fun prepareAdditionUpdate(
         existing: OrderItemWithModifiers,

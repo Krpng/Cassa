@@ -354,6 +354,62 @@ class NewOrderScreenTest {
         }
     }
 
+    @Test
+    fun customizedPizzaRowExposesPersonalizzataSemanticsWithoutChangingStandardRows() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        orderLines = listOf(
+                            DraftOrderLine(
+                                itemId = "custom-id",
+                                quantity = 2,
+                                productName = "Diavola",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(1_600),
+                                isCustomizedPizza = true,
+                            ),
+                            DraftOrderLine(
+                                itemId = "standard-id",
+                                quantity = 1,
+                                productName = "Margherita",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(700),
+                                isCustomizedPizza = false,
+                            ),
+                            DraftOrderLine(
+                                itemId = "drink-id",
+                                quantity = 1,
+                                productName = "Coca Cola",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(250),
+                                isCustomizedPizza = false,
+                            ),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+        composeRule.onNodeWithContentDescription(
+            "Apri dettaglio riga: 2x Diavola, 16,00 €, personalizzata",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(
+            "Apri dettaglio riga: 1x Margherita, 7,00 €",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(
+            "Apri dettaglio riga: 1x Coca Cola, 2,50 €",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithContentDescription(
+            "Apri dettaglio riga: 1x Margherita, 7,00 €, personalizzata",
+        ).assertDoesNotExist()
+    }
+
     private fun readyState(
         catalogItems: List<OrderCatalogItem> = emptyList(),
         orderLines: List<DraftOrderLine> = emptyList(),
