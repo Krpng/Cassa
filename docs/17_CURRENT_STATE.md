@@ -309,11 +309,49 @@ Required atomic result when Save is confirmed:
 - preserve product, printed-name, category, base-price, automatic-extras-pricing, and other required source snapshots;
 - apply the requested Addition/Removal/Note/Manual-price customization only to the new row;
 - preserve Addition and Removal snapshots and calculate pricing through the existing pricing primitives;
-- assign deterministic `createdSequence` consistent with order rendering;
+- assign deterministic `createdSequence` according to the frozen decision below;
 - update `orders.updatedAt` within the same transaction;
 - conserve total quantity across the two rows;
 - never create a quantity-zero row or accidental duplicate;
 - commit every write together or roll back to the original aggregated row on any failure.
+
+### Frozen decision added before ORD-019 implementation — `createdSequence`
+
+This rule is a project decision recorded before coding. It is not yet implemented.
+
+When `MODIFICA UNA` creates a new `order_item` through the atomic split:
+
+- the source row keeps its own `createdSequence`;
+- the new row receives the next available `createdSequence` in the order;
+- the new row is therefore treated as a newly inserted `order_item`;
+- existing `order_item` rows are not renumbered or reordered;
+- `createdSequence` must remain deterministic and unique according to existing conventions.
+
+Example:
+
+```text
+before:
+
+Margherita 3x          createdSequence=1
+Crocchè                createdSequence=2
+Coca Cola              createdSequence=3
+
+MODIFICA UNA on Margherita
+
+after:
+
+Margherita 2x          createdSequence=1
+Crocchè                createdSequence=2
+Coca Cola              createdSequence=3
+Margherita custom 1x   createdSequence=4
+```
+
+Rationale:
+
+- `createdSequence` represents insertion order;
+- the split row is a new `order_item`;
+- already persisted rows must not be reindexed;
+- this keeps the transaction simple and deterministic.
 
 Tests linked jointly to `ORD-018/019` by the traceability matrix:
 
@@ -356,4 +394,17 @@ app data cleared: NO
 git diff --check before ORD-018 commit: PASS
 ```
 
-At handoff creation, `ORD-018` is committed and pushed at `a80986b6039f520874584c926817a65691bfbcc6`. The handoff document itself is intentionally uncommitted pending review. No production code or test file was changed while creating it.
+Documented repository state before any `ORD-019` implementation:
+
+```yaml
+HEAD (documentation): 189172e2f66fb3e3002bb55d706430a6242d4b09
+HEAD commit: "docs: add project handoff checkpoint"
+handoff: committed and pushed
+last approved production implementation checkpoint: a80986b6039f520874584c926817a65691bfbcc6
+production commit: "feat: add aggregated pizza edit scope prompt"
+last completed production task: ORD-018
+ORD-019: NOT STARTED
+no production task after ORD-018 has been started
+```
+
+`HEAD` may point at the documentation-only handoff commit without meaning that any production work after `ORD-018` has begun. The last approved production implementation checkpoint remains `a80986b6039f520874584c926817a65691bfbcc6`. No production code or test file was changed while creating or updating this handoff document.
