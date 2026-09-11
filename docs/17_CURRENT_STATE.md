@@ -12,15 +12,20 @@ Verified on 2026-09-11:
 
 ```yaml
 branch: main
-production checkpoint: a24627e49ecc3da1c171a8f266b9089e0ed683c7
-commit: "feat: split aggregated pizza atomically"
-last completed implementation task: ORD-019
-ORD-001..ORD-019: COMPLETE
-ORD-020: NOT STARTED
+HEAD: ad96197c66c68f306f15329d7d26a2a4a94b95d1
+HEAD commit: "feat: highlight customized pizza rows"
+ORD-020 production checkpoint: 30098949315edfd7d6f98469ab01a94a39d1636f
+ORD-020 commit: "feat: manage order line quantity and removal"
+last completed implementation task: ORD-020
+last completed UX mini-task: customized pizza row highlight
+ORD-001..ORD-020: COMPLETE
+custom pizza highlight: COMPLETE
+ORD-021: NOT STARTED
 origin/main: synchronized
+working tree: clean
 ```
 
-The new agent must verify that `a24627e49ecc3da1c171a8f266b9089e0ed683c7` remains the last approved production implementation checkpoint. Do not rewrite history, and keep each approved backlog task isolated.
+The new agent must verify that `ad96197c66c68f306f15329d7d26a2a4a94b95d1` remains `HEAD` / `origin/main` and that `30098949315edfd7d6f98469ab01a94a39d1636f` is the approved `ORD-020` production implementation commit. Do not rewrite history, and keep each approved backlog task isolated.
 
 ## 3. Current milestone
 
@@ -33,7 +38,7 @@ M4 ODS import: COMPLETE
 M5 Draft order core: IN PROGRESS
 ```
 
-Within M5, `ORD-001` through `ORD-019` are complete. `ORD-020` is the next task and has not been started.
+Within M5, `ORD-001` through `ORD-020` are complete, including the post-`ORD-020` customized-pizza row highlight mini-task. `ORD-021` is the next task and has not been started.
 
 ## 4. Completed tasks
 
@@ -42,25 +47,26 @@ Within M5, `ORD-001` through `ORD-019` are complete. `ORD-020` is the next task 
 - `DB-001..009`: catalog/order/settings entities, relations, DAO/read models, repository foundation, single-draft invariant, production `CassaDatabase`, and exported schema baseline.
 - `MENU-001..008`: logical catalog CRUD, reactive catalog flows, deterministic product search, menu UI, and product/addition editors.
 - `ODS-001..011`: SAF picker, structural ODS parsing, sheet detection, row/price parsing, validation, planning, preview, atomic Room commit, and flag preservation.
-- `ORD-001..019`: draft lifecycle/recovery/conflict handling, order screen, catalog search/actions, persisted quick-add/list/detail, additions/removals, pricing variants, custom-line behavior, the aggregated-pizza edit-scope prompt, and the atomic `MODIFICA UNA` split.
+- `ORD-001..020`: draft lifecycle/recovery/conflict handling, order screen, catalog search/actions, persisted quick-add/list/detail, additions/removals, pricing variants, custom-line behavior, the aggregated-pizza edit-scope prompt, the atomic `MODIFICA UNA` split, and draft-list quantity change plus explicit line removal.
+- Post-`ORD-020` UX mini-task: customized pizza rows in the draft list use a soft purple background when the pizza is customized.
 
 Relevant additional regression checkpoint:
 
 - `8d4810173847d47afe587f9d189d7b0b8a12b3b7`: safe handling of trailing LibreOffice repeated padding in ODS files.
 
-Tasks after `ORD-019` are not complete unless a later checkpoint explicitly records otherwise.
+Tasks after `ORD-020` are not complete unless a later checkpoint explicitly records otherwise. `ORD-021` is not started.
 
 ## 5. Current next task
 
 ```yaml
-task: ORD-020
-title: Remove line/change quantity
+task: ORD-021
+title: General note
 priority: P0
 status: NOT STARTED
 milestone: M5 — Draft order core
 ```
 
-Read the exact contract again before coding. `docs/10_IMPLEMENTATION_BACKLOG.md` names the task, while `docs/02_BUSINESS_RULES.md`, `docs/03_UX_UI_FLOWS.md`, `docs/05_DATABASE_SCHEMA.md`, `docs/09_TEST_PLAN.md`, and `docs/16_TRACEABILITY_MATRIX.md` define its supported behavior and tests. Do not invent requirements that those documents do not state.
+Read the exact contract again before coding. `docs/10_IMPLEMENTATION_BACKLOG.md` names the task, while `docs/02_BUSINESS_RULES.md`, `docs/03_UX_UI_FLOWS.md`, `docs/05_DATABASE_SCHEMA.md`, `docs/09_TEST_PLAN.md`, and `docs/16_TRACEABILITY_MATRIX.md` define its supported behavior and tests. Do not invent requirements that those documents do not state. Do not begin `ORD-021` while only documenting this handoff.
 
 ## 6. Frozen architecture decisions
 
@@ -98,7 +104,7 @@ Read the exact contract again before coding. `docs/10_IMPLEMENTATION_BACKLOG.md`
 
 ## 8. Order/customization behavior
 
-Frozen behavior through `ORD-019`:
+Frozen behavior through `ORD-020`:
 
 - Persisted `1x` standard pizza may receive modifiers and increase quantity after explicit apply-all confirmation.
 - Persisted `1x` customized pizza may increase quantity after explicit apply-all confirmation.
@@ -113,12 +119,13 @@ Frozen behavior through `ORD-019`:
 - `ANNULLA` performs no writes and leaves the persisted order unchanged.
 - Existing customized multi-quantity rows do not use the standard-aggregated prompt.
 - Custom split rows never auto-merge with each other, even when their customizations are identical.
+- Draft-list quantity and removal follow the `ORD-020` contract recorded in section 19.
 
 ### Non-frozen note — `MODIFY_ONE` plus quantity change
 
-Current conservative behavior: when the edit scope is `MODIFY_ONE`, a simultaneous quantity change is rejected instead of inventing an unspecified semantics.
+Outside `ORD-020` scope. Current conservative behavior: when the edit scope is `MODIFY_ONE`, a simultaneous quantity change is rejected instead of inventing an unspecified semantics.
 
-This is **not** a frozen business rule. Do not treat it as a permanent contract, and do not change it until `ORD-020` or another normative source defines the case.
+This is **not** a frozen general business rule. Do not treat it as a permanent contract. The current conservative rejection is preserved until a later normative source defines the case.
 
 ## 9. Pricing behavior
 
@@ -257,6 +264,20 @@ The following manual checks were explicitly completed on Samsung `SM-S931B`:
 - TEST 2 PASS: leave and reopen the order → split structure and customization persist.
 - TEST 3 PASS: second `MODIFICA UNA` with the identical Addition → two separate custom rows → no auto-merge.
 
+### `ORD-020`
+
+- TEST 1 PASS: `2x` standard → `+` → `3x`, persistence after reopen.
+- TEST 2 PASS: `3 → 2 → 1`, minus blocked at `1`, no delete-on-zero.
+- TEST 3 PASS: custom quantity increase preserves customization and unit price.
+- TEST 4 PASS: remove dialog cancel + confirm; persistence correct.
+- TEST 5 PASS: remove last item → empty DRAFT still exists.
+
+### Customized pizza row highlight (post-`ORD-020` UX mini-task)
+
+- TEST VISIVO 1 PASS: standard vs custom distinction correct; alpha `0.22` approved.
+- TEST VISIVO 2 PASS: manual price EUR `0,00` → row highlighted.
+- TEST VISIVO 3 PASS: note/removal → highlighted; full custom removal returns to normal background.
+
 Some edge cases are covered by automated tests but were not necessarily repeated manually. Do not describe an automated check as a manual hardware check. In particular, `ORDER-012` transaction rollback is covered by automation and was not provoked manually on the device.
 
 ## 14. Deferred/manual checks still open
@@ -369,9 +390,97 @@ Relevant implementation files:
 - `app/src/main/java/it/krpng/cassa/feature/order/OrderItemDetailViewModel.kt`
 - corresponding JVM and Android tests under `app/src/test` and `app/src/androidTest`
 
-Do not begin `ORD-020` while documenting or revisiting `ORD-019`.
+## 17. ORD-020 final behavior
 
-## 17. Rules for the next coding agent
+`ORD-020` implemented draft-list quantity change and explicit line removal.
+
+List controls:
+
+```text
+[-] quantity [+]
+RIMUOVI
+```
+
+Quantity:
+
+- `[+]`: `quantity + 1`, immediate persistence.
+- `[-]` with `quantity > 1`: `quantity - 1`, immediate persistence.
+- `[-]` with `quantity = 1`: disabled / no mutation.
+- `quantity = 0` is invalid and does not mean delete.
+
+A quantity change preserves:
+
+- the same `order_item`;
+- the same `createdSequence`;
+- the same snapshots;
+- the same customizations;
+- the same unit price;
+- no split;
+- no merge;
+- no repricing.
+
+Removal:
+
+- `RIMUOVI` opens a confirmation dialog;
+- `ANNULLA` writes nothing;
+- confirm deletes children and the item atomically;
+- removing the last row leaves an existing empty `DRAFT`;
+- `ACCEPTED` remains immutable;
+- `orders.updatedAt` uses `ClockProvider`.
+
+Automated coverage linked to `ORD-020`:
+
+- `ORDER-013`..`ORDER-025` are implemented/covered.
+
+Relevant implementation files:
+
+- `app/src/main/java/it/krpng/cassa/domain/usecase/ChangeQuantity.kt`
+- `app/src/main/java/it/krpng/cassa/domain/usecase/RemoveOrderItem.kt`
+- `app/src/main/java/it/krpng/cassa/data/repository/RoomOrderRepository.kt`
+- `app/src/main/java/it/krpng/cassa/feature/order/NewOrderScreen.kt`
+- `app/src/main/java/it/krpng/cassa/feature/order/NewOrderViewModel.kt`
+- corresponding JVM and Android tests under `app/src/test` and `app/src/androidTest`
+
+Production commit:
+
+```text
+30098949315edfd7d6f98469ab01a94a39d1636f
+feat: manage order line quantity and removal
+```
+
+## 18. Customized pizza row highlight
+
+Completed as a visual-only mini-task after `ORD-020`.
+
+Detection rule:
+
+```text
+category == PIZZA
+AND (
+  Addition
+  OR Removal
+  OR note is not blank
+  OR manualUnitPrice != null
+)
+```
+
+Notes:
+
+- `manualUnitPrice = EUR 0,00` is a valid customization and must highlight;
+- standard pizza → normal background;
+- non-pizza rows → unchanged by this rule;
+- removing all customizations returns the row to the normal background;
+- background uses theme `tertiary` with alpha `0.22`;
+- text/price colors, quantity/remove interactions, and `ORD-020` behavior are unchanged.
+
+Approved commit:
+
+```text
+ad96197c66c68f306f15329d7d26a2a4a94b95d1
+feat: highlight customized pizza rows
+```
+
+## 19. Rules for the next coding agent
 
 1. Read `AGENTS.md`, `docs/17_CURRENT_STATE.md`, the exact backlog task, linked requirements, linked test plan, and traceability matrix before changing files. Consult `README_CODEX.md` and `docs/11_CODEX_WORKFLOW.md` only for workflow conventions that remain applicable; they are non-normative for Cursor, must not override agent-agnostic instructions, and must not introduce Codex-specific behavior into Cursor work.
 2. Implement one backlog task at a time and stop at its boundary.
@@ -387,31 +496,34 @@ Do not begin `ORD-020` while documenting or revisiting `ORD-019`.
 12. Report the exact files changed, test results, assumptions, deferred behavior, and open issues.
 13. Do not change documentation to justify behavior that contradicts higher-precedence requirements.
 14. Stop and report if the task contract is contradictory, requires a destructive migration, or would violate an architectural boundary.
+15. Next task is `ORD-021` — General note. Do not begin it while only updating this handoff document.
 
-## 18. Verification baseline
+## 20. Verification baseline
 
-Latest verified `ORD-019` baseline:
+Latest verified `ORD-020` / customized-pizza highlight baseline:
 
 ```yaml
-./gradlew test: PASS — 323 tests
-./gradlew assembleDebug: PASS
-./gradlew assembleDebugAndroidTest: PASS
-./gradlew connectedDebugAndroidTest: PASS — 55 tests on Samsung SM-S931B
-./gradlew installDebug: PASS
+./gradlew.bat test: PASS — 323 JVM
+./gradlew.bat assembleDebug: PASS
+./gradlew.bat assembleDebugAndroidTest: PASS
+./gradlew.bat connectedDebugAndroidTest: PASS — 62 tests on Samsung SM-S931B
+./gradlew.bat installDebug: PASS
 device: Samsung SM-S931B
 app data cleared: NO
 ```
 
-Documented repository state after the approved `ORD-019` production commit:
+Documented repository state after the approved customized-pizza highlight commit:
 
 ```yaml
-HEAD (production): a24627e49ecc3da1c171a8f266b9089e0ed683c7
-HEAD commit: "feat: split aggregated pizza atomically"
-last approved production implementation checkpoint: a24627e49ecc3da1c171a8f266b9089e0ed683c7
-last completed production task: ORD-019
-ORD-001..ORD-019: COMPLETE
-ORD-020: NOT STARTED
-next task: ORD-020 — Remove line/change quantity [P0]
+HEAD: ad96197c66c68f306f15329d7d26a2a4a94b95d1
+HEAD commit: "feat: highlight customized pizza rows"
+ORD-020 production checkpoint: 30098949315edfd7d6f98469ab01a94a39d1636f
+ORD-020 commit: "feat: manage order line quantity and removal"
+last completed production task: ORD-020
+custom pizza highlight: COMPLETE
+ORD-001..ORD-020: COMPLETE
+ORD-021: NOT STARTED
+next task: ORD-021 — General note [P0]
 ```
 
-A later documentation-only update of this handoff file may leave `HEAD` ahead of the production checkpoint without meaning that any production work after `ORD-019` has begun. No production code or test file was changed while creating or updating this handoff document.
+A later documentation-only update of this handoff file may leave `HEAD` ahead of a previously recorded docs checkpoint without meaning that `ORD-021` has begun. No production code or test file was changed while creating or updating this handoff document.
