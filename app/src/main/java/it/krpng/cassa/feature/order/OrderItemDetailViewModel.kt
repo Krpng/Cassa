@@ -15,7 +15,9 @@ import it.krpng.cassa.domain.repository.AdditionRepository
 import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
+import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
+import it.krpng.cassa.domain.usecase.SplitStandardPizzaItem
 import it.krpng.cassa.domain.usecase.UpdateOrderItem
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -81,6 +83,7 @@ class OrderItemDetailViewModel @Inject constructor(
     private val additionRepository: AdditionRepository,
     private val productRepository: ProductRepository,
     private val updateOrderItem: UpdateOrderItem,
+    private val splitStandardPizzaItem: SplitStandardPizzaItem,
 ) : ViewModel() {
     private val orderId = savedStateHandle.get<String>(ORDER_ID_ARGUMENT).orEmpty()
     private val orderItemId = savedStateHandle.get<String>(ORDER_ITEM_ID_ARGUMENT).orEmpty()
@@ -435,12 +438,7 @@ class OrderItemDetailViewModel @Inject constructor(
     ) {
         val state = _uiState.value
         if (state.aggregatedPizzaEditScope == AggregatedPizzaEditScope.MODIFY_ONE) {
-            _uiState.update { current ->
-                current.copy(
-                    errorMessage =
-                        "La modifica di una sola pizza richiede la separazione della riga.",
-                )
-            }
+            splitSingleUnit(fields)
             return
         }
         if (
@@ -504,6 +502,124 @@ class OrderItemDetailViewModel @Inject constructor(
                 UpdateOrderItemResult.PersistenceFailure
             }
             applySaveResult(result)
+        }
+    }
+
+    private fun splitSingleUnit(fields: ValidatedOrderItemFields) {
+        val state = _uiState.value
+        if (fields.quantity != state.originalQuantity) {
+            _uiState.update { current ->
+                current.copy(
+                    errorMessage = "Non modificare la quantità mentre personalizzi una sola pizza.",
+                )
+            }
+            return
+        }
+        val hasCustomization = state.selectedAdditionIds.isNotEmpty() ||
+            state.selectedRemovalIngredientIds.isNotEmpty() ||
+            fields.note != null ||
+            fields.manualUnitPrice != null
+        if (!hasCustomization) {
+            _uiState.update { current ->
+                current.copy(
+                    errorMessage =
+                        "Aggiungi una personalizzazione per separare una pizza dalla riga.",
+                )
+            }
+            return
+        }
+        _uiState.update { current ->
+            current.copy(
+                isSaving = true,
+                showQuantityIncreaseConfirmation = false,
+                validationErrors = OrderItemFormErrors(),
+                errorMessage = null,
+            )
+        }
+        viewModelScope.launch {
+            val result = try {
+                splitStandardPizzaItem(
+                    orderId = orderId,
+                    orderItemId = orderItemId,
+                    note = fields.note,
+                    manualUnitPrice = fields.manualUnitPrice,
+                    selectedAdditionIds = state.selectedAdditionIds,
+                    selectedRemovalIngredientIds = state.selectedRemovalIngredientIds,
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                SplitStandardPizzaItemResult.PersistenceFailure
+            }
+            applySplitResult(result)
+        }
+    }
+
+    private fun applySplitResult(result: SplitStandardPizzaItemResult) {
+        when (result) {
+            is SplitStandardPizzaItemResult.Split ->
+                _uiState.update { state -> state.copy(isSaving = false, isSaved = true) }
+
+            SplitStandardPizzaItemResult.OrderNotFound,
+            SplitStandardPizzaItemResult.ItemNotFound,
+            -> showUnavailable("La riga ordine non è più disponibile.")
+
+            SplitStandardPizzaItemResult.OrderNotEditable ->
+                showUnavailable("Questo ordine non è modificabile.")
+
+            SplitStandardPizzaItemResult.ItemNotPizza ->
+                showUnavailable("Le aggiunte sono disponibili solo per le pizze.")
+
+            SplitStandardPizzaItemResult.ItemNotStandard,
+            SplitStandardPizzaItemResult.ItemNotAggregated,
+            -> _uiState.update { state ->
+                state.copy(
+                    isSaving = false,
+                    errorMessage = "Questa riga non può essere separata.",
+                )
+            }
+
+            SplitStandardPizzaItemResult.CustomizationRequired ->
+                _uiState.update { state ->
+                    state.copy(
+                        isSaving = false,
+                        errorMessage =
+                            "Aggiungi una personalizzazione per separare una pizza dalla riga.",
+                    )
+                }
+
+            SplitStandardPizzaItemResult.AdditionUnavailable ->
+                _uiState.update { state ->
+                    state.copy(
+                        isSaving = false,
+                        errorMessage = "Una delle aggiunte selezionate non è più disponibile.",
+                    )
+                }
+
+            SplitStandardPizzaItemResult.IngredientNotRemovable ->
+                _uiState.update { state ->
+                    state.copy(
+                        isSaving = false,
+                        errorMessage =
+                            "Uno degli ingredienti selezionati non appartiene più al prodotto.",
+                    )
+                }
+
+            SplitStandardPizzaItemResult.AmountOverflow ->
+                _uiState.update { state ->
+                    state.copy(
+                        isSaving = false,
+                        errorMessage = "Quantità o prezzo troppo elevati.",
+                    )
+                }
+
+            SplitStandardPizzaItemResult.PersistenceFailure ->
+                _uiState.update { state ->
+                    state.copy(
+                        isSaving = false,
+                        errorMessage = "Impossibile salvare la riga. Riprova.",
+                    )
+                }
         }
     }
 

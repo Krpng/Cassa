@@ -1,6 +1,7 @@
 package it.krpng.cassa.data.repository
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -9,6 +10,9 @@ import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.data.database.CassaDatabase
 import it.krpng.cassa.data.database.RoomDatabaseTransactionRunner
 import it.krpng.cassa.data.database.dao.DraftReplacementConflictException
+import it.krpng.cassa.data.database.dao.OrderDao
+import it.krpng.cassa.data.database.entity.OrderItemEntity
+import it.krpng.cassa.data.database.entity.OrderItemRemovalEntity
 import it.krpng.cassa.data.database.entity.OrderEntity
 import it.krpng.cassa.data.database.entity.AdditionEntity
 import it.krpng.cassa.data.database.entity.IngredientEntity
@@ -21,6 +25,7 @@ import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.time.Instant
 import kotlinx.coroutines.flow.first
@@ -992,6 +997,311 @@ class RoomOrderRepositoryTest {
                 ),
             )
         }
+
+    @Test
+    fun modifyOneSplitsTheAggregatedStandardPizzaAndKeepsTheSourceUntouched() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+        database.productDao().insert(product(42, "Crocchè", ProductCategory.FRITTURA, 250))
+        repeat(3) { repository.quickAddStandard(draft.id, 41) }
+        assertTrue(repository.quickAddStandard(draft.id, 42) is QuickAddStandardResult.Added)
+        val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+        val mozzarellaId = database.ingredientDao().insert(ingredient("Mozzarella"))
+        database.productDao().insertProductIngredients(
+            listOf(ProductIngredientEntity(41, mozzarellaId, 0)),
+        )
+        val before = requireNotNull(repository.getById(draft.id))
+        val source = before.items.single { it.productId == 41L }
+        assertEquals(3, source.quantity)
+        assertEquals(1, source.createdSequence)
+        assertEquals(2, before.items.single { it.productId == 42L }.createdSequence)
+
+        val result = repository.splitStandardPizzaItem(
+            orderId = draft.id,
+            orderItemId = source.id,
+            note = "Ben cotta",
+            manualUnitPrice = null,
+            selectedAdditionIds = listOf(acciugheId),
+            selectedRemovalIngredientIds = listOf(mozzarellaId),
+        )
+
+        assertTrue(result is SplitStandardPizzaItemResult.Split)
+        val split = result as SplitStandardPizzaItemResult.Split
+        val after = requireNotNull(repository.getById(draft.id))
+        assertEquals(3, after.items.size)
+        val kept = after.items.single { it.id == source.id }
+        val created = after.items.single { it.id == split.newOrderItemId }
+        assertTrue(created.id != source.id)
+
+        assertEquals(2, kept.quantity)
+        assertEquals(1, created.quantity)
+        assertEquals(3, after.items.filter { it.productId == 41L }.sumOf { it.quantity })
+
+        assertTrue(kept.additions.isEmpty())
+        assertTrue(kept.removals.isEmpty())
+        assertNull(kept.note)
+        assertNull(kept.manualUnitPrice)
+        assertEquals(700L, kept.finalUnitPrice.cents)
+        assertEquals(1, kept.createdSequence)
+        assertEquals(2, after.items.single { it.productId == 42L }.createdSequence)
+        assertEquals(3, created.createdSequence)
+        assertEquals(created.createdSequence, split.newCreatedSequence)
+        assertEquals(source.id, split.sourceOrderItemId)
+        assertEquals(2, split.sourceQuantity)
+
+        assertEquals(listOf(acciugheId), created.additions.map { it.additionId })
+        assertEquals(listOf(mozzarellaId), created.removals.map { it.ingredientId })
+        assertEquals("Ben cotta", created.note)
+
+        assertEquals(source.productId, created.productId)
+        assertEquals(source.productNameSnapshot, created.productNameSnapshot)
+        assertEquals(source.productPrintedNameSnapshot, created.productPrintedNameSnapshot)
+        assertEquals(source.categorySnapshot, created.categorySnapshot)
+        assertEquals(source.baseUnitPrice.cents, created.baseUnitPrice.cents)
+        assertEquals(
+            source.automaticExtrasPricingSnapshot,
+            created.automaticExtrasPricingSnapshot,
+        )
+
+        assertEquals(150L, created.automaticExtrasTotal.cents)
+        assertEquals(850L, created.finalUnitPrice.cents)
+        assertNull(created.manualUnitPrice)
+    }
+
+    @Test
+    fun splitRollsBackTheDecrementAndTheNewRowWhenTheTransactionFails() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+        repeat(3) { repository.quickAddStandard(draft.id, 41) }
+        val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+        val mozzarellaId = database.ingredientDao().insert(ingredient("Mozzarella"))
+        database.productDao().insertProductIngredients(
+            listOf(ProductIngredientEntity(41, mozzarellaId, 0)),
+        )
+        val source = requireNotNull(repository.getById(draft.id)).items.single()
+        val failing = RoomOrderRepository(
+            orderDao = FailingRemovalOrderDao(database.orderDao()),
+            clockProvider = object : ClockProvider {
+                override fun now(): Instant = UPDATED_NOW
+            },
+            transactionRunner = RoomDatabaseTransactionRunner(database),
+        )
+
+        val result = failing.splitStandardPizzaItem(
+            orderId = draft.id,
+            orderItemId = source.id,
+            note = "Ben cotta",
+            manualUnitPrice = null,
+            selectedAdditionIds = listOf(acciugheId),
+            selectedRemovalIngredientIds = listOf(mozzarellaId),
+        )
+
+        assertSame(SplitStandardPizzaItemResult.PersistenceFailure, result)
+        val after = requireNotNull(repository.getById(draft.id))
+        val unchanged = after.items.single()
+        assertEquals(source.id, unchanged.id)
+        assertEquals(3, unchanged.quantity)
+        assertNull(unchanged.note)
+        assertTrue(unchanged.additions.isEmpty())
+        assertTrue(unchanged.removals.isEmpty())
+        assertEquals(1, countRows("order_items"))
+        assertEquals(0, countRows("order_item_additions"))
+        assertEquals(0, countRows("order_item_removals"))
+        assertEquals(FIXED_NOW.toEpochMilli(), after.updatedAt.toEpochMilli())
+    }
+
+    @Test
+    fun splitRejectsMissingTargetsAcceptedOrdersAndRowsThatCannotBeSplit() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
+        database.productDao().insert(product(42, "Crocchè", ProductCategory.FRITTURA, 250))
+        database.productDao().insert(product(43, "Marinara", ProductCategory.PIZZA, 600))
+        repeat(3) { repository.quickAddStandard(draft.id, 41) }
+        repeat(3) { repository.quickAddStandard(draft.id, 42) }
+        assertTrue(repository.quickAddStandard(draft.id, 43) is QuickAddStandardResult.Added)
+        val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+        val mozzarellaId = database.ingredientDao().insert(ingredient("Mozzarella"))
+        database.productDao().insertProductIngredients(
+            listOf(ProductIngredientEntity(41, mozzarellaId, 0)),
+        )
+        val basilicoId = database.ingredientDao().insert(ingredient("Basilico"))
+        val items = requireNotNull(repository.getById(draft.id)).items
+        val aggregatedPizzaId = items.single { it.productId == 41L }.id
+        val aggregatedFritturaId = items.single { it.productId == 42L }.id
+        val singlePizzaId = items.single { it.productId == 43L }.id
+        val accepted = acceptedOrder()
+        database.orderDao().insertDraft(accepted)
+        val foreignItemId = "foreign-item-id"
+        database.orderDao().insertOrderItem(
+            orderItem(id = foreignItemId, orderId = accepted.id, productId = 41),
+        )
+
+        suspend fun split(
+            orderId: String = draft.id,
+            itemId: String = aggregatedPizzaId,
+            additionIds: List<Long> = listOf(acciugheId),
+            removalIds: List<Long> = emptyList(),
+        ) = repository.splitStandardPizzaItem(
+            orderId = orderId,
+            orderItemId = itemId,
+            note = null,
+            manualUnitPrice = null,
+            selectedAdditionIds = additionIds,
+            selectedRemovalIngredientIds = removalIds,
+        )
+
+        assertSame(
+            SplitStandardPizzaItemResult.OrderNotFound,
+            split(orderId = "missing-order-id"),
+        )
+        assertSame(
+            SplitStandardPizzaItemResult.OrderNotEditable,
+            split(orderId = accepted.id, itemId = foreignItemId),
+        )
+        assertSame(SplitStandardPizzaItemResult.ItemNotFound, split(itemId = "missing-item-id"))
+        assertSame(SplitStandardPizzaItemResult.ItemNotFound, split(itemId = foreignItemId))
+        assertSame(
+            SplitStandardPizzaItemResult.ItemNotPizza,
+            split(itemId = aggregatedFritturaId),
+        )
+        assertSame(
+            SplitStandardPizzaItemResult.ItemNotAggregated,
+            split(itemId = singlePizzaId),
+        )
+        assertSame(
+            SplitStandardPizzaItemResult.CustomizationRequired,
+            split(additionIds = emptyList()),
+        )
+        assertSame(
+            SplitStandardPizzaItemResult.AdditionUnavailable,
+            split(additionIds = listOf(acciugheId + 999)),
+        )
+        assertSame(
+            SplitStandardPizzaItemResult.IngredientNotRemovable,
+            split(additionIds = emptyList(), removalIds = listOf(basilicoId)),
+        )
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = singlePizzaId,
+                quantity = 2,
+                note = null,
+                manualUnitPrice = null,
+                selectedAdditionIds = listOf(acciugheId),
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        assertSame(
+            SplitStandardPizzaItemResult.ItemNotStandard,
+            split(itemId = singlePizzaId),
+        )
+
+        val after = requireNotNull(repository.getById(draft.id))
+        assertEquals(3, after.items.size)
+        assertEquals(3, after.items.single { it.id == aggregatedPizzaId }.quantity)
+        assertEquals(3, after.items.single { it.id == aggregatedFritturaId }.quantity)
+        assertTrue(after.items.single { it.id == aggregatedPizzaId }.additions.isEmpty())
+        assertTrue(after.items.single { it.id == aggregatedPizzaId }.removals.isEmpty())
+        // The three draft rows plus the row owned by the accepted order, which stays untouched.
+        assertEquals(4, countRows("order_items"))
+    }
+
+    @Test
+    fun repeatedSplitsNeverMergeAndHonourDeferredExtrasAndZeroManualPrice() = runBlocking {
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(
+            product(44, "Margherita", ProductCategory.PIZZA, 700, automaticExtrasPricing = false),
+        )
+        repeat(4) { repository.quickAddStandard(draft.id, 44) }
+        val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+        val sourceId = requireNotNull(repository.getById(draft.id)).items.single().id
+
+        val first = repository.splitStandardPizzaItem(
+            orderId = draft.id,
+            orderItemId = sourceId,
+            note = null,
+            manualUnitPrice = null,
+            selectedAdditionIds = listOf(acciugheId),
+        ) as SplitStandardPizzaItemResult.Split
+        val second = repository.splitStandardPizzaItem(
+            orderId = draft.id,
+            orderItemId = sourceId,
+            note = null,
+            manualUnitPrice = null,
+            selectedAdditionIds = listOf(acciugheId),
+        ) as SplitStandardPizzaItemResult.Split
+        val third = repository.splitStandardPizzaItem(
+            orderId = draft.id,
+            orderItemId = sourceId,
+            note = null,
+            manualUnitPrice = Money.ZERO,
+            selectedAdditionIds = listOf(acciugheId),
+        ) as SplitStandardPizzaItemResult.Split
+
+        val after = requireNotNull(repository.getById(draft.id))
+        assertEquals(4, after.items.size)
+        assertEquals(4, after.items.sumOf { it.quantity })
+        assertEquals(1, after.items.single { it.id == sourceId }.quantity)
+        assertEquals(
+            listOf(2, 3, 4),
+            listOf(first, second, third).map { it.newCreatedSequence },
+        )
+        assertEquals(
+            listOf(1, 2, 3, 4),
+            after.items.map { it.createdSequence },
+        )
+
+        val firstRow = after.items.single { it.id == first.newOrderItemId }
+        val secondRow = after.items.single { it.id == second.newOrderItemId }
+        val thirdRow = after.items.single { it.id == third.newOrderItemId }
+        assertTrue(firstRow.id != secondRow.id)
+        assertEquals(1, firstRow.quantity)
+        assertEquals(1, secondRow.quantity)
+
+        assertEquals(150L, firstRow.additions.single().listedPrice.cents)
+        assertEquals(0L, firstRow.additions.single().chargedPrice.cents)
+        assertEquals(0L, firstRow.automaticExtrasTotal.cents)
+        assertEquals(700L, firstRow.finalUnitPrice.cents)
+
+        assertEquals(0L, thirdRow.manualUnitPrice?.cents)
+        assertEquals(0L, thirdRow.finalUnitPrice.cents)
+    }
+
+    private class FailingRemovalOrderDao(private val delegate: OrderDao) : OrderDao by delegate {
+        override suspend fun insertOrderItemRemovals(removals: List<OrderItemRemovalEntity>): Unit =
+            throw SQLiteException("removal insert failed")
+    }
+
+    private suspend fun countRows(table: String): Int = database.query(
+        "SELECT COUNT(*) FROM $table",
+        emptyArray(),
+    ).use { cursor ->
+        if (cursor.moveToFirst()) cursor.getInt(0) else 0
+    }
+
+    private fun orderItem(
+        id: String,
+        orderId: String,
+        productId: Long,
+    ): OrderItemEntity = OrderItemEntity(
+        id = id,
+        orderId = orderId,
+        productId = productId,
+        productNameSnapshot = "Margherita",
+        productPrintedNameSnapshot = "MARGHERITA",
+        categorySnapshot = ProductCategory.PIZZA,
+        quantity = 3,
+        baseUnitPriceCents = 700,
+        automaticExtrasTotalCents = 0,
+        manualUnitPriceCents = null,
+        finalUnitPriceCents = 700,
+        automaticExtrasPricingSnapshot = true,
+        note = null,
+        createdSequence = 1,
+    )
 
     private suspend fun allOrderIds(): List<String> = database.query(
         "SELECT id FROM orders ORDER BY id",

@@ -32,6 +32,15 @@ interface OrderRepository {
         customizationQuantityIntent: CustomizationQuantityIntent =
             CustomizationQuantityIntent.KEEP_CURRENT_SCOPE,
     ): UpdateOrderItemResult
+
+    suspend fun splitStandardPizzaItem(
+        orderId: String,
+        orderItemId: String,
+        note: String?,
+        manualUnitPrice: Money?,
+        selectedAdditionIds: List<Long> = emptyList(),
+        selectedRemovalIngredientIds: List<Long> = emptyList(),
+    ): SplitStandardPizzaItemResult
 }
 
 enum class CustomizationQuantityIntent {
@@ -61,6 +70,37 @@ sealed interface UpdateOrderItemResult {
     data object AmountOverflow : UpdateOrderItemResult
 
     data object PersistenceFailure : UpdateOrderItemResult
+}
+
+sealed interface SplitStandardPizzaItemResult {
+    data class Split(
+        val sourceOrderItemId: String,
+        val sourceQuantity: Int,
+        val newOrderItemId: String,
+        val newCreatedSequence: Int,
+    ) : SplitStandardPizzaItemResult
+
+    data object OrderNotFound : SplitStandardPizzaItemResult
+
+    data object OrderNotEditable : SplitStandardPizzaItemResult
+
+    data object ItemNotFound : SplitStandardPizzaItemResult
+
+    data object ItemNotPizza : SplitStandardPizzaItemResult
+
+    data object ItemNotStandard : SplitStandardPizzaItemResult
+
+    data object ItemNotAggregated : SplitStandardPizzaItemResult
+
+    data object CustomizationRequired : SplitStandardPizzaItemResult
+
+    data object AdditionUnavailable : SplitStandardPizzaItemResult
+
+    data object IngredientNotRemovable : SplitStandardPizzaItemResult
+
+    data object AmountOverflow : SplitStandardPizzaItemResult
+
+    data object PersistenceFailure : SplitStandardPizzaItemResult
 }
 
 sealed interface QuickAddStandardResult {

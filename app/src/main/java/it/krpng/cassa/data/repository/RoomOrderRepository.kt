@@ -29,6 +29,7 @@ import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.util.UUID
 import javax.inject.Inject
@@ -267,6 +268,148 @@ class RoomOrderRepository @Inject constructor(
             UpdateOrderItemResult.PersistenceFailure
         }
     }
+
+    override suspend fun splitStandardPizzaItem(
+        orderId: String,
+        orderItemId: String,
+        note: String?,
+        manualUnitPrice: Money?,
+        selectedAdditionIds: List<Long>,
+        selectedRemovalIngredientIds: List<Long>,
+    ): SplitStandardPizzaItemResult = try {
+        transactionRunner.runInTransaction {
+            val order = orderDao.getFullOrder(orderId)
+                ?: return@runInTransaction SplitStandardPizzaItemResult.OrderNotFound
+            if (order.order.status != OrderStatus.DRAFT || order.order.draftSlot != DRAFT_SLOT) {
+                return@runInTransaction SplitStandardPizzaItemResult.OrderNotEditable
+            }
+            val source = order.items.firstOrNull { item -> item.item.id == orderItemId }
+                ?: return@runInTransaction SplitStandardPizzaItemResult.ItemNotFound
+            if (source.item.categorySnapshot != ProductCategory.PIZZA) {
+                return@runInTransaction SplitStandardPizzaItemResult.ItemNotPizza
+            }
+            if (source.isCustomized()) {
+                return@runInTransaction SplitStandardPizzaItemResult.ItemNotStandard
+            }
+            if (source.item.quantity <= 1) {
+                return@runInTransaction SplitStandardPizzaItemResult.ItemNotAggregated
+            }
+
+            val requestedNote = note?.trim()?.ifEmpty { null }
+            val requestsCustomization = selectedAdditionIds.isNotEmpty() ||
+                selectedRemovalIngredientIds.isNotEmpty() ||
+                requestedNote != null ||
+                manualUnitPrice != null
+            if (!requestsCustomization) {
+                return@runInTransaction SplitStandardPizzaItemResult.CustomizationRequired
+            }
+
+            val maxSequence = order.items.maxOfOrNull { item -> item.item.createdSequence } ?: 0
+            if (maxSequence == Int.MAX_VALUE) {
+                return@runInTransaction SplitStandardPizzaItemResult.AmountOverflow
+            }
+            val splitItemId = UUID.randomUUID().toString()
+
+            if (selectedAdditionIds.size != selectedAdditionIds.distinct().size) {
+                return@runInTransaction SplitStandardPizzaItemResult.AdditionUnavailable
+            }
+            val additions = if (selectedAdditionIds.isEmpty()) {
+                emptyList()
+            } else {
+                val byId = orderDao.getActiveAdditionsByIds(selectedAdditionIds)
+                    .associateBy(AdditionEntity::id)
+                if (byId.keys != selectedAdditionIds.toSet()) {
+                    return@runInTransaction SplitStandardPizzaItemResult.AdditionUnavailable
+                }
+                selectedAdditionIds.mapIndexed { displayOrder, additionId ->
+                    checkNotNull(byId[additionId]).toOrderItemAddition(
+                        orderItemId = splitItemId,
+                        displayOrder = displayOrder,
+                        automaticExtrasPricing = source.item.automaticExtrasPricingSnapshot,
+                    )
+                }
+            }
+
+            if (
+                selectedRemovalIngredientIds.size != selectedRemovalIngredientIds.distinct().size
+            ) {
+                return@runInTransaction SplitStandardPizzaItemResult.IngredientNotRemovable
+            }
+            val removals = if (selectedRemovalIngredientIds.isEmpty()) {
+                emptyList()
+            } else {
+                val productId = source.item.productId
+                    ?: return@runInTransaction SplitStandardPizzaItemResult.IngredientNotRemovable
+                val byId = orderDao
+                    .getProductIngredientsByIds(productId, selectedRemovalIngredientIds)
+                    .associateBy(IngredientEntity::id)
+                if (byId.keys != selectedRemovalIngredientIds.toSet()) {
+                    return@runInTransaction SplitStandardPizzaItemResult.IngredientNotRemovable
+                }
+                selectedRemovalIngredientIds.mapIndexed { displayOrder, ingredientId ->
+                    checkNotNull(byId[ingredientId]).toOrderItemRemoval(
+                        orderItemId = splitItemId,
+                        displayOrder = displayOrder,
+                    )
+                }
+            }
+
+            val pricing = PricingCalculator.calculate(
+                baseUnitPrice = Money.ofCents(source.item.baseUnitPriceCents),
+                additionPrices = additions.map { addition ->
+                    Money.ofCents(addition.listedPriceCents)
+                },
+                automaticExtrasPricing = source.item.automaticExtrasPricingSnapshot,
+                manualUnitPrice = manualUnitPrice,
+                quantity = 1,
+            )
+            val splitItem = source.item.copy(
+                id = splitItemId,
+                quantity = 1,
+                automaticExtrasTotalCents = pricing.automaticExtrasTotal.cents,
+                manualUnitPriceCents = manualUnitPrice?.cents,
+                finalUnitPriceCents = pricing.finalUnitPrice.cents,
+                note = requestedNote,
+                createdSequence = maxSequence + 1,
+            )
+            val decrementedSource = source.item.copy(quantity = source.item.quantity - 1)
+
+            if (orderDao.updateOrderItem(decrementedSource) != 1) {
+                throw OrderItemSplitConflictException()
+            }
+            orderDao.insertOrderItem(splitItem)
+            if (additions.isNotEmpty()) {
+                orderDao.insertOrderItemAdditions(additions)
+            }
+            if (removals.isNotEmpty()) {
+                orderDao.insertOrderItemRemovals(removals)
+            }
+            val updatedAt = clockProvider.now().toEpochMilli()
+            if (orderDao.updateDraftTimestamp(orderId, updatedAt) != 1) {
+                throw OrderItemSplitConflictException()
+            }
+            SplitStandardPizzaItemResult.Split(
+                sourceOrderItemId = decrementedSource.id,
+                sourceQuantity = decrementedSource.quantity,
+                newOrderItemId = splitItem.id,
+                newCreatedSequence = splitItem.createdSequence,
+            )
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: ArithmeticException) {
+        SplitStandardPizzaItemResult.AmountOverflow
+    } catch (_: SQLiteException) {
+        SplitStandardPizzaItemResult.PersistenceFailure
+    } catch (_: OrderItemSplitConflictException) {
+        SplitStandardPizzaItemResult.PersistenceFailure
+    }
+
+    private fun OrderItemWithModifiers.isCustomized(): Boolean =
+        additions.isNotEmpty() ||
+            removals.isNotEmpty() ||
+            !item.note.isNullOrBlank() ||
+            item.manualUnitPriceCents != null
 
     private suspend fun prepareAdditionUpdate(
         existing: OrderItemWithModifiers,
@@ -578,6 +721,8 @@ class RoomOrderRepository @Inject constructor(
 private class QuickAddWriteConflictException : IllegalStateException()
 
 private class OrderItemUpdateConflictException : IllegalStateException()
+
+private class OrderItemSplitConflictException : IllegalStateException()
 
 private sealed interface AdditionUpdatePreparation {
     data class Ready(val update: AdditionUpdate) : AdditionUpdatePreparation

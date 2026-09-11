@@ -314,6 +314,15 @@ class HomeViewModelTest {
             selectedRemovalIngredientIds: List<Long>?,
             customizationQuantityIntent: it.krpng.cassa.domain.repository.CustomizationQuantityIntent,
         ): UpdateOrderItemResult = error("Not used")
+
+        override suspend fun splitStandardPizzaItem(
+            orderId: String,
+            orderItemId: String,
+            note: String?,
+            manualUnitPrice: Money?,
+            selectedAdditionIds: List<Long>,
+            selectedRemovalIngredientIds: List<Long>,
+        ): it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult = error("Not used")
     }
 
     private fun emptyDraft(id: String = "empty-draft-id"): Order = Order(

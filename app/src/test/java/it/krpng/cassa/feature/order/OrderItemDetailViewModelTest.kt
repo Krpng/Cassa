@@ -20,7 +20,9 @@ import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
+import it.krpng.cassa.domain.usecase.SplitStandardPizzaItem
 import it.krpng.cassa.domain.usecase.UpdateOrderItem
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
@@ -371,9 +373,11 @@ class OrderItemDetailViewModelTest {
             )
             assertTrue(modifyOne.uiState.value.canEditAdditions)
             assertTrue(modifyOneRepository.updates.isEmpty())
-            assertTrue(
-                modifyOne.uiState.value.errorMessage.orEmpty().contains("separazione della riga"),
-            )
+            assertNull(modifyOne.uiState.value.errorMessage)
+            assertTrue(modifyOne.uiState.value.isSaved)
+            assertEquals(1, modifyOneRepository.splits.size)
+            assertEquals("item-id", modifyOneRepository.splits.single().itemId)
+            assertEquals(listOf(10L), modifyOneRepository.splits.single().selectedAdditionIds)
         }
 
     @Test
@@ -754,6 +758,75 @@ class OrderItemDetailViewModelTest {
             )
         }
 
+    @Test
+    fun `modify one alone and modify one without customization never write anything`() =
+        runTest(dispatcher) {
+            val standard = draft().copy(
+                items = draft().items.map { item ->
+                    item.copy(
+                        quantity = 3,
+                        note = null,
+                        automaticExtrasTotal = Money.ZERO,
+                        finalUnitPrice = item.baseUnitPrice,
+                    )
+                },
+            )
+            val repository = FakeOrderRepository(standard)
+            val viewModel = viewModel(
+                repository,
+                additionRepository = FakeAdditionRepository(listOf(addition(10, "Provola", 150))),
+            )
+            advanceUntilIdle()
+
+            viewModel.selectModifyOne()
+            advanceUntilIdle()
+            assertTrue(repository.splits.isEmpty())
+            assertTrue(repository.updates.isEmpty())
+
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertTrue(repository.splits.isEmpty())
+            assertTrue(repository.updates.isEmpty())
+            assertFalse(viewModel.uiState.value.isSaved)
+            assertTrue(
+                viewModel.uiState.value.errorMessage.orEmpty().contains("personalizzazione"),
+            )
+        }
+
+    @Test
+    fun `a rejected split surfaces the error and leaves the item unsaved`() =
+        runTest(dispatcher) {
+            val standard = draft().copy(
+                items = draft().items.map { item ->
+                    item.copy(
+                        quantity = 3,
+                        note = null,
+                        automaticExtrasTotal = Money.ZERO,
+                        finalUnitPrice = item.baseUnitPrice,
+                    )
+                },
+            )
+            val repository = FakeOrderRepository(standard)
+            repository.splitResult = SplitStandardPizzaItemResult.PersistenceFailure
+            val viewModel = viewModel(
+                repository,
+                additionRepository = FakeAdditionRepository(listOf(addition(10, "Provola", 150))),
+            )
+            advanceUntilIdle()
+
+            viewModel.selectModifyOne()
+            viewModel.toggleAddition(10)
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertEquals(1, repository.splits.size)
+            assertTrue(repository.updates.isEmpty())
+            assertFalse(viewModel.uiState.value.isSaved)
+            assertFalse(viewModel.uiState.value.isSaving)
+            assertTrue(viewModel.uiState.value.errorMessage.orEmpty().isNotBlank())
+        }
+
     private fun viewModel(
         repository: OrderRepository,
         itemId: String = "item-id",
@@ -770,6 +843,7 @@ class OrderItemDetailViewModelTest {
         additionRepository = additionRepository,
         productRepository = productRepository,
         updateOrderItem = UpdateOrderItem(repository),
+        splitStandardPizzaItem = SplitStandardPizzaItem(repository),
     )
 
     private class FakeAdditionRepository(
@@ -821,6 +895,13 @@ class OrderItemDetailViewModelTest {
         val requestedOrderIds = mutableListOf<String>()
         val updates = mutableListOf<UpdateCall>()
         var updateResult: UpdateOrderItemResult = UpdateOrderItemResult.Updated
+        val splits = mutableListOf<SplitCall>()
+        var splitResult: SplitStandardPizzaItemResult = SplitStandardPizzaItemResult.Split(
+            sourceOrderItemId = "item-id",
+            sourceQuantity = 2,
+            newOrderItemId = "split-item-id",
+            newCreatedSequence = 2,
+        )
 
         override suspend fun getById(orderId: String): Order? {
             requestedOrderIds += orderId
@@ -887,8 +968,48 @@ class OrderItemDetailViewModelTest {
             return updateResult
         }
 
+        override suspend fun splitStandardPizzaItem(
+            orderId: String,
+            orderItemId: String,
+            note: String?,
+            manualUnitPrice: Money?,
+            selectedAdditionIds: List<Long>,
+            selectedRemovalIngredientIds: List<Long>,
+        ): SplitStandardPizzaItemResult {
+            splits += SplitCall(
+                orderId,
+                orderItemId,
+                note,
+                manualUnitPrice,
+                selectedAdditionIds,
+                selectedRemovalIngredientIds,
+            )
+            val result = splitResult
+            if (result is SplitStandardPizzaItemResult.Split) {
+                order = order?.copy(
+                    items = order.orEmptyItems().map { item ->
+                        if (item.id == orderItemId) {
+                            item.copy(quantity = item.quantity - 1)
+                        } else {
+                            item
+                        }
+                    },
+                )
+            }
+            return result
+        }
+
         private fun Order?.orEmptyItems(): List<OrderItem> = this?.items.orEmpty()
     }
+
+    private data class SplitCall(
+        val orderId: String,
+        val itemId: String,
+        val note: String?,
+        val manualPrice: Money?,
+        val selectedAdditionIds: List<Long>,
+        val selectedRemovalIngredientIds: List<Long>,
+    )
 
     private data class UpdateCall(
         val orderId: String,
