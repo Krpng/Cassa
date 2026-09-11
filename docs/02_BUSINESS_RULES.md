@@ -57,7 +57,7 @@ Ogni modifica significativa deve essere persistita subito:
 - quantità (inclusi `+`/`-` dalla lista ordine);
 - aggiunte;
 - rimozioni ingredienti;
-- nota;
+- nota di riga (`order_items.note`);
 - prezzo manuale;
 - reset prezzo.
 
@@ -66,6 +66,11 @@ Room è la source of truth.
 Non mantenere un carrello solo in memoria in attesa di un "salva".
 
 I controlli quantità `+`/`-` della lista ordine persistono immediatamente: non richiedono apertura del dettaglio né `SALVA`.
+
+### Eccezione ORD-021 — nota generale ordine
+
+La nota generale (`orders.generalNote`) **non** usa autosave per carattere né debounce.
+Si persiste solo con azione esplicita `SALVA NOTA`, secondo la sezione dedicata.
 
 ## 4. Categorie
 
@@ -125,8 +130,10 @@ Ripetute aggiunte quick:
 È personalizzata se ha almeno uno:
 - addition;
 - removal;
-- note;
-- prezzo manuale.
+- note di riga (`order_items.note` non blank);
+- prezzo manuale (`manualUnitPrice != null`, incluso EUR 0,00).
+
+`orders.generalNote` **non** rende una pizza personalizzata e non attiva l'highlight viola delle righe pizza.
 
 Pizze personalizzate inserite separatamente:
 - non vengono deduplicate, anche se identiche.
@@ -191,6 +198,52 @@ Guard obbligatori a repository/domain:
 - item appartenente all'order;
 - `order.status == DRAFT`;
 - `ACCEPTED` immutabile.
+
+### Nota generale ordine (ORD-021)
+
+Campo: `orders.generalNote` (già previsto dallo schema). Distinto da `order_items.note`.
+
+Semantica empty/null congelata:
+- testo `null` / vuoto / solo whitespace → persistire `generalNote = null`;
+- testo non vuoto → trim solo degli spazi esterni; preservare testo interno, spazi interni e line break significativi.
+
+Esempio:
+```text
+"   consegna dopo le 21   " → "consegna dopo le 21"
+```
+
+Cancellazione: campo portato a blank e `SALVA NOTA` → `generalNote = null`.
+
+MVP: nessun limite di lunghezza applicativo arbitrario (100/255/500…). Vincoli di stampa futuri appartengono alla specifica di stampa, non a ORD-021.
+
+Salvataggio:
+- solo con `SALVA NOTA` esplicito;
+- vietati autosave per carattere, debounce automatico, salvataggio implicito tramite quantity/remove;
+- salvataggio riuscito: persiste `generalNote`, aggiorna `orders.updatedAt` tramite `ClockProvider` (un solo timestamp logico; vietato system clock diretto), aggiorna lo stato osservato;
+- il pulsante può essere disabilitato quando il valore editor è identico al valore persistito.
+
+Guard repository/domain obbligatori:
+- order esistente;
+- `order.status == DRAFT`;
+- `ACCEPTED` immutabile: ogni mutation diretta di `generalNote` su ACCEPTED è rifiutata anche a repository/domain, non solo in UI.
+
+Indipendenza da note riga:
+- `orders.generalNote` e `order_items.note` coesistono e non si sovrascrivono;
+- salvare/modificare/cancellare una non modifica l'altra.
+
+Editor dirty vs Flow:
+- il valore persistito inizializza l'editor all'apertura/caricamento;
+- se l'utente ha testo locale non ancora salvato (`dirty`), una riemissione Flow da operazioni non correlate (quantity +/-, remove, modifica item) **non** deve sovrascrivere l'editor;
+- dopo salvataggio riuscito: persisted == editor, `dirty = false`.
+
+Errore salvataggio:
+- testo locale resta disponibile;
+- `generalNote` persistito resta invariato;
+- errore coerente con i pattern esistenti;
+- l'utente può riprovare;
+- nessuna perdita silenziosa del testo digitato.
+
+Recovery/reopen: dopo salvataggio riuscito, Home → riapri DRAFT mostra la stessa nota tramite Room (nessuna cache parallela).
 
 ## 8. Modifica una / tutte
 

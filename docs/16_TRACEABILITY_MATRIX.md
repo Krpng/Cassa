@@ -13,6 +13,7 @@ Questa matrice collega requisiti, backlog e test.
 | Custom pizza no merge | ORD-016 | ORDER-003..006 |
 | Modify one/all | ORD-018/019 | ORDER-010..012 |
 | Remove line / change quantity | ORD-020 | ORDER-013..025 |
+| General note | ORD-021 | ORDER-026..039 |
 | Additions | ORD-011/013 | PRICE, PRINT |
 | Removals | ORD-012 | PRICE-002, PRINT-T006 |
 | Manual price | ORD-014/015 | PRICE-004/005 |

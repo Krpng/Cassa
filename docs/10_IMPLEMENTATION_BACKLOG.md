@@ -243,6 +243,30 @@ Test: ORDER-013..025.
 
 ### ORD-021 [P0] General note
 
+Campo: `orders.generalNote` (schema esistente; nessuna migration se già presente). Distinto da `order_items.note`.
+
+UI (New Order / DRAFT):
+- sezione `NOTA ORDINE` dopo le righe ordine, prima di totale/azioni;
+- campo multilinea;
+- salvataggio esplicito `SALVA NOTA` (no autosave per carattere, no debounce);
+- `SALVA NOTA` disabilitabile se editor == persistito;
+- IME/`navigationBarsPadding`, touch `>= 48dp`; non sticky se non richiesto;
+- preservare controlli ORD-020.
+
+Semantica:
+- blank/whitespace → `null`; testo non vuoto → trim esterno solo;
+- nessun max length applicativo MVP;
+- solo `DRAFT`; `ACCEPTED` immutabile a repository/domain;
+- `updatedAt` via `ClockProvider`;
+- editor dirty non sovrascritto da Flow non correlati;
+- save failure preserva testo locale;
+- indipendenza da item note;
+- non influenza custom pizza highlight.
+
+Fuori scope: ORD-022 total live; flussi ACCEPTED/archivio/stampa dedicati.
+
+Test: ORDER-026..039.
+
 ### ORD-022 [P0] Total live from persisted state
 
 Test: ORDER/DRAFT/PRICE.

@@ -200,6 +200,50 @@ Dopo `RIMUOVI` confermato non restano child orphan per l'item eliminato.
 ### ORDER-025
 Cambio quantità o rimozione persistiti → kill/reopen processo → stesso stato Room (DRAFT, items, children, prezzi).
 
+## 8c. General note (ORD-021)
+
+### ORDER-026
+DRAFT nuovo/senza nota → `orders.generalNote` è `null`; l'editor `NOTA ORDINE` si inizializza vuoto.
+
+### ORDER-027
+`null` → testo non blank → `SALVA NOTA` → `generalNote` persistito uguale al testo trim esterno; `updatedAt` aggiornato.
+
+### ORDER-028
+Testo A persistito → modifica editor a testo B → `SALVA NOTA` → `generalNote = B` (dopo trim esterno se applicabile).
+
+### ORDER-029
+Testo persistito → editor blank/whitespace → `SALVA NOTA` → `generalNote = null`.
+
+### ORDER-030
+Input con spazi esterni (`"   consegna dopo le 21   "`) → `SALVA NOTA` → persistito `"consegna dopo le 21"`; spazi interni e line break significativi preservati.
+
+### ORDER-031
+Nota multilinea con line break interni → `SALVA NOTA` → stessi line break persistiti (solo trim esterno).
+
+### ORDER-032
+Dopo `SALVA NOTA` riuscito → Home → riapri DRAFT / kill-reopen processo → stessa `generalNote` da Room.
+
+### ORDER-033
+`SALVA NOTA` riuscito aggiorna `orders.updatedAt` tramite `ClockProvider` / FakeClock (non system clock diretto).
+
+### ORDER-034
+Mutation general note su order inesistente → order not found; nessuna scrittura.
+
+### ORDER-035
+Mutation general note su order `ACCEPTED` → rifiutata a repository/domain; `generalNote` e struttura invariati.
+
+### ORDER-036
+`orders.generalNote = "Consegna alle 21"` e `order_items.note = "Ben cotta"` sullo stesso DRAFT → coesistono; salvare/modificare/cancellare una non muta l'altra.
+
+### ORDER-037
+Editor `NOTA ORDINE` dirty (testo locale non salvato) → Flow da quantity +/-, remove o modifica item → l'editor **non** viene sovrascritto dal valore persistito.
+
+### ORDER-038
+`SALVA NOTA` fallisce → testo locale resta; `generalNote` persistito invariato; errore coerente; retry possibile.
+
+### ORDER-039
+Solo `orders.generalNote` valorizzata, pizza senza Addition/Removal/item note/manual price → pizza **non** customized e **senza** highlight viola.
+
 ## 9. Draft
 
 ### DRAFT-001

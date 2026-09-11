@@ -152,6 +152,31 @@ Rimuovere questa riga?
 
 Touch target almeno `48dp`. `RIMUOVI` resta distinto dai controlli quantità.
 
+### Nota ordine (ORD-021)
+
+Nella schermata principale del DRAFT (`Nuovo ordine` / ordine in corso), dopo l'elenco delle righe e prima dell'area finale totale/azioni, una sezione distinta:
+
+```text
+NOTA ORDINE
+[campo multilinea]
+[SALVA NOTA]
+```
+
+Regole UX:
+- chiaramente riconoscibile come nota dell'**intero ordine**, non di una singola riga;
+- campo multilinea leggibile, con scrolling/layout adeguati;
+- salvataggio **solo** tramite `SALVA NOTA` (nessun autosave per carattere);
+- `SALVA NOTA` può essere disabilitato quando il testo editor coincide con il valore persistito;
+- touch target `>= 48dp`;
+- con tastiera aperta: campo usabile e `SALVA NOTA` raggiungibile (`imePadding` / `navigationBarsPadding` appropriati);
+- accessibilità coerente con i pattern esistenti;
+- la sezione **non** è sticky se il layout attuale non lo richiede;
+- i controlli ORD-020 (`+/-`, `RIMUOVI`, tap riga → dettaglio) restano invariati.
+
+Semantica di salvataggio/empty/null, guard DRAFT/ACCEPTED, protezione editor dirty da riemissioni Flow, e recovery: vedi `docs/02_BUSINESS_RULES.md` (Nota generale ordine ORD-021).
+
+`orders.generalNote` non attiva l'highlight viola delle pizze personalizzate.
+
 Footer/sticky:
 - `TOTALE`;
 - `COMPLETA`.
@@ -161,6 +186,7 @@ Se nessuna riga:
 `Aggiungi un prodotto per iniziare l'ordine.`
 
 Un DRAFT senza items resta esistente (vuoto); Home/recovery seguono le regole già definite per draft vuoto.
+La sezione `NOTA ORDINE` resta disponibile anche su DRAFT vuoto.
 
 ### Nessun risultato
 `Nessun prodotto trovato.`
