@@ -12,16 +12,15 @@ Verified on 2026-09-11:
 
 ```yaml
 branch: main
-production checkpoint: a80986b6039f520874584c926817a65691bfbcc6
-commit: "feat: add aggregated pizza edit scope prompt"
-last completed implementation task: ORD-018
-ORD-019: NOT STARTED
+production checkpoint: a24627e49ecc3da1c171a8f266b9089e0ed683c7
+commit: "feat: split aggregated pizza atomically"
+last completed implementation task: ORD-019
+ORD-001..ORD-019: COMPLETE
+ORD-020: NOT STARTED
 origin/main: synchronized
 ```
 
-`docs/17_CURRENT_STATE.md` is created after this production checkpoint. A later `HEAD` may therefore point to a documentation-only handoff commit without indicating any production implementation after `ORD-018`.
-
-The new agent must verify that `a80986b6039f520874584c926817a65691bfbcc6` remains the last approved production implementation checkpoint. Any commits between it and the start of `ORD-019` must be exclusively documentation/handoff changes. Do not rewrite history, and keep each approved backlog task isolated.
+The new agent must verify that `a24627e49ecc3da1c171a8f266b9089e0ed683c7` remains the last approved production implementation checkpoint. Do not rewrite history, and keep each approved backlog task isolated.
 
 ## 3. Current milestone
 
@@ -34,7 +33,7 @@ M4 ODS import: COMPLETE
 M5 Draft order core: IN PROGRESS
 ```
 
-Within M5, `ORD-001` through `ORD-018` are complete. `ORD-019` is the next task and has not been started.
+Within M5, `ORD-001` through `ORD-019` are complete. `ORD-020` is the next task and has not been started.
 
 ## 4. Completed tasks
 
@@ -43,34 +42,25 @@ Within M5, `ORD-001` through `ORD-018` are complete. `ORD-019` is the next task 
 - `DB-001..009`: catalog/order/settings entities, relations, DAO/read models, repository foundation, single-draft invariant, production `CassaDatabase`, and exported schema baseline.
 - `MENU-001..008`: logical catalog CRUD, reactive catalog flows, deterministic product search, menu UI, and product/addition editors.
 - `ODS-001..011`: SAF picker, structural ODS parsing, sheet detection, row/price parsing, validation, planning, preview, atomic Room commit, and flag preservation.
-- `ORD-001..018`: draft lifecycle/recovery/conflict handling, order screen, catalog search/actions, persisted quick-add/list/detail, additions/removals, pricing variants, custom-line behavior, and the aggregated-pizza edit-scope prompt.
+- `ORD-001..019`: draft lifecycle/recovery/conflict handling, order screen, catalog search/actions, persisted quick-add/list/detail, additions/removals, pricing variants, custom-line behavior, the aggregated-pizza edit-scope prompt, and the atomic `MODIFICA UNA` split.
 
 Relevant additional regression checkpoint:
 
 - `8d4810173847d47afe587f9d189d7b0b8a12b3b7`: safe handling of trailing LibreOffice repeated padding in ODS files.
 
-Tasks after `ORD-018` are not complete unless a later checkpoint explicitly records otherwise.
+Tasks after `ORD-019` are not complete unless a later checkpoint explicitly records otherwise.
 
 ## 5. Current next task
 
 ```yaml
-task: ORD-019
-title: Atomic split
+task: ORD-020
+title: Remove line/change quantity
 priority: P0
 status: NOT STARTED
 milestone: M5 — Draft order core
 ```
 
-Read the exact contract again before coding. `docs/10_IMPLEMENTATION_BACKLOG.md` names the task, while `docs/02_BUSINESS_RULES.md`, `docs/03_UX_UI_FLOWS.md`, `docs/05_DATABASE_SCHEMA.md`, `docs/09_TEST_PLAN.md`, and `docs/16_TRACEABILITY_MATRIX.md` define its supported behavior and tests.
-
-Primary implementation surfaces likely involved, to be confirmed rather than assumed:
-
-- `app/src/main/java/it/krpng/cassa/domain/repository/OrderRepository.kt`
-- `app/src/main/java/it/krpng/cassa/domain/usecase/UpdateOrderItem.kt` or a focused split use case
-- `app/src/main/java/it/krpng/cassa/data/database/dao/OrderDao.kt`
-- `app/src/main/java/it/krpng/cassa/data/repository/RoomOrderRepository.kt`
-- `app/src/main/java/it/krpng/cassa/feature/order/OrderItemDetailViewModel.kt`
-- related JVM, Room, and Compose tests
+Read the exact contract again before coding. `docs/10_IMPLEMENTATION_BACKLOG.md` names the task, while `docs/02_BUSINESS_RULES.md`, `docs/03_UX_UI_FLOWS.md`, `docs/05_DATABASE_SCHEMA.md`, `docs/09_TEST_PLAN.md`, and `docs/16_TRACEABILITY_MATRIX.md` define its supported behavior and tests. Do not invent requirements that those documents do not state.
 
 ## 6. Frozen architecture decisions
 
@@ -108,7 +98,7 @@ Primary implementation surfaces likely involved, to be confirmed rather than ass
 
 ## 8. Order/customization behavior
 
-Frozen behavior through `ORD-018`:
+Frozen behavior through `ORD-019`:
 
 - Persisted `1x` standard pizza may receive modifiers and increase quantity after explicit apply-all confirmation.
 - Persisted `1x` customized pizza may increase quantity after explicit apply-all confirmation.
@@ -119,10 +109,16 @@ Frozen behavior through `ORD-018`:
   - `MODIFICA TUTTE`
   - `ANNULLA`
 - `MODIFICA TUTTE` updates the same row atomically, preserves quantity and `orderItemId`, and applies the customization to every unit.
-- `MODIFICA UNA` records the selected scope but performs no split and no mutation yet. The split is reserved for `ORD-019`.
+- `MODIFICA UNA` records the selected scope but writes nothing on selection alone. The atomic split occurs only when the user saves a valid customization.
 - `ANNULLA` performs no writes and leaves the persisted order unchanged.
 - Existing customized multi-quantity rows do not use the standard-aggregated prompt.
-- Until `ORD-019`, there must be no clone, split, second order item, or partial mutation for `MODIFICA UNA`.
+- Custom split rows never auto-merge with each other, even when their customizations are identical.
+
+### Non-frozen note — `MODIFY_ONE` plus quantity change
+
+Current conservative behavior: when the edit scope is `MODIFY_ONE`, a simultaneous quantity change is rejected instead of inventing an unspecified semantics.
+
+This is **not** a frozen business rule. Do not treat it as a permanent contract, and do not change it until `ORD-020` or another normative source defines the case.
 
 ## 9. Pricing behavior
 
@@ -255,11 +251,16 @@ The following manual checks were explicitly completed on Samsung `SM-S931B`:
 - `MODIFICA UNA` performs no premature split or mutation: PASS.
 - `ANNULLA` performs no write and leaves persisted state unchanged: PASS.
 
-Some edge cases are covered by automated tests but were not necessarily repeated manually. Do not describe an automated check as a manual hardware check.
+### `ORD-019`
+
+- TEST 1 PASS: `3x` standard → `MODIFICA UNA` → Addition → Save → `2x` standard + `1x` custom.
+- TEST 2 PASS: leave and reopen the order → split structure and customization persist.
+- TEST 3 PASS: second `MODIFICA UNA` with the identical Addition → two separate custom rows → no auto-merge.
+
+Some edge cases are covered by automated tests but were not necessarily repeated manually. Do not describe an automated check as a manual hardware check. In particular, `ORDER-012` transaction rollback is covered by automation and was not provoked manually on the device.
 
 ## 14. Deferred/manual checks still open
 
-- `ORD-019` split behavior has not been implemented or manually tested.
 - The complete M5 demo (complex draft, process termination, and identical recovery) remains pending until M5 is complete.
 - A dedicated manual comparison of both `automaticExtrasPricing=true` and `false` paths was deferred; these paths have automated coverage and must remain green.
 - Acceptance, numbering, archive, duplicate, and final printing flows belong to future milestones and have not been validated as completed features.
@@ -275,7 +276,7 @@ Final behavior:
 1. Opening a standard aggregated pizza with quantity greater than one shows the one/all/cancel prompt.
 2. `MODIFICA TUTTE` enables customization and sends the explicit apply-all intent through the existing use case/repository path.
 3. Room atomically updates the existing item; quantity and item ID remain unchanged.
-4. `MODIFICA UNA` records its explicit scope but intentionally performs no write because the required split transaction belongs to `ORD-019`.
+4. `MODIFICA UNA` records its explicit scope but, until Save of a valid customization, performs no write; the split belongs to `ORD-019`.
 5. `ANNULLA`, dialog dismissal, and system Back leave the database unchanged.
 6. The prompt does not appear for non-pizza rows, quantity-one rows, or already customized multi-quantity pizza rows.
 
@@ -286,38 +287,45 @@ Relevant implementation and regression-test files:
 - `app/src/main/java/it/krpng/cassa/data/repository/RoomOrderRepository.kt`
 - corresponding JVM and Android tests under `app/src/test` and `app/src/androidTest`
 
-## 16. ORD-019 boundary
+## 16. ORD-019 final behavior
 
-The backlog defines `ORD-019 [P0] Atomic split`. The business rules, UX flow, database specification, test plan, and traceability matrix support this exact boundary:
+`ORD-019` implemented the atomic split for `MODIFICA UNA`.
 
-Starting state:
+Final behavior:
 
 ```text
-source standard pizza order_item
-quantity > 1
-edit scope = MODIFICA UNA
-valid requested customization
+MODIFICA UNA
+→ does not write on selection alone
+→ split only on Save of a valid customization
+
+3x standard
+→ 2x source standard
++ 1x new custom
 ```
 
-Required atomic result when Save is confirmed:
+Source row:
 
-- verify the owning order exists and is `DRAFT`;
-- verify item ownership and that source quantity is greater than one;
-- obtain one logical mutation timestamp from `ClockProvider` according to existing conventions;
-- decrement the source standard row by one;
-- create a new `order_item` with a new UUID and `quantity = 1`;
-- preserve product, printed-name, category, base-price, automatic-extras-pricing, and other required source snapshots;
-- apply the requested Addition/Removal/Note/Manual-price customization only to the new row;
-- preserve Addition and Removal snapshots and calculate pricing through the existing pricing primitives;
-- assign deterministic `createdSequence` according to the frozen decision below;
-- update `orders.updatedAt` within the same transaction;
-- conserve total quantity across the two rows;
-- never create a quantity-zero row or accidental duplicate;
-- commit every write together or roll back to the original aggregated row on any failure.
+- same `orderItemId`;
+- quantity decreased by one;
+- same `createdSequence`.
 
-### Frozen decision added before ORD-019 implementation — `createdSequence`
+New row:
 
-This rule is a project decision recorded before coding. It is not yet implemented.
+- new UUID;
+- `quantity = 1`;
+- next available `createdSequence` in the order;
+- customization applied exclusively to the new row.
+
+Transaction and pricing:
+
+- single Room transaction;
+- full rollback on failure;
+- `orders.updatedAt` via `ClockProvider`;
+- source product/printed-name/category/base-price/automatic-extras and related snapshots preserved without re-reading the live catalog;
+- pricing recalculated through existing `PricingCalculator` primitives;
+- custom split rows never auto-merge.
+
+### Frozen `createdSequence` decision — implemented
 
 When `MODIFICA UNA` creates a new `order_item` through the atomic split:
 
@@ -325,7 +333,7 @@ When `MODIFICA UNA` creates a new `order_item` through the atomic split:
 - the new row receives the next available `createdSequence` in the order;
 - the new row is therefore treated as a newly inserted `order_item`;
 - existing `order_item` rows are not renumbered or reordered;
-- `createdSequence` must remain deterministic and unique according to existing conventions.
+- `createdSequence` remains deterministic and unique according to existing conventions.
 
 Example:
 
@@ -346,21 +354,22 @@ Coca Cola              createdSequence=3
 Margherita custom 1x   createdSequence=4
 ```
 
-Rationale:
+Automated coverage linked to `ORD-019`:
 
-- `createdSequence` represents insertion order;
-- the split row is a new `order_item`;
-- already persisted rows must not be reindexed;
-- this keeps the transaction simple and deterministic.
+- `ORDER-010`: `3x` standard, Modify one → `2x` standard plus `1x` customized — covered.
+- `ORDER-012`: transaction failure leaves the original structure intact — covered.
+- `UI-004`: critical Compose flow for `3x` standard → Modify one — covered.
+- `ORDER-011` (Modify all) remains covered by `ORD-018`.
 
-Tests linked jointly to `ORD-018/019` by the traceability matrix:
+Relevant implementation files:
 
-- `ORDER-010`: `3x` standard, Modify one -> `2x` standard plus `1x` customized.
-- `ORDER-011`: `3x` standard, Modify all -> one `3x` customized row. This path is already covered by `ORD-018`.
-- `ORDER-012`: transaction failure leaves the original structure intact.
-- `UI-004`: critical Compose flow for `3x` standard -> Modify one.
+- `app/src/main/java/it/krpng/cassa/domain/repository/OrderRepository.kt`
+- `app/src/main/java/it/krpng/cassa/domain/usecase/SplitStandardPizzaItem.kt`
+- `app/src/main/java/it/krpng/cassa/data/repository/RoomOrderRepository.kt`
+- `app/src/main/java/it/krpng/cassa/feature/order/OrderItemDetailViewModel.kt`
+- corresponding JVM and Android tests under `app/src/test` and `app/src/androidTest`
 
-Do not generalize split behavior to other categories or edit scenarios unless a normative document explicitly requires it. Do not begin `ORD-020` line removal/change-quantity behavior while implementing `ORD-019`.
+Do not begin `ORD-020` while documenting or revisiting `ORD-019`.
 
 ## 17. Rules for the next coding agent
 
@@ -381,30 +390,28 @@ Do not generalize split behavior to other categories or edit scenarios unless a 
 
 ## 18. Verification baseline
 
-Latest verified `ORD-018` baseline:
+Latest verified `ORD-019` baseline:
 
 ```yaml
-./gradlew test: PASS — 321 tests, 0 failures, 0 errors, 0 skipped
+./gradlew test: PASS — 323 tests
 ./gradlew assembleDebug: PASS
 ./gradlew assembleDebugAndroidTest: PASS
-./gradlew connectedDebugAndroidTest: PASS — 49 tests, 0 failures
+./gradlew connectedDebugAndroidTest: PASS — 55 tests on Samsung SM-S931B
 ./gradlew installDebug: PASS
 device: Samsung SM-S931B
 app data cleared: NO
-git diff --check before ORD-018 commit: PASS
 ```
 
-Documented repository state before any `ORD-019` implementation:
+Documented repository state after the approved `ORD-019` production commit:
 
 ```yaml
-HEAD (documentation): 189172e2f66fb3e3002bb55d706430a6242d4b09
-HEAD commit: "docs: add project handoff checkpoint"
-handoff: committed and pushed
-last approved production implementation checkpoint: a80986b6039f520874584c926817a65691bfbcc6
-production commit: "feat: add aggregated pizza edit scope prompt"
-last completed production task: ORD-018
-ORD-019: NOT STARTED
-no production task after ORD-018 has been started
+HEAD (production): a24627e49ecc3da1c171a8f266b9089e0ed683c7
+HEAD commit: "feat: split aggregated pizza atomically"
+last approved production implementation checkpoint: a24627e49ecc3da1c171a8f266b9089e0ed683c7
+last completed production task: ORD-019
+ORD-001..ORD-019: COMPLETE
+ORD-020: NOT STARTED
+next task: ORD-020 — Remove line/change quantity [P0]
 ```
 
-`HEAD` may point at the documentation-only handoff commit without meaning that any production work after `ORD-018` has begun. The last approved production implementation checkpoint remains `a80986b6039f520874584c926817a65691bfbcc6`. No production code or test file was changed while creating or updating this handoff document.
+A later documentation-only update of this handoff file may leave `HEAD` ahead of the production checkpoint without meaning that any production work after `ORD-019` has begun. No production code or test file was changed while creating or updating this handoff document.
