@@ -20,6 +20,7 @@ import it.krpng.cassa.data.database.relation.OrderItemWithModifiers
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.order.GeneralNoteNormalizer
 import it.krpng.cassa.domain.pricing.OrderLineMergeCandidate
 import it.krpng.cassa.domain.pricing.OrderLineMergePolicy
 import it.krpng.cassa.domain.pricing.PricingCalculator
@@ -32,6 +33,7 @@ import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
+import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.util.UUID
 import javax.inject.Inject
@@ -475,6 +477,34 @@ class RoomOrderRepository @Inject constructor(
         RemoveOrderItemResult.PersistenceFailure
     }
 
+    override suspend fun updateGeneralNote(
+        orderId: String,
+        generalNote: String?,
+    ): UpdateGeneralNoteResult = try {
+        transactionRunner.runInTransaction {
+            val order = orderDao.getFullOrder(orderId)
+                ?: return@runInTransaction UpdateGeneralNoteResult.OrderNotFound
+            if (order.order.status != OrderStatus.DRAFT || order.order.draftSlot != DRAFT_SLOT) {
+                return@runInTransaction UpdateGeneralNoteResult.OrderNotEditable
+            }
+            val normalized = GeneralNoteNormalizer.normalize(generalNote)
+            if (orderDao.updateDraftGeneralNote(orderId, normalized) != 1) {
+                throw GeneralNoteUpdateConflictException()
+            }
+            val updatedAt = clockProvider.now().toEpochMilli()
+            if (orderDao.updateDraftTimestamp(orderId, updatedAt) != 1) {
+                throw GeneralNoteUpdateConflictException()
+            }
+            UpdateGeneralNoteResult.Updated
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: SQLiteException) {
+        UpdateGeneralNoteResult.PersistenceFailure
+    } catch (_: GeneralNoteUpdateConflictException) {
+        UpdateGeneralNoteResult.PersistenceFailure
+    }
+
     private fun OrderItemWithModifiers.isCustomized(): Boolean =
         OrderLineMergePolicy.isCustomized(
             OrderLineMergeCandidate(
@@ -803,6 +833,8 @@ private class OrderItemSplitConflictException : IllegalStateException()
 private class OrderItemQuantityConflictException : IllegalStateException()
 
 private class OrderItemRemoveConflictException : IllegalStateException()
+
+private class GeneralNoteUpdateConflictException : IllegalStateException()
 
 private sealed interface AdditionUpdatePreparation {
     data class Ready(val update: AdditionUpdate) : AdditionUpdatePreparation

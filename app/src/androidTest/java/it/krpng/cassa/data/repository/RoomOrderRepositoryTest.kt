@@ -28,6 +28,7 @@ import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
+import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.time.Instant
 import kotlinx.coroutines.flow.first
@@ -1486,6 +1487,113 @@ class RoomOrderRepositoryTest {
         assertEquals(1, requireNotNull(repository.getById(draft.id)).items.size)
         assertEquals(draftItemId, requireNotNull(repository.getById(draft.id)).items.single().id)
         assertEquals(2, countRows("order_items"))
+    }
+
+    @Test
+    fun updateGeneralNoteInsertsEditsClearsAndTrimsWithoutMigration() = runBlocking {
+        // ORDER-026 / ORDER-027 / ORDER-028 / ORDER-029 / ORDER-030 / ORDER-031 / ORDER-032 / ORDER-033
+        val created = repository.createDraft() as CreateDraftResult.Created
+        val draft = created.draft
+        assertNull(draft.generalNote)
+        assertNull(requireNotNull(repository.getById(draft.id)).generalNote)
+
+        val clock = MutableClock(UPDATED_NOW)
+        val timed = RoomOrderRepository(
+            orderDao = database.orderDao(),
+            clockProvider = clock,
+            transactionRunner = RoomDatabaseTransactionRunner(database),
+        )
+
+        assertSame(
+            UpdateGeneralNoteResult.Updated,
+            timed.updateGeneralNote(draft.id, "  Consegna alle 21  "),
+        )
+        var loaded = requireNotNull(repository.getById(draft.id))
+        assertEquals("Consegna alle 21", loaded.generalNote)
+        assertEquals(UPDATED_NOW.toEpochMilli(), loaded.updatedAt.toEpochMilli())
+
+        clock.now = RESET_NOW
+        assertSame(
+            UpdateGeneralNoteResult.Updated,
+            timed.updateGeneralNote(draft.id, "Nuova nota\nseconda riga"),
+        )
+        loaded = requireNotNull(repository.getById(draft.id))
+        assertEquals("Nuova nota\nseconda riga", loaded.generalNote)
+        assertEquals(RESET_NOW.toEpochMilli(), loaded.updatedAt.toEpochMilli())
+
+        assertSame(
+            UpdateGeneralNoteResult.Updated,
+            timed.updateGeneralNote(draft.id, "   "),
+        )
+        loaded = requireNotNull(repository.getById(draft.id))
+        assertNull(loaded.generalNote)
+    }
+
+    @Test
+    fun updateGeneralNoteRejectsMissingAndAcceptedOrders() = runBlocking {
+        // ORDER-034 / ORDER-035
+        assertSame(
+            UpdateGeneralNoteResult.OrderNotFound,
+            repository.updateGeneralNote("missing-id", "Nota"),
+        )
+
+        val accepted = acceptedOrder()
+        database.orderDao().insertDraft(accepted)
+        assertSame(
+            UpdateGeneralNoteResult.OrderNotEditable,
+            repository.updateGeneralNote(accepted.id, "Nota"),
+        )
+        assertNull(requireNotNull(repository.getById(accepted.id)).generalNote)
+    }
+
+    @Test
+    fun updateGeneralNoteLeavesItemNotesIndependent() = runBlocking {
+        // ORDER-036
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(61, "Margherita", ProductCategory.PIZZA, 700))
+        assertTrue(repository.quickAddStandard(draft.id, 61L) is QuickAddStandardResult.Added)
+        val itemId = requireNotNull(repository.getById(draft.id)).items.single().id
+
+        assertSame(
+            UpdateGeneralNoteResult.Updated,
+            repository.updateGeneralNote(draft.id, "Consegna alle 21"),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 1,
+                note = "Ben cotta",
+                manualUnitPrice = null,
+            ),
+        )
+
+        var loaded = requireNotNull(repository.getById(draft.id))
+        assertEquals("Consegna alle 21", loaded.generalNote)
+        assertEquals("Ben cotta", loaded.items.single().note)
+
+        assertSame(
+            UpdateGeneralNoteResult.Updated,
+            repository.updateGeneralNote(draft.id, null),
+        )
+        loaded = requireNotNull(repository.getById(draft.id))
+        assertNull(loaded.generalNote)
+        assertEquals("Ben cotta", loaded.items.single().note)
+
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 1,
+                note = null,
+                manualUnitPrice = null,
+            ),
+        )
+        loaded = requireNotNull(repository.getById(draft.id))
+        assertNull(loaded.generalNote)
+        assertNull(loaded.items.single().note)
     }
 
     private class MutableClock(var now: Instant) : ClockProvider {

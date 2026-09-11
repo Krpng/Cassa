@@ -1196,6 +1196,8 @@ class RoomOrderRepositoryTest {
 
         override suspend fun deleteOrderItem(orderId: String, orderItemId: String): Int = 0
 
+        override suspend fun updateDraftGeneralNote(orderId: String, generalNote: String?): Int = 1
+
         override suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int {
             updatedDraftTimestamp = updatedAt
             return updateTimestampResult

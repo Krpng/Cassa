@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.core.normalization.TextNormalizer
+import it.krpng.cassa.domain.model.OrderItem
+import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductCategory
-import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.order.GeneralNoteNormalizer
 import it.krpng.cassa.domain.pricing.OrderLineMergeCandidate
 import it.krpng.cassa.domain.pricing.OrderLineMergePolicy
 import it.krpng.cassa.domain.repository.ChangeQuantityResult
@@ -16,11 +18,12 @@ import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
+import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.search.ProductSearchEngine
 import it.krpng.cassa.domain.usecase.AddProductToDraft
 import it.krpng.cassa.domain.usecase.ChangeQuantity
 import it.krpng.cassa.domain.usecase.RemoveOrderItem
-import it.krpng.cassa.domain.model.OrderItem
+import it.krpng.cassa.domain.usecase.UpdateGeneralNote
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -28,8 +31,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -71,6 +74,11 @@ sealed interface NewOrderUiState {
         val quickAddError: String? = null,
         val lineMutationInProgressItemIds: Set<String> = emptySet(),
         val lineMutationError: String? = null,
+        val generalNoteEditor: String = "",
+        val persistedGeneralNote: String? = null,
+        val canSaveGeneralNote: Boolean = false,
+        val generalNoteSaveInProgress: Boolean = false,
+        val generalNoteError: String? = null,
     ) : NewOrderUiState {
         val isDraftEmpty: Boolean
             get() = orderLines.isEmpty()
@@ -91,12 +99,14 @@ class NewOrderViewModel @Inject constructor(
     private val addProductToDraft: AddProductToDraft,
     private val changeQuantity: ChangeQuantity,
     private val removeOrderItem: RemoveOrderItem,
+    private val updateGeneralNote: UpdateGeneralNote,
 ) : ViewModel() {
     private val draftId: String = savedStateHandle.get<String>(DRAFT_ID_ARGUMENT).orEmpty()
     private val searchQuery = MutableStateFlow("")
     private val selectedFilter = MutableStateFlow(OrderCatalogFilter.ALL)
     private val quickAddOperation = MutableStateFlow(QuickAddOperationState())
     private val lineMutationOperation = MutableStateFlow(LineMutationOperationState())
+    private val generalNoteLocal = MutableStateFlow(GeneralNoteLocalState())
 
     private val _uiState = MutableStateFlow<NewOrderUiState>(NewOrderUiState.Loading)
     val uiState: StateFlow<NewOrderUiState> = _uiState.asStateFlow()
@@ -108,6 +118,7 @@ class NewOrderViewModel @Inject constructor(
     }
 
     fun retry() {
+        generalNoteLocal.value = GeneralNoteLocalState()
         observeOrderAndCatalog()
     }
 
@@ -184,6 +195,51 @@ class NewOrderViewModel @Inject constructor(
         lineMutationOperation.update { state -> state.copy(error = null) }
     }
 
+    fun updateGeneralNoteEditor(value: String) {
+        generalNoteLocal.update { state ->
+            state.copy(editor = value, error = null)
+        }
+    }
+
+    fun saveGeneralNote() {
+        val ready = _uiState.value as? NewOrderUiState.Ready ?: return
+        val local = generalNoteLocal.value
+        if (local.saveInProgress) return
+        val editorSnapshot = local.editor ?: ready.generalNoteEditor
+        if (GeneralNoteNormalizer.normalize(editorSnapshot) == ready.persistedGeneralNote) return
+
+        generalNoteLocal.update { state ->
+            state.copy(saveInProgress = true, error = null)
+        }
+        viewModelScope.launch {
+            val result = try {
+                updateGeneralNote(draftId, editorSnapshot)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                UpdateGeneralNoteResult.PersistenceFailure
+            }
+            generalNoteLocal.update { state ->
+                when (result) {
+                    UpdateGeneralNoteResult.Updated -> state.copy(
+                        editor = null,
+                        saveInProgress = false,
+                        error = null,
+                    )
+                    else -> state.copy(
+                        editor = editorSnapshot,
+                        saveInProgress = false,
+                        error = result.toUserMessage(),
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissGeneralNoteError() {
+        generalNoteLocal.update { state -> state.copy(error = null) }
+    }
+
     private fun mutateLineQuantity(itemId: String, quantity: Int) {
         if (itemId in lineMutationOperation.value.pendingCounts) return
 
@@ -217,35 +273,48 @@ class NewOrderViewModel @Inject constructor(
                     productRepository.observeActive(),
                     searchQuery,
                     selectedFilter,
-                    combine(quickAddOperation, lineMutationOperation) { quickAdd, lineMutation ->
-                        quickAdd to lineMutation
+                    combine(
+                        quickAddOperation,
+                        lineMutationOperation,
+                        generalNoteLocal,
+                    ) { quickAdd, lineMutation, generalNote ->
+                        Triple(quickAdd, lineMutation, generalNote)
                     },
                 ) { order, products, query, filter, operations ->
-                    val (quickAdd, lineMutation) = operations
+                    val (quickAdd, lineMutation, generalNote) = operations
                     when {
                         order == null -> NewOrderUiState.NotFound
                         order.status != OrderStatus.DRAFT -> NewOrderUiState.NotEditable
-                        else -> NewOrderUiState.Ready(
-                            draftId = order.id,
-                            orderLines = order.items
-                                .sortedWith(compareBy({ it.createdSequence }, { it.id }))
-                                .map { item ->
-                                    DraftOrderLine(
-                                        itemId = item.id,
-                                        quantity = item.quantity,
-                                        productName = item.productNameSnapshot,
-                                        lineTotal = item.finalUnitPrice * item.quantity,
-                                        isCustomizedPizza = item.isCustomizedPizzaRow(),
-                                    )
-                                },
-                            searchQuery = query,
-                            selectedFilter = filter,
-                            catalogItems = products.toCatalogItems(query, filter),
-                            quickAddInProgressProductIds = quickAdd.pendingCounts.keys,
-                            quickAddError = quickAdd.error,
-                            lineMutationInProgressItemIds = lineMutation.pendingCounts.keys,
-                            lineMutationError = lineMutation.error,
-                        )
+                        else -> {
+                            val editor = generalNote.editor ?: order.generalNote.orEmpty()
+                            NewOrderUiState.Ready(
+                                draftId = order.id,
+                                orderLines = order.items
+                                    .sortedWith(compareBy({ it.createdSequence }, { it.id }))
+                                    .map { item ->
+                                        DraftOrderLine(
+                                            itemId = item.id,
+                                            quantity = item.quantity,
+                                            productName = item.productNameSnapshot,
+                                            lineTotal = item.finalUnitPrice * item.quantity,
+                                            isCustomizedPizza = item.isCustomizedPizzaRow(),
+                                        )
+                                    },
+                                searchQuery = query,
+                                selectedFilter = filter,
+                                catalogItems = products.toCatalogItems(query, filter),
+                                quickAddInProgressProductIds = quickAdd.pendingCounts.keys,
+                                quickAddError = quickAdd.error,
+                                lineMutationInProgressItemIds = lineMutation.pendingCounts.keys,
+                                lineMutationError = lineMutation.error,
+                                generalNoteEditor = editor,
+                                persistedGeneralNote = order.generalNote,
+                                canSaveGeneralNote = !generalNote.saveInProgress &&
+                                    GeneralNoteNormalizer.normalize(editor) != order.generalNote,
+                                generalNoteSaveInProgress = generalNote.saveInProgress,
+                                generalNoteError = generalNote.error,
+                            )
+                        }
                     }
                 }
                     .catch {
@@ -330,6 +399,15 @@ class NewOrderViewModel @Inject constructor(
             "Impossibile rimuovere la riga. Riprova."
     }
 
+    private fun UpdateGeneralNoteResult.toUserMessage(): String? = when (this) {
+        UpdateGeneralNoteResult.Updated -> null
+        UpdateGeneralNoteResult.OrderNotFound,
+        UpdateGeneralNoteResult.OrderNotEditable,
+        UpdateGeneralNoteResult.PersistenceFailure,
+        ->
+            "Impossibile salvare la nota ordine. Riprova."
+    }
+
     companion object {
         const val DRAFT_ID_ARGUMENT = "draftId"
     }
@@ -386,3 +464,13 @@ private data class LineMutationOperationState(
         return copy(pendingCounts = updatedCounts, error = message ?: error)
     }
 }
+
+/**
+ * [editor] null means follow the persisted Room value (clean).
+ * Non-null means the user has local unsaved text that Flow must not overwrite.
+ */
+private data class GeneralNoteLocalState(
+    val editor: String? = null,
+    val saveInProgress: Boolean = false,
+    val error: String? = null,
+)

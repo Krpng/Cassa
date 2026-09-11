@@ -308,6 +308,8 @@ class RoomRepositoriesTest {
 
         override suspend fun deleteOrderItem(orderId: String, orderItemId: String): Int = 0
 
+        override suspend fun updateDraftGeneralNote(orderId: String, generalNote: String?): Int = 0
+
         override suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int = 0
 
         override suspend fun deleteDraft(orderId: String): Int = 0

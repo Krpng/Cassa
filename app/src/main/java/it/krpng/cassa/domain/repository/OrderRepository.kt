@@ -52,11 +52,26 @@ interface OrderRepository {
         orderId: String,
         orderItemId: String,
     ): RemoveOrderItemResult
+
+    suspend fun updateGeneralNote(
+        orderId: String,
+        generalNote: String?,
+    ): UpdateGeneralNoteResult
 }
 
 enum class CustomizationQuantityIntent {
     KEEP_CURRENT_SCOPE,
     APPLY_TO_ALL_UNITS_CONFIRMED,
+}
+
+sealed interface UpdateGeneralNoteResult {
+    data object Updated : UpdateGeneralNoteResult
+
+    data object OrderNotFound : UpdateGeneralNoteResult
+
+    data object OrderNotEditable : UpdateGeneralNoteResult
+
+    data object PersistenceFailure : UpdateGeneralNoteResult
 }
 
 sealed interface ChangeQuantityResult {

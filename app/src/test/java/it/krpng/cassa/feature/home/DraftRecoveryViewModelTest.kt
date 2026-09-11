@@ -216,6 +216,11 @@ class DraftRecoveryViewModelTest {
             orderId: String,
             orderItemId: String,
         ): it.krpng.cassa.domain.repository.RemoveOrderItemResult = error("Not used")
+
+        override suspend fun updateGeneralNote(
+            orderId: String,
+            generalNote: String?,
+        ): it.krpng.cassa.domain.repository.UpdateGeneralNoteResult = error("Not used")
     }
 
     private fun emptyDraft(): Order = Order(

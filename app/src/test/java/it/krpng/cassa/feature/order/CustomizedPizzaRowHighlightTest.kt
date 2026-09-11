@@ -66,7 +66,8 @@ class CustomizedPizzaRowHighlightTest {
     }
 
     @Test
-    fun nonPizzaRowsAreNeverHighlightedByThisRule() {
+    fun nonPizzaAndGeneralNoteDoNotTriggerCustomPizzaHighlight() {
+        // ORDER-039
         assertFalse(
             pizza(
                 category = ProductCategory.BIBITA,
@@ -79,6 +80,8 @@ class CustomizedPizzaRowHighlightTest {
                 manualUnitPrice = Money.ZERO,
             ).isCustomizedPizzaRow(),
         )
+        // orders.generalNote is outside OrderItem and cannot enter this predicate.
+        assertFalse(pizza().isCustomizedPizzaRow())
     }
 
     private fun pizza(

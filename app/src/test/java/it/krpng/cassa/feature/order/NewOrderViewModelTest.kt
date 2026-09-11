@@ -16,10 +16,12 @@ import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import it.krpng.cassa.domain.usecase.AddProductToDraft
 import it.krpng.cassa.domain.usecase.ChangeQuantity
 import it.krpng.cassa.domain.usecase.RemoveOrderItem
+import it.krpng.cassa.domain.usecase.UpdateGeneralNote
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -51,6 +53,86 @@ class NewOrderViewModelTest {
     @After
     fun tearDown() {
         Dispatchers.resetMain()
+    }
+
+    @Test
+    fun `ORDER-026 initial general note is null and editor starts empty`() = runTest(mainDispatcher) {
+        val viewModel = viewModel(FakeOrderRepository(MutableStateFlow(draft())), "draft-id")
+        advanceUntilIdle()
+
+        val ready = viewModel.uiState.value as NewOrderUiState.Ready
+        assertNull(ready.persistedGeneralNote)
+        assertEquals("", ready.generalNoteEditor)
+        assertFalse(ready.canSaveGeneralNote)
+    }
+
+    @Test
+    fun `ORDER-037 dirty general note editor is not overwritten by unrelated order emissions`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(draft())
+            val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+            advanceUntilIdle()
+
+            viewModel.updateGeneralNoteEditor("Consegna alle 21")
+            advanceUntilIdle()
+            assertEquals(
+                "Consegna alle 21",
+                (viewModel.uiState.value as NewOrderUiState.Ready).generalNoteEditor,
+            )
+
+            orders.value = draft().copy(items = listOf(orderItem()), generalNote = null)
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals("Consegna alle 21", ready.generalNoteEditor)
+            assertTrue(ready.canSaveGeneralNote)
+            assertNull(ready.persistedGeneralNote)
+        }
+
+    @Test
+    fun `ORDER-038 save failure keeps local general note text and remains dirty`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(draft())
+            val repository = FakeOrderRepository(orders).apply {
+                updateGeneralNoteResult = UpdateGeneralNoteResult.PersistenceFailure
+            }
+            val viewModel = viewModel(repository, "draft-id")
+            advanceUntilIdle()
+
+            viewModel.updateGeneralNoteEditor("Testo locale")
+            advanceUntilIdle()
+            viewModel.saveGeneralNote()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals("Testo locale", ready.generalNoteEditor)
+            assertTrue(ready.canSaveGeneralNote)
+            assertEquals("Impossibile salvare la nota ordine. Riprova.", ready.generalNoteError)
+            assertEquals(1, repository.updateGeneralNoteCalls.size)
+            assertNull(orders.value?.generalNote)
+        }
+
+    @Test
+    fun `ORDER-027 successful save persists and clears dirty editor`() = runTest(mainDispatcher) {
+        val orders = MutableStateFlow<Order?>(draft())
+        val repository = FakeOrderRepository(orders)
+        val viewModel = viewModel(repository, "draft-id")
+        advanceUntilIdle()
+
+        viewModel.updateGeneralNoteEditor("  Consegna alle 21  ")
+        advanceUntilIdle()
+        viewModel.saveGeneralNote()
+        advanceUntilIdle()
+
+        val ready = viewModel.uiState.value as NewOrderUiState.Ready
+        assertEquals("Consegna alle 21", ready.generalNoteEditor)
+        assertEquals("Consegna alle 21", ready.persistedGeneralNote)
+        assertFalse(ready.canSaveGeneralNote)
+        assertNull(ready.generalNoteError)
+        assertEquals(
+            listOf("draft-id" to "  Consegna alle 21  "),
+            repository.updateGeneralNoteCalls,
+        )
     }
 
     @Test
@@ -369,6 +451,7 @@ class NewOrderViewModelTest {
         addProductToDraft = AddProductToDraft(repository),
         changeQuantity = ChangeQuantity(repository),
         removeOrderItem = RemoveOrderItem(repository),
+        updateGeneralNote = UpdateGeneralNote(repository),
     )
 
     private class FakeOrderRepository(
@@ -381,6 +464,8 @@ class NewOrderViewModelTest {
         var quickAddResult: QuickAddStandardResult =
             QuickAddStandardResult.Added("item-id")
         val quickAddCalls = mutableListOf<Pair<String, Long>>()
+        var updateGeneralNoteResult: UpdateGeneralNoteResult = UpdateGeneralNoteResult.Updated
+        val updateGeneralNoteCalls = mutableListOf<Pair<String, String?>>()
 
         override suspend fun getById(orderId: String): Order? = null
 
@@ -446,6 +531,25 @@ class NewOrderViewModelTest {
             orderId: String,
             orderItemId: String,
         ): it.krpng.cassa.domain.repository.RemoveOrderItemResult = error("Not used")
+
+        override suspend fun updateGeneralNote(
+            orderId: String,
+            generalNote: String?,
+        ): UpdateGeneralNoteResult {
+            updateGeneralNoteCalls += orderId to generalNote
+            val result = updateGeneralNoteResult
+            if (result is UpdateGeneralNoteResult.Updated) {
+                val flow = observedOrders as? MutableStateFlow<Order?>
+                val current = flow?.value
+                if (flow != null && current != null) {
+                    flow.value = current.copy(
+                        generalNote = it.krpng.cassa.domain.order.GeneralNoteNormalizer
+                            .normalize(generalNote),
+                    )
+                }
+            }
+            return result
+        }
     }
 
     private class FakeProductRepository(

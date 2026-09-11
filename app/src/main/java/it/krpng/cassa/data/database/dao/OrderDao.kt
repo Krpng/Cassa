@@ -137,6 +137,15 @@ interface OrderDao {
     @Query(
         """
         UPDATE orders
+        SET generalNote = :generalNote
+        WHERE id = :orderId AND status = 'DRAFT' AND draftSlot = 1
+        """,
+    )
+    suspend fun updateDraftGeneralNote(orderId: String, generalNote: String?): Int
+
+    @Query(
+        """
+        UPDATE orders
         SET updatedAt = :updatedAt
         WHERE id = :orderId AND status = 'DRAFT' AND draftSlot = 1
         """,

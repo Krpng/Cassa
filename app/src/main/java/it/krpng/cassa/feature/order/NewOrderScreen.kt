@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -39,6 +42,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -66,6 +70,9 @@ fun NewOrderRoute(
         onIncreaseLineQuantity = viewModel::increaseLineQuantity,
         onDecreaseLineQuantity = viewModel::decreaseLineQuantity,
         onRemoveLine = viewModel::removeLine,
+        onGeneralNoteChanged = viewModel::updateGeneralNoteEditor,
+        onSaveGeneralNote = viewModel::saveGeneralNote,
+        onDismissGeneralNoteError = viewModel::dismissGeneralNoteError,
         onQuickAdd = viewModel::quickAdd,
         onDismissQuickAddError = viewModel::dismissQuickAddError,
         onDismissLineMutationError = viewModel::dismissLineMutationError,
@@ -84,6 +91,9 @@ fun NewOrderScreen(
     onIncreaseLineQuantity: (String) -> Unit = {},
     onDecreaseLineQuantity: (String) -> Unit = {},
     onRemoveLine: (String) -> Unit = {},
+    onGeneralNoteChanged: (String) -> Unit = {},
+    onSaveGeneralNote: () -> Unit = {},
+    onDismissGeneralNoteError: () -> Unit = {},
     onQuickAdd: (Long) -> Unit,
     onDismissQuickAddError: () -> Unit,
     onDismissLineMutationError: () -> Unit = {},
@@ -112,6 +122,9 @@ fun NewOrderScreen(
                 onIncreaseLineQuantity = onIncreaseLineQuantity,
                 onDecreaseLineQuantity = onDecreaseLineQuantity,
                 onRemoveLine = onRemoveLine,
+                onGeneralNoteChanged = onGeneralNoteChanged,
+                onSaveGeneralNote = onSaveGeneralNote,
+                onDismissGeneralNoteError = onDismissGeneralNoteError,
                 onQuickAdd = onQuickAdd,
                 onDismissQuickAddError = onDismissQuickAddError,
                 onDismissLineMutationError = onDismissLineMutationError,
@@ -163,6 +176,9 @@ private fun OrderCatalogContent(
     onIncreaseLineQuantity: (String) -> Unit,
     onDecreaseLineQuantity: (String) -> Unit,
     onRemoveLine: (String) -> Unit,
+    onGeneralNoteChanged: (String) -> Unit,
+    onSaveGeneralNote: () -> Unit,
+    onDismissGeneralNoteError: () -> Unit,
     onQuickAdd: (Long) -> Unit,
     onDismissQuickAddError: () -> Unit,
     onDismissLineMutationError: () -> Unit,
@@ -175,10 +191,17 @@ private fun OrderCatalogContent(
         CurrentOrderContent(
             orderLines = state.orderLines,
             lineMutationInProgressItemIds = state.lineMutationInProgressItemIds,
+            generalNoteEditor = state.generalNoteEditor,
+            canSaveGeneralNote = state.canSaveGeneralNote,
+            generalNoteSaveInProgress = state.generalNoteSaveInProgress,
+            generalNoteError = state.generalNoteError,
             onOrderItemSelected = onOrderItemSelected,
             onIncreaseLineQuantity = onIncreaseLineQuantity,
             onDecreaseLineQuantity = onDecreaseLineQuantity,
             onRemoveLine = onRemoveLine,
+            onGeneralNoteChanged = onGeneralNoteChanged,
+            onSaveGeneralNote = onSaveGeneralNote,
+            onDismissGeneralNoteError = onDismissGeneralNoteError,
         )
         OutlinedTextField(
             value = state.searchQuery,
@@ -285,16 +308,26 @@ private fun OrderCatalogContent(
 private fun CurrentOrderContent(
     orderLines: List<DraftOrderLine>,
     lineMutationInProgressItemIds: Set<String>,
+    generalNoteEditor: String,
+    canSaveGeneralNote: Boolean,
+    generalNoteSaveInProgress: Boolean,
+    generalNoteError: String?,
     onOrderItemSelected: (String) -> Unit,
     onIncreaseLineQuantity: (String) -> Unit,
     onDecreaseLineQuantity: (String) -> Unit,
     onRemoveLine: (String) -> Unit,
+    onGeneralNoteChanged: (String) -> Unit,
+    onSaveGeneralNote: () -> Unit,
+    onDismissGeneralNoteError: () -> Unit,
 ) {
     var pendingRemovalItemId by remember { mutableStateOf<String?>(null) }
     val pendingRemovalLine = orderLines.firstOrNull { it.itemId == pendingRemovalItemId }
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .imePadding()
+            .navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
@@ -380,7 +413,9 @@ private fun CurrentOrderContent(
                                     .semantics {
                                         contentDescription = buildString {
                                             append("Apri dettaglio riga: ${line.quantity}x ")
-                                            append("${line.productName}, ${line.lineTotal.formatEur()}")
+                                            append(
+                                                "${line.productName}, ${line.lineTotal.formatEur()}",
+                                            )
                                             if (line.isCustomizedPizza) {
                                                 append(", personalizzata")
                                             }
@@ -412,6 +447,57 @@ private fun CurrentOrderContent(
                         }
                         HorizontalDivider()
                     }
+                }
+            }
+        }
+
+        Text(
+            text = "NOTA ORDINE",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        OutlinedTextField(
+            value = generalNoteEditor,
+            onValueChange = onGeneralNoteChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 96.dp)
+                .semantics {
+                    contentDescription = "Nota generale dell'ordine"
+                },
+            minLines = 3,
+            maxLines = 6,
+            keyboardOptions = KeyboardOptions(
+                capitalization = KeyboardCapitalization.Sentences,
+            ),
+            enabled = !generalNoteSaveInProgress,
+        )
+        Button(
+            onClick = onSaveGeneralNote,
+            enabled = canSaveGeneralNote && !generalNoteSaveInProgress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics {
+                    contentDescription = "Salva nota ordine"
+                },
+        ) {
+            Text(if (generalNoteSaveInProgress) "SALVATAGGIO..." else "SALVA NOTA")
+        }
+        generalNoteError?.let { message ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = message,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = onDismissGeneralNoteError) {
+                    Text("CHIUDI")
                 }
             }
         }

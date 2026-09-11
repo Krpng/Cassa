@@ -410,6 +410,29 @@ class NewOrderScreenTest {
         ).assertDoesNotExist()
     }
 
+    @Test
+    fun generalNoteSectionExposesMultilineEditorAndExplicitSave() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("NOTA ORDINE").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Nota generale dell'ordine").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Salva nota ordine").assertIsDisplayed()
+        composeRule.onNodeWithText("SALVA NOTA").assertIsDisplayed()
+    }
+
     private fun readyState(
         catalogItems: List<OrderCatalogItem> = emptyList(),
         orderLines: List<DraftOrderLine> = emptyList(),
