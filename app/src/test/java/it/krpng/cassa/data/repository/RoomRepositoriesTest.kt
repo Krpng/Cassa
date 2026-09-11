@@ -302,6 +302,12 @@ class RoomRepositoriesTest {
             relationIds: List<String>,
         ): Int = 0
 
+        override suspend fun deleteAllOrderItemRemovals(orderItemId: String): Int = 0
+
+        override suspend fun deleteAllOrderItemAdditions(orderItemId: String): Int = 0
+
+        override suspend fun deleteOrderItem(orderId: String, orderItemId: String): Int = 0
+
         override suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int = 0
 
         override suspend fun deleteDraft(orderId: String): Int = 0

@@ -5,7 +5,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -78,16 +80,100 @@ class NewOrderScreenTest {
             }
         }
 
-        composeRule.onNodeWithText("2x Margherita snapshot").assertIsDisplayed()
+        composeRule.onNodeWithText("Margherita snapshot").assertIsDisplayed()
         composeRule.onNodeWithText("14,00 €").assertIsDisplayed()
-        composeRule.onNodeWithText("3x Coca Cola").assertIsDisplayed()
+        composeRule.onNodeWithText("Coca Cola").assertIsDisplayed()
         composeRule.onNodeWithText("7,50 €").assertIsDisplayed()
         composeRule.onNodeWithText("Aggiungi un prodotto per iniziare l'ordine.")
             .assertDoesNotExist()
         composeRule.onNodeWithContentDescription(
-            "Modifica riga: 2x Margherita snapshot, 14,00 €",
+            "Apri dettaglio riga: 2x Margherita snapshot, 14,00 €",
         ).performClick()
         composeRule.runOnIdle { assertEquals(listOf("pizza-id"), selectedItemIds) }
+    }
+
+    @Test
+    fun orderLineQuantityControlsDispatchImmediatelyAndDisableMinusAtOne() {
+        val increases = mutableListOf<String>()
+        val decreases = mutableListOf<String>()
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        orderLines = listOf(
+                            DraftOrderLine(
+                                itemId = "pizza-id",
+                                quantity = 2,
+                                productName = "Margherita",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(1_400),
+                            ),
+                            DraftOrderLine(
+                                itemId = "single-id",
+                                quantity = 1,
+                                productName = "Coca Cola",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(250),
+                            ),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onIncreaseLineQuantity = { increases += it },
+                    onDecreaseLineQuantity = { decreases += it },
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Aumenta quantità Margherita").performClick()
+        composeRule.onNodeWithContentDescription("Diminuisci quantità Margherita").performClick()
+        composeRule.onNodeWithContentDescription("Diminuisci quantità Coca Cola")
+            .assertIsNotEnabled()
+        composeRule.runOnIdle {
+            assertEquals(listOf("pizza-id"), increases)
+            assertEquals(listOf("pizza-id"), decreases)
+        }
+    }
+
+    @Test
+    fun removeLineRequiresConfirmationAndCancelWritesNothing() {
+        val removals = mutableListOf<String>()
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        orderLines = listOf(
+                            DraftOrderLine(
+                                itemId = "pizza-id",
+                                quantity = 2,
+                                productName = "Margherita",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(1_400),
+                            ),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onRemoveLine = { removals += it },
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Rimuovi Margherita").performClick()
+        composeRule.onNodeWithText("Rimuovere questa riga?").assertIsDisplayed()
+        composeRule.onNodeWithText("ANNULLA").performClick()
+        composeRule.runOnIdle { assertEquals(emptyList<String>(), removals) }
+
+        composeRule.onNodeWithContentDescription("Rimuovi Margherita").performClick()
+        composeRule.onAllNodesWithText("RIMUOVI")[1].performClick()
+        composeRule.runOnIdle { assertEquals(listOf("pizza-id"), removals) }
     }
 
     @Test

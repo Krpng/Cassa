@@ -120,6 +120,20 @@ interface OrderDao {
         relationIds: List<String>,
     ): Int
 
+    @Query("DELETE FROM order_item_removals WHERE orderItemId = :orderItemId")
+    suspend fun deleteAllOrderItemRemovals(orderItemId: String): Int
+
+    @Query("DELETE FROM order_item_additions WHERE orderItemId = :orderItemId")
+    suspend fun deleteAllOrderItemAdditions(orderItemId: String): Int
+
+    @Query(
+        """
+        DELETE FROM order_items
+        WHERE id = :orderItemId AND orderId = :orderId
+        """,
+    )
+    suspend fun deleteOrderItem(orderId: String, orderItemId: String): Int
+
     @Query(
         """
         UPDATE orders

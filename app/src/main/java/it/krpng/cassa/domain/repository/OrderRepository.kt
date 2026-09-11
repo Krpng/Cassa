@@ -41,11 +41,48 @@ interface OrderRepository {
         selectedAdditionIds: List<Long> = emptyList(),
         selectedRemovalIngredientIds: List<Long> = emptyList(),
     ): SplitStandardPizzaItemResult
+
+    suspend fun changeQuantity(
+        orderId: String,
+        orderItemId: String,
+        quantity: Int,
+    ): ChangeQuantityResult
+
+    suspend fun removeOrderItem(
+        orderId: String,
+        orderItemId: String,
+    ): RemoveOrderItemResult
 }
 
 enum class CustomizationQuantityIntent {
     KEEP_CURRENT_SCOPE,
     APPLY_TO_ALL_UNITS_CONFIRMED,
+}
+
+sealed interface ChangeQuantityResult {
+    data object Updated : ChangeQuantityResult
+
+    data object OrderNotFound : ChangeQuantityResult
+
+    data object OrderNotEditable : ChangeQuantityResult
+
+    data object ItemNotFound : ChangeQuantityResult
+
+    data object InvalidQuantity : ChangeQuantityResult
+
+    data object PersistenceFailure : ChangeQuantityResult
+}
+
+sealed interface RemoveOrderItemResult {
+    data object Removed : RemoveOrderItemResult
+
+    data object OrderNotFound : RemoveOrderItemResult
+
+    data object OrderNotEditable : RemoveOrderItemResult
+
+    data object ItemNotFound : RemoveOrderItemResult
+
+    data object PersistenceFailure : RemoveOrderItemResult
 }
 
 sealed interface UpdateOrderItemResult {

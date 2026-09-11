@@ -15,16 +15,22 @@ import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -54,8 +60,12 @@ fun NewOrderRoute(
             val state = viewModel.uiState.value as? NewOrderUiState.Ready
             if (state != null) onOrderItemSelected(state.draftId, orderItemId)
         },
+        onIncreaseLineQuantity = viewModel::increaseLineQuantity,
+        onDecreaseLineQuantity = viewModel::decreaseLineQuantity,
+        onRemoveLine = viewModel::removeLine,
         onQuickAdd = viewModel::quickAdd,
         onDismissQuickAddError = viewModel::dismissQuickAddError,
+        onDismissLineMutationError = viewModel::dismissLineMutationError,
     )
 }
 
@@ -68,8 +78,12 @@ fun NewOrderScreen(
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
     onOrderItemSelected: (String) -> Unit = {},
+    onIncreaseLineQuantity: (String) -> Unit = {},
+    onDecreaseLineQuantity: (String) -> Unit = {},
+    onRemoveLine: (String) -> Unit = {},
     onQuickAdd: (Long) -> Unit,
     onDismissQuickAddError: () -> Unit,
+    onDismissLineMutationError: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -92,8 +106,12 @@ fun NewOrderScreen(
                 onFilterSelected = onFilterSelected,
                 onProductSelected = onProductSelected,
                 onOrderItemSelected = onOrderItemSelected,
+                onIncreaseLineQuantity = onIncreaseLineQuantity,
+                onDecreaseLineQuantity = onDecreaseLineQuantity,
+                onRemoveLine = onRemoveLine,
                 onQuickAdd = onQuickAdd,
                 onDismissQuickAddError = onDismissQuickAddError,
+                onDismissLineMutationError = onDismissLineMutationError,
                 modifier = Modifier.weight(1f),
             )
         } else {
@@ -139,8 +157,12 @@ private fun OrderCatalogContent(
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
     onOrderItemSelected: (String) -> Unit,
+    onIncreaseLineQuantity: (String) -> Unit,
+    onDecreaseLineQuantity: (String) -> Unit,
+    onRemoveLine: (String) -> Unit,
     onQuickAdd: (Long) -> Unit,
     onDismissQuickAddError: () -> Unit,
+    onDismissLineMutationError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -149,7 +171,11 @@ private fun OrderCatalogContent(
     ) {
         CurrentOrderContent(
             orderLines = state.orderLines,
+            lineMutationInProgressItemIds = state.lineMutationInProgressItemIds,
             onOrderItemSelected = onOrderItemSelected,
+            onIncreaseLineQuantity = onIncreaseLineQuantity,
+            onDecreaseLineQuantity = onDecreaseLineQuantity,
+            onRemoveLine = onRemoveLine,
         )
         OutlinedTextField(
             value = state.searchQuery,
@@ -191,6 +217,23 @@ private fun OrderCatalogContent(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 TextButton(onClick = onDismissQuickAddError) {
+                    Text("CHIUDI")
+                }
+            }
+        }
+        state.lineMutationError?.let { message ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = message,
+                    modifier = Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                TextButton(onClick = onDismissLineMutationError) {
                     Text("CHIUDI")
                 }
             }
@@ -238,8 +281,15 @@ private fun OrderCatalogContent(
 @Composable
 private fun CurrentOrderContent(
     orderLines: List<DraftOrderLine>,
+    lineMutationInProgressItemIds: Set<String>,
     onOrderItemSelected: (String) -> Unit,
+    onIncreaseLineQuantity: (String) -> Unit,
+    onDecreaseLineQuantity: (String) -> Unit,
+    onRemoveLine: (String) -> Unit,
 ) {
+    var pendingRemovalItemId by remember { mutableStateOf<String?>(null) }
+    val pendingRemovalLine = orderLines.firstOrNull { it.itemId == pendingRemovalItemId }
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -258,44 +308,128 @@ private fun CurrentOrderContent(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 168.dp),
+                    .heightIn(max = 280.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 items(
                     items = orderLines,
                     key = DraftOrderLine::itemId,
                 ) { line ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable(
-                                role = Role.Button,
-                                onClick = { onOrderItemSelected(line.itemId) },
-                            )
-                            .semantics {
-                                contentDescription =
-                                    "Modifica riga: ${line.quantity}x ${line.productName}, " +
-                                        line.lineTotal.formatEur()
+                    val mutating = line.itemId in lineMutationInProgressItemIds
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedButton(
+                                onClick = { onDecreaseLineQuantity(line.itemId) },
+                                enabled = !mutating && line.quantity > 1,
+                                modifier = Modifier
+                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                    .semantics {
+                                        contentDescription =
+                                            "Diminuisci quantità ${line.productName}"
+                                    },
+                            ) {
+                                Text("−")
                             }
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = "${line.quantity}x ${line.productName}",
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            text = line.lineTotal.formatEur(),
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
+                            Text(
+                                text = line.quantity.toString(),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.semantics {
+                                    contentDescription =
+                                        "Quantità ${line.productName}: ${line.quantity}"
+                                },
+                            )
+                            OutlinedButton(
+                                onClick = { onIncreaseLineQuantity(line.itemId) },
+                                enabled = !mutating,
+                                modifier = Modifier
+                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                    .semantics {
+                                        contentDescription =
+                                            "Aumenta quantità ${line.productName}"
+                                    },
+                            ) {
+                                Text("+")
+                            }
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable(
+                                        role = Role.Button,
+                                        onClick = { onOrderItemSelected(line.itemId) },
+                                    )
+                                    .semantics {
+                                        contentDescription =
+                                            "Apri dettaglio riga: ${line.quantity}x " +
+                                                "${line.productName}, ${line.lineTotal.formatEur()}"
+                                    }
+                                    .padding(vertical = 4.dp),
+                            ) {
+                                Text(
+                                    text = line.productName,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = line.lineTotal.formatEur(),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            }
+                            TextButton(
+                                onClick = { pendingRemovalItemId = line.itemId },
+                                enabled = !mutating,
+                                modifier = Modifier
+                                    .heightIn(min = 48.dp)
+                                    .semantics {
+                                        contentDescription = "Rimuovi ${line.productName}"
+                                    },
+                            ) {
+                                Text("RIMUOVI")
+                            }
+                        }
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
                 }
             }
         }
+    }
+
+    if (pendingRemovalLine != null) {
+        AlertDialog(
+            onDismissRequest = { pendingRemovalItemId = null },
+            title = { Text("Rimuovere questa riga?") },
+            text = {
+                Text(
+                    "${pendingRemovalLine.quantity}x ${pendingRemovalLine.productName}",
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingRemovalItemId = null },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("ANNULLA")
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val itemId = pendingRemovalLine.itemId
+                        pendingRemovalItemId = null
+                        onRemoveLine(itemId)
+                    },
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("RIMUOVI")
+                }
+            },
+        )
     }
 }
 

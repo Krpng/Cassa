@@ -23,11 +23,13 @@ import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.pricing.OrderLineMergeCandidate
 import it.krpng.cassa.domain.pricing.OrderLineMergePolicy
 import it.krpng.cassa.domain.pricing.PricingCalculator
+import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
@@ -402,7 +404,75 @@ class RoomOrderRepository @Inject constructor(
     } catch (_: SQLiteException) {
         SplitStandardPizzaItemResult.PersistenceFailure
     } catch (_: OrderItemSplitConflictException) {
-        SplitStandardPizzaItemResult.PersistenceFailure
+            SplitStandardPizzaItemResult.PersistenceFailure
+        }
+
+    override suspend fun changeQuantity(
+        orderId: String,
+        orderItemId: String,
+        quantity: Int,
+    ): ChangeQuantityResult = try {
+        transactionRunner.runInTransaction {
+            if (quantity <= 0) {
+                return@runInTransaction ChangeQuantityResult.InvalidQuantity
+            }
+            val order = orderDao.getFullOrder(orderId)
+                ?: return@runInTransaction ChangeQuantityResult.OrderNotFound
+            if (order.order.status != OrderStatus.DRAFT || order.order.draftSlot != DRAFT_SLOT) {
+                return@runInTransaction ChangeQuantityResult.OrderNotEditable
+            }
+            val existing = order.items.firstOrNull { item -> item.item.id == orderItemId }
+                ?: return@runInTransaction ChangeQuantityResult.ItemNotFound
+
+            val updatedItem = existing.item.copy(quantity = quantity)
+            if (orderDao.updateOrderItem(updatedItem) != 1) {
+                throw OrderItemQuantityConflictException()
+            }
+            val updatedAt = clockProvider.now().toEpochMilli()
+            if (orderDao.updateDraftTimestamp(orderId, updatedAt) != 1) {
+                throw OrderItemQuantityConflictException()
+            }
+            ChangeQuantityResult.Updated
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: SQLiteException) {
+        ChangeQuantityResult.PersistenceFailure
+    } catch (_: OrderItemQuantityConflictException) {
+        ChangeQuantityResult.PersistenceFailure
+    }
+
+    override suspend fun removeOrderItem(
+        orderId: String,
+        orderItemId: String,
+    ): RemoveOrderItemResult = try {
+        transactionRunner.runInTransaction {
+            val order = orderDao.getFullOrder(orderId)
+                ?: return@runInTransaction RemoveOrderItemResult.OrderNotFound
+            if (order.order.status != OrderStatus.DRAFT || order.order.draftSlot != DRAFT_SLOT) {
+                return@runInTransaction RemoveOrderItemResult.OrderNotEditable
+            }
+            val existing = order.items.firstOrNull { item -> item.item.id == orderItemId }
+                ?: return@runInTransaction RemoveOrderItemResult.ItemNotFound
+
+            // Removals use NO_ACTION FK; delete children explicitly before the parent.
+            orderDao.deleteAllOrderItemRemovals(existing.item.id)
+            orderDao.deleteAllOrderItemAdditions(existing.item.id)
+            if (orderDao.deleteOrderItem(orderId, existing.item.id) != 1) {
+                throw OrderItemRemoveConflictException()
+            }
+            val updatedAt = clockProvider.now().toEpochMilli()
+            if (orderDao.updateDraftTimestamp(orderId, updatedAt) != 1) {
+                throw OrderItemRemoveConflictException()
+            }
+            RemoveOrderItemResult.Removed
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: SQLiteException) {
+        RemoveOrderItemResult.PersistenceFailure
+    } catch (_: OrderItemRemoveConflictException) {
+        RemoveOrderItemResult.PersistenceFailure
     }
 
     private fun OrderItemWithModifiers.isCustomized(): Boolean =
@@ -723,6 +793,10 @@ private class QuickAddWriteConflictException : IllegalStateException()
 private class OrderItemUpdateConflictException : IllegalStateException()
 
 private class OrderItemSplitConflictException : IllegalStateException()
+
+private class OrderItemQuantityConflictException : IllegalStateException()
+
+private class OrderItemRemoveConflictException : IllegalStateException()
 
 private sealed interface AdditionUpdatePreparation {
     data class Ready(val update: AdditionUpdate) : AdditionUpdatePreparation

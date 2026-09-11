@@ -205,6 +205,17 @@ class DraftRecoveryViewModelTest {
             selectedAdditionIds: List<Long>,
             selectedRemovalIngredientIds: List<Long>,
         ): it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult = error("Not used")
+
+        override suspend fun changeQuantity(
+            orderId: String,
+            orderItemId: String,
+            quantity: Int,
+        ): it.krpng.cassa.domain.repository.ChangeQuantityResult = error("Not used")
+
+        override suspend fun removeOrderItem(
+            orderId: String,
+            orderItemId: String,
+        ): it.krpng.cassa.domain.repository.RemoveOrderItemResult = error("Not used")
     }
 
     private fun emptyDraft(): Order = Order(

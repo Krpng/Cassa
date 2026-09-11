@@ -9,11 +9,15 @@ import it.krpng.cassa.core.normalization.TextNormalizer
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.search.ProductSearchEngine
 import it.krpng.cassa.domain.usecase.AddProductToDraft
+import it.krpng.cassa.domain.usecase.ChangeQuantity
+import it.krpng.cassa.domain.usecase.RemoveOrderItem
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -61,6 +65,8 @@ sealed interface NewOrderUiState {
         val catalogItems: List<OrderCatalogItem>,
         val quickAddInProgressProductIds: Set<Long> = emptySet(),
         val quickAddError: String? = null,
+        val lineMutationInProgressItemIds: Set<String> = emptySet(),
+        val lineMutationError: String? = null,
     ) : NewOrderUiState {
         val isDraftEmpty: Boolean
             get() = orderLines.isEmpty()
@@ -79,11 +85,14 @@ class NewOrderViewModel @Inject constructor(
     private val orderRepository: OrderRepository,
     private val productRepository: ProductRepository,
     private val addProductToDraft: AddProductToDraft,
+    private val changeQuantity: ChangeQuantity,
+    private val removeOrderItem: RemoveOrderItem,
 ) : ViewModel() {
     private val draftId: String = savedStateHandle.get<String>(DRAFT_ID_ARGUMENT).orEmpty()
     private val searchQuery = MutableStateFlow("")
     private val selectedFilter = MutableStateFlow(OrderCatalogFilter.ALL)
     private val quickAddOperation = MutableStateFlow(QuickAddOperationState())
+    private val lineMutationOperation = MutableStateFlow(LineMutationOperationState())
 
     private val _uiState = MutableStateFlow<NewOrderUiState>(NewOrderUiState.Loading)
     val uiState: StateFlow<NewOrderUiState> = _uiState.asStateFlow()
@@ -128,6 +137,67 @@ class NewOrderViewModel @Inject constructor(
         quickAddOperation.update { state -> state.copy(error = null) }
     }
 
+    fun increaseLineQuantity(itemId: String) {
+        val ready = _uiState.value as? NewOrderUiState.Ready ?: return
+        val line = ready.orderLines.firstOrNull { it.itemId == itemId } ?: return
+        if (line.quantity == Int.MAX_VALUE) {
+            lineMutationOperation.update { state ->
+                state.copy(error = "Non è possibile aumentare ulteriormente la quantità.")
+            }
+            return
+        }
+        mutateLineQuantity(itemId, line.quantity + 1)
+    }
+
+    fun decreaseLineQuantity(itemId: String) {
+        val ready = _uiState.value as? NewOrderUiState.Ready ?: return
+        val line = ready.orderLines.firstOrNull { it.itemId == itemId } ?: return
+        if (line.quantity <= 1) return
+        mutateLineQuantity(itemId, line.quantity - 1)
+    }
+
+    fun removeLine(itemId: String) {
+        val ready = _uiState.value as? NewOrderUiState.Ready ?: return
+        if (ready.orderLines.none { it.itemId == itemId }) return
+        if (itemId in lineMutationOperation.value.pendingCounts) return
+
+        lineMutationOperation.update { state -> state.start(itemId) }
+        viewModelScope.launch {
+            val result = try {
+                removeOrderItem(draftId, itemId)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                RemoveOrderItemResult.PersistenceFailure
+            }
+            lineMutationOperation.update { state ->
+                state.finish(itemId, result.toUserMessage())
+            }
+        }
+    }
+
+    fun dismissLineMutationError() {
+        lineMutationOperation.update { state -> state.copy(error = null) }
+    }
+
+    private fun mutateLineQuantity(itemId: String, quantity: Int) {
+        if (itemId in lineMutationOperation.value.pendingCounts) return
+
+        lineMutationOperation.update { state -> state.start(itemId) }
+        viewModelScope.launch {
+            val result = try {
+                changeQuantity(draftId, itemId, quantity)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                ChangeQuantityResult.PersistenceFailure
+            }
+            lineMutationOperation.update { state ->
+                state.finish(itemId, result.toUserMessage())
+            }
+        }
+    }
+
     private fun observeOrderAndCatalog() {
         observationJob?.cancel()
         if (draftId.isBlank()) {
@@ -143,8 +213,11 @@ class NewOrderViewModel @Inject constructor(
                     productRepository.observeActive(),
                     searchQuery,
                     selectedFilter,
-                    quickAddOperation,
-                ) { order, products, query, filter, operation ->
+                    combine(quickAddOperation, lineMutationOperation) { quickAdd, lineMutation ->
+                        quickAdd to lineMutation
+                    },
+                ) { order, products, query, filter, operations ->
+                    val (quickAdd, lineMutation) = operations
                     when {
                         order == null -> NewOrderUiState.NotFound
                         order.status != OrderStatus.DRAFT -> NewOrderUiState.NotEditable
@@ -163,8 +236,10 @@ class NewOrderViewModel @Inject constructor(
                             searchQuery = query,
                             selectedFilter = filter,
                             catalogItems = products.toCatalogItems(query, filter),
-                            quickAddInProgressProductIds = operation.pendingCounts.keys,
-                            quickAddError = operation.error,
+                            quickAddInProgressProductIds = quickAdd.pendingCounts.keys,
+                            quickAddError = quickAdd.error,
+                            lineMutationInProgressItemIds = lineMutation.pendingCounts.keys,
+                            lineMutationError = lineMutation.error,
                         )
                     }
                 }
@@ -226,6 +301,30 @@ class NewOrderViewModel @Inject constructor(
             "Impossibile aggiungere il prodotto. Riprova."
     }
 
+    private fun ChangeQuantityResult.toUserMessage(): String? = when (this) {
+        ChangeQuantityResult.Updated -> null
+        ChangeQuantityResult.OrderNotFound,
+        ChangeQuantityResult.ItemNotFound,
+        -> "La riga ordine non è più disponibile."
+        ChangeQuantityResult.OrderNotEditable ->
+            "Questo ordine non è una bozza modificabile."
+        ChangeQuantityResult.InvalidQuantity ->
+            "Quantità non valida."
+        ChangeQuantityResult.PersistenceFailure ->
+            "Impossibile aggiornare la quantità. Riprova."
+    }
+
+    private fun RemoveOrderItemResult.toUserMessage(): String? = when (this) {
+        RemoveOrderItemResult.Removed -> null
+        RemoveOrderItemResult.OrderNotFound,
+        RemoveOrderItemResult.ItemNotFound,
+        -> "La riga ordine non è più disponibile."
+        RemoveOrderItemResult.OrderNotEditable ->
+            "Questo ordine non è una bozza modificabile."
+        RemoveOrderItemResult.PersistenceFailure ->
+            "Impossibile rimuovere la riga. Riprova."
+    }
+
     companion object {
         const val DRAFT_ID_ARGUMENT = "draftId"
     }
@@ -246,6 +345,26 @@ private data class QuickAddOperationState(
             pendingCounts + (productId to remaining)
         } else {
             pendingCounts - productId
+        }
+        return copy(pendingCounts = updatedCounts, error = message ?: error)
+    }
+}
+
+private data class LineMutationOperationState(
+    val pendingCounts: Map<String, Int> = emptyMap(),
+    val error: String? = null,
+) {
+    fun start(itemId: String): LineMutationOperationState = copy(
+        pendingCounts = pendingCounts + (itemId to ((pendingCounts[itemId] ?: 0) + 1)),
+        error = null,
+    )
+
+    fun finish(itemId: String, message: String?): LineMutationOperationState {
+        val remaining = (pendingCounts[itemId] ?: 1) - 1
+        val updatedCounts = if (remaining > 0) {
+            pendingCounts + (itemId to remaining)
+        } else {
+            pendingCounts - itemId
         }
         return copy(pendingCounts = updatedCounts, error = message ?: error)
     }

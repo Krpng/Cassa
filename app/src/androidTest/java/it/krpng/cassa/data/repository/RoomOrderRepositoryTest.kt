@@ -20,11 +20,13 @@ import it.krpng.cassa.data.database.entity.ProductIngredientEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
+import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.time.Instant
@@ -1268,6 +1270,226 @@ class RoomOrderRepositoryTest {
 
         assertEquals(0L, thirdRow.manualUnitPrice?.cents)
         assertEquals(0L, thirdRow.finalUnitPrice.cents)
+    }
+
+    @Test
+    fun changeQuantityIncreasesAndDecreasesTheSameStandardRowWithoutRepricing() = runBlocking {
+        // ORDER-013 / ORDER-014 / ORDER-023
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(51, "Margherita", ProductCategory.PIZZA, 700))
+        repeat(2) { repository.quickAddStandard(draft.id, 51) }
+        val before = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(2, before.quantity)
+
+        val clock = MutableClock(UPDATED_NOW)
+        val timed = RoomOrderRepository(
+            orderDao = database.orderDao(),
+            clockProvider = clock,
+            transactionRunner = RoomDatabaseTransactionRunner(database),
+        )
+        assertSame(
+            ChangeQuantityResult.Updated,
+            timed.changeQuantity(draft.id, before.id, 3),
+        )
+        val increased = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(before.id, increased.id)
+        assertEquals(3, increased.quantity)
+        assertEquals(before.createdSequence, increased.createdSequence)
+        assertEquals(before.baseUnitPrice.cents, increased.baseUnitPrice.cents)
+        assertEquals(before.automaticExtrasTotal.cents, increased.automaticExtrasTotal.cents)
+        assertEquals(before.finalUnitPrice.cents, increased.finalUnitPrice.cents)
+        assertNull(increased.manualUnitPrice)
+        assertEquals(UPDATED_NOW.toEpochMilli(), requireNotNull(repository.getById(draft.id)).updatedAt.toEpochMilli())
+
+        clock.now = RESET_NOW
+        assertSame(
+            ChangeQuantityResult.Updated,
+            timed.changeQuantity(draft.id, before.id, 1),
+        )
+        val decreased = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(1, decreased.quantity)
+        assertEquals(before.id, decreased.id)
+        assertEquals(before.finalUnitPrice.cents, decreased.finalUnitPrice.cents)
+        assertEquals(RESET_NOW.toEpochMilli(), requireNotNull(repository.getById(draft.id)).updatedAt.toEpochMilli())
+    }
+
+    @Test
+    fun changeQuantityRejectsNonPositiveAndLeavesQuantityOneUntouchedWhenAskedToStayAtOne() =
+        runBlocking {
+            // ORDER-015 (repo rejects quantity<=0; UI keeps minus disabled at 1)
+            val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+            database.productDao().insert(product(52, "Margherita", ProductCategory.PIZZA, 700))
+            assertTrue(repository.quickAddStandard(draft.id, 52) is QuickAddStandardResult.Added)
+            val item = requireNotNull(repository.getById(draft.id)).items.single()
+
+            assertSame(
+                ChangeQuantityResult.InvalidQuantity,
+                repository.changeQuantity(draft.id, item.id, 0),
+            )
+            assertSame(
+                ChangeQuantityResult.InvalidQuantity,
+                repository.changeQuantity(draft.id, item.id, -1),
+            )
+            assertEquals(1, requireNotNull(repository.getById(draft.id)).items.single().quantity)
+            assertSame(
+                ChangeQuantityResult.Updated,
+                repository.changeQuantity(draft.id, item.id, 1),
+            )
+            assertEquals(1, requireNotNull(repository.getById(draft.id)).items.single().quantity)
+        }
+
+    @Test
+    fun changeQuantityPreservesCustomizationsAndUnitPriceOnTheSameRow() = runBlocking {
+        // ORDER-016
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(53, "Margherita", ProductCategory.PIZZA, 700))
+        assertTrue(repository.quickAddStandard(draft.id, 53) is QuickAddStandardResult.Added)
+        val itemId = requireNotNull(repository.getById(draft.id)).items.single().id
+        val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+        val mozzarellaId = database.ingredientDao().insert(ingredient("Mozzarella"))
+        database.productDao().insertProductIngredients(
+            listOf(ProductIngredientEntity(53, mozzarellaId, 0)),
+        )
+        assertSame(
+            UpdateOrderItemResult.Updated,
+            repository.updateOrderItem(
+                orderId = draft.id,
+                orderItemId = itemId,
+                quantity = 2,
+                note = "Ben cotta",
+                manualUnitPrice = Money.ofCents(1_000),
+                selectedAdditionIds = listOf(acciugheId),
+                selectedRemovalIngredientIds = listOf(mozzarellaId),
+                customizationQuantityIntent =
+                    CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+            ),
+        )
+        val before = requireNotNull(repository.getById(draft.id)).items.single()
+
+        assertSame(
+            ChangeQuantityResult.Updated,
+            repository.changeQuantity(draft.id, itemId, 3),
+        )
+        val after = requireNotNull(repository.getById(draft.id)).items.single()
+        assertEquals(before.id, after.id)
+        assertEquals(3, after.quantity)
+        assertEquals(before.createdSequence, after.createdSequence)
+        assertEquals(before.note, after.note)
+        assertEquals(before.manualUnitPrice?.cents, after.manualUnitPrice?.cents)
+        assertEquals(before.finalUnitPrice.cents, after.finalUnitPrice.cents)
+        assertEquals(before.automaticExtrasTotal.cents, after.automaticExtrasTotal.cents)
+        assertEquals(before.additions.map { it.additionId }, after.additions.map { it.additionId })
+        assertEquals(
+            before.removals.map { it.ingredientId },
+            after.removals.map { it.ingredientId },
+        )
+        assertEquals(1, requireNotNull(repository.getById(draft.id)).items.size)
+    }
+
+    @Test
+    fun removeOrderItemDeletesStandardAndCustomRowsWithChildrenWithoutDeletingTheDraft() =
+        runBlocking {
+            // ORDER-017 / ORDER-018 / ORDER-020 / ORDER-023 / ORDER-024 / ORDER-025
+            val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+            database.productDao().insert(product(54, "Margherita", ProductCategory.PIZZA, 700))
+            database.productDao().insert(product(55, "Crocchè", ProductCategory.FRITTURA, 250))
+            assertTrue(repository.quickAddStandard(draft.id, 54) is QuickAddStandardResult.Added)
+            assertTrue(repository.quickAddStandard(draft.id, 55) is QuickAddStandardResult.Added)
+            val pizzaId = requireNotNull(repository.getById(draft.id)).items
+                .single { it.productId == 54L }.id
+            val fritturaId = requireNotNull(repository.getById(draft.id)).items
+                .single { it.productId == 55L }.id
+            val acciugheId = database.additionDao().insert(addition("Acciughe", null, 150))
+            val mozzarellaId = database.ingredientDao().insert(ingredient("Mozzarella"))
+            database.productDao().insertProductIngredients(
+                listOf(ProductIngredientEntity(54, mozzarellaId, 0)),
+            )
+            assertSame(
+                UpdateOrderItemResult.Updated,
+                repository.updateOrderItem(
+                    orderId = draft.id,
+                    orderItemId = pizzaId,
+                    quantity = 1,
+                    note = null,
+                    manualUnitPrice = null,
+                    selectedAdditionIds = listOf(acciugheId),
+                    selectedRemovalIngredientIds = listOf(mozzarellaId),
+                ),
+            )
+            assertEquals(1, countRows("order_item_additions"))
+            assertEquals(1, countRows("order_item_removals"))
+
+            val clock = MutableClock(UPDATED_NOW)
+            val timed = RoomOrderRepository(
+                orderDao = database.orderDao(),
+                clockProvider = clock,
+                transactionRunner = RoomDatabaseTransactionRunner(database),
+            )
+            assertSame(
+                RemoveOrderItemResult.Removed,
+                timed.removeOrderItem(draft.id, pizzaId),
+            )
+            val afterCustomRemoval = requireNotNull(repository.getById(draft.id))
+            assertEquals(listOf(fritturaId), afterCustomRemoval.items.map { it.id })
+            assertEquals(0, countRows("order_item_additions"))
+            assertEquals(0, countRows("order_item_removals"))
+            assertEquals(UPDATED_NOW.toEpochMilli(), afterCustomRemoval.updatedAt.toEpochMilli())
+
+            assertSame(
+                RemoveOrderItemResult.Removed,
+                timed.removeOrderItem(draft.id, fritturaId),
+            )
+            val emptyDraft = requireNotNull(repository.getById(draft.id))
+            assertTrue(emptyDraft.items.isEmpty())
+            assertEquals(OrderStatus.DRAFT, emptyDraft.status)
+            assertEquals(draft.id, repository.getActiveDraft()?.id)
+            assertEquals(0, countRows("order_items"))
+            assertEquals(0, countRows("order_item_additions"))
+            assertEquals(0, countRows("order_item_removals"))
+            assertEquals(
+                draft.id,
+                repository.observeById(draft.id).first()?.id,
+            )
+            assertTrue(requireNotNull(repository.observeById(draft.id).first()).items.isEmpty())
+        }
+
+    @Test
+    fun removeOrderItemRejectsWrongOwnershipAndAcceptedOrders() = runBlocking {
+        // ORDER-021 / ORDER-022
+        val draft = (repository.createDraft() as CreateDraftResult.Created).draft
+        database.productDao().insert(product(56, "Margherita", ProductCategory.PIZZA, 700))
+        assertTrue(repository.quickAddStandard(draft.id, 56) is QuickAddStandardResult.Added)
+        val draftItemId = requireNotNull(repository.getById(draft.id)).items.single().id
+        val accepted = acceptedOrder()
+        database.orderDao().insertDraft(accepted)
+        val foreignItemId = "foreign-remove-id"
+        database.orderDao().insertOrderItem(
+            orderItem(id = foreignItemId, orderId = accepted.id, productId = 56),
+        )
+
+        assertSame(
+            RemoveOrderItemResult.ItemNotFound,
+            repository.removeOrderItem(draft.id, foreignItemId),
+        )
+        assertSame(
+            ChangeQuantityResult.ItemNotFound,
+            repository.changeQuantity(draft.id, foreignItemId, 2),
+        )
+        assertSame(
+            RemoveOrderItemResult.OrderNotEditable,
+            repository.removeOrderItem(accepted.id, foreignItemId),
+        )
+        assertSame(
+            ChangeQuantityResult.OrderNotEditable,
+            repository.changeQuantity(accepted.id, foreignItemId, 2),
+        )
+        assertEquals(1, requireNotNull(repository.getById(draft.id)).items.size)
+        assertEquals(draftItemId, requireNotNull(repository.getById(draft.id)).items.single().id)
+        assertEquals(2, countRows("order_items"))
+    }
+
+    private class MutableClock(var now: Instant) : ClockProvider {
+        override fun now(): Instant = now
     }
 
     private class FailingRemovalOrderDao(private val delegate: OrderDao) : OrderDao by delegate {

@@ -999,6 +999,17 @@ class OrderItemDetailViewModelTest {
             return result
         }
 
+        override suspend fun changeQuantity(
+            orderId: String,
+            orderItemId: String,
+            quantity: Int,
+        ): it.krpng.cassa.domain.repository.ChangeQuantityResult = error("Not used")
+
+        override suspend fun removeOrderItem(
+            orderId: String,
+            orderItemId: String,
+        ): it.krpng.cassa.domain.repository.RemoveOrderItemResult = error("Not used")
+
         private fun Order?.orEmptyItems(): List<OrderItem> = this?.items.orEmpty()
     }
 

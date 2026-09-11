@@ -18,6 +18,8 @@ import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import it.krpng.cassa.domain.usecase.AddProductToDraft
+import it.krpng.cassa.domain.usecase.ChangeQuantity
+import it.krpng.cassa.domain.usecase.RemoveOrderItem
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -365,6 +367,8 @@ class NewOrderViewModelTest {
         orderRepository = repository,
         productRepository = FakeProductRepository(products),
         addProductToDraft = AddProductToDraft(repository),
+        changeQuantity = ChangeQuantity(repository),
+        removeOrderItem = RemoveOrderItem(repository),
     )
 
     private class FakeOrderRepository(
@@ -431,6 +435,17 @@ class NewOrderViewModelTest {
             selectedAdditionIds: List<Long>,
             selectedRemovalIngredientIds: List<Long>,
         ): it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult = error("Not used")
+
+        override suspend fun changeQuantity(
+            orderId: String,
+            orderItemId: String,
+            quantity: Int,
+        ): it.krpng.cassa.domain.repository.ChangeQuantityResult = error("Not used")
+
+        override suspend fun removeOrderItem(
+            orderId: String,
+            orderItemId: String,
+        ): it.krpng.cassa.domain.repository.RemoveOrderItemResult = error("Not used")
     }
 
     private class FakeProductRepository(
