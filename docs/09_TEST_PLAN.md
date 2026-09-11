@@ -244,6 +244,65 @@ Editor `NOTA ORDINE` dirty (testo locale non salvato) → Flow da quantity +/-, 
 ### ORDER-039
 Solo `orders.generalNote` valorizzata, pizza senza Addition/Removal/item note/manual price → pizza **non** customized e **senza** highlight viola.
 
+## 8d. Totale live DRAFT (ORD-022)
+
+### ORDER-040
+DRAFT senza item → UI mostra `TOTALE` `€0,00`; totale resta visibile.
+
+### ORDER-041
+Una sola riga standard persistita → `orderTotalCents = finalUnitPriceCents * quantity` di quella riga; UI allineata.
+
+### ORDER-042
+Più righe persistite → `orderTotalCents = sum(lineTotalCents)`; UI allineata.
+
+### ORDER-043
+Quantity `+` / `-` persistita → totale live aggiornato con i nuovi `lineTotalCents`; nessun ricalcolo unitario dal catalogo.
+
+### ORDER-044
+`RIMUOVI` confermato sull'unica riga → DRAFT vuoto con `TOTALE` `€0,00`.
+
+### ORDER-045
+Quick add persistito → totale live aggiornato includendo la nuova riga (o qty incrementata) dallo stato Room.
+
+### ORDER-046
+Addition salvata con `automaticExtrasPricing=true` → `finalUnitPriceCents` già aggiornato in Room; totale live = somma dei `lineTotalCents` persistiti.
+
+### ORDER-047
+Addition salvata con `automaticExtrasPricing=false` → additions charged 0 già riflesse in `finalUnitPriceCents`; totale live coerente, senza surcharge extras.
+
+### ORDER-048
+Manual price salvato (`manualUnitPriceCents != null`) → totale live usa `finalUnitPriceCents` persistito (override), non il prezzo automatico/catalogo.
+
+### ORDER-049
+Manual price `€0` (`manualUnitPriceCents = 0`) → override valido; `lineTotalCents = 0` per quella riga; totale live aggiornato di conseguenza.
+
+### ORDER-050
+Reset manual price salvato → `finalUnitPriceCents` torna al pricing automatico persistito; totale live aggiornato di conseguenza.
+
+### ORDER-051
+Atomic split `MODIFICA UNA` → due righe persistite; totale live = somma dei rispettivi `lineTotalCents`; nessuna logica speciale di split nel calcolo totale.
+
+### ORDER-052
+Solo item note salvata (stesso prezzo/qty) → totale invariato.
+
+### ORDER-053
+`generalNote` salvata / cancellata → totale invariato (`generalNote` non è input di pricing).
+
+### ORDER-054
+Editor/form dirty non salvato (item detail o `NOTA ORDINE`) → totale live resta quello derivato dallo stato Room corrente; nessun optimistic total.
+
+### ORDER-055
+Dopo persistenza di un item, cambio prezzo/nome nel catalogo live → totale DRAFT invariato (usa snapshot/`finalUnitPriceCents` persistiti, non il menu corrente).
+
+### ORDER-056
+Totale live calcolato da item persistiti → kill/reopen o Home → riapri DRAFT → stesso totale derivato dallo stesso stato Room (senza dipendere da `orders.totalCents` come source of truth DRAFT).
+
+### ORDER-057
+`finalUnitPriceCents * quantity` oltre il range `Money` supportato → `AmountOverflow` / errore equivalente; nessun totale numericamente corrotto/wraparound.
+
+### ORDER-058
+Somma dei `lineTotalCents` oltre il range `Money` supportato → `AmountOverflow` / errore equivalente; nessun totale numericamente corrotto/wraparound.
+
 ## 9. Draft
 
 ### DRAFT-001

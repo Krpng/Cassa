@@ -269,7 +269,46 @@ Test: ORDER-026..039.
 
 ### ORD-022 [P0] Total live from persisted state
 
-Test: ORDER/DRAFT/PRICE.
+Per `status == DRAFT`, totale live derivato **solo** dagli `order_items` persistiti in Room.
+
+Formule:
+```text
+lineTotalCents = finalUnitPriceCents * quantity
+orderTotalCents = sum(lineTotalCents)
+```
+
+`Money` / `Long` cents only; vietati `Double`/`Float`.
+
+Source of truth:
+- persisted `order_items` = unica SoT del live total DRAFT;
+- **non** da editor dirty, form non salvati, catalogo live, menu corrente, valori temporanei Compose/ViewModel.
+
+`orders.totalCents` sul DRAFT:
+- **non** è la source of truth del totale live;
+- ORD-022 **non** sincronizza `orders.totalCents` dopo ogni mutation (quick add, qty, remove, item edit, split);
+- Acceptance futura salverà lo snapshot definitivo in `orders.totalCents` (fuori scope).
+
+Live/reactive:
+Room mutation → Flow/read model → ricalcolo totale derivato → UI.
+Nessun optimistic total non persistito.
+
+Reagisce a mutation persistite di righe/prezzi/qty (quick add, +/-, `RIMUOVI`, Addition/Removal/manual/reset/`MODIFICA TUTTE`/atomic split). Item note e `generalNote` non cambiano il totale. Removal ingrediente può riemettere senza abbassare il prezzo.
+
+Pricing: nessuna nuova regola; usare solo `finalUnitPriceCents` + `quantity` già persistiti (`manual €0` valido → line total 0).
+
+Empty DRAFT: mostra `TOTALE` `€0,00` (totale visibile; no riga fittizia; DRAFT non cancellato).
+
+UI: footer/area finale `TOTALE` `€xx,xx` evidente, accessibile, insets; layout minimo necessario.
+
+Overflow: checked/`Money`; `AmountOverflow` / equivalente; no wraparound/totale corrotto.
+
+Fuori scope:
+- `COMPLETA` / Acceptance / Preview / numerazione / write DRAFT di `orders.totalCents`;
+- nuovi flussi ACCEPTED (useranno snapshot futuro).
+
+ORD-022 chiude il blocco ORD di M5. Successivo: Demo/validation M5 secondo questo backlog (non inventare `ORD-023`).
+
+Test: ORDER-040..058.
 
 Demo M5:
 - creare ordine complesso, kill app, riprendere identico.

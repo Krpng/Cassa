@@ -227,6 +227,8 @@ Guard repository/domain obbligatori:
 - `order.status == DRAFT`;
 - `ACCEPTED` immutabile: ogni mutation diretta di `generalNote` su ACCEPTED è rifiutata anche a repository/domain, non solo in UI.
 
+`orders.generalNote` non è input di pricing e non influenza `orderTotalCents` (vedi Totale live DRAFT ORD-022). Una general note dirty non salvata non ha alcun effetto sul totale.
+
 Indipendenza da note riga:
 - `orders.generalNote` e `order_items.note` coesistono e non si sovrascrivono;
 - salvare/modificare/cancellare una non modifica l'altra.
@@ -244,6 +246,115 @@ Errore salvataggio:
 - nessuna perdita silenziosa del testo digitato.
 
 Recovery/reopen: dopo salvataggio riuscito, Home → riapri DRAFT mostra la stessa nota tramite Room (nessuna cache parallela).
+
+### Totale live DRAFT (ORD-022)
+
+Per un ordine con `status == DRAFT`, il totale live deriva **esclusivamente** dagli `order_items` persistiti in Room.
+
+Source of truth congelata:
+- `persisted order_items` = unica source of truth del live total DRAFT.
+
+Il totale **non** deve derivare da:
+- editor locale non salvato;
+- form dirty;
+- catalogo live;
+- prezzo corrente del menu;
+- valori temporanei Compose/ViewModel.
+
+Formula (cents / `Money`):
+```text
+lineTotalCents = finalUnitPriceCents * quantity
+orderTotalCents = sum(lineTotalCents di tutti gli order_items persistiti)
+```
+
+Usare esclusivamente `Money` / `Long` cents. Vietati `Double` e `Float`.
+
+#### `orders.totalCents` nel DRAFT
+
+ORD-022 **non** mantiene `orders.totalCents` sincronizzato dopo ogni mutation del DRAFT.
+
+`orders.totalCents` **non** è la source of truth del totale live del DRAFT.
+
+Non introdurre write aggiuntive a `orders.totalCents` per:
+- quick add;
+- quantity change;
+- remove line;
+- item edit;
+- split.
+
+Il totale DRAFT viene **derivato** dagli item persistiti.
+
+Il futuro flusso di Acceptance ricalcolerà il totale dagli item persistiti e salverà lo snapshot definitivo in `orders.totalCents`; Acceptance, numerazione e salvataggio definitivo di `orders.totalCents` sono **fuori scope ORD-022**.
+
+Separazione congelata:
+- DRAFT live total = valore **derivato** dagli `order_items` persistiti;
+- ACCEPTED `totalCents` = **snapshot** persistito (task/milestone successive).
+
+#### Live / reactive
+
+"Live" significa:
+1. Room mutation completata;
+2. Flow/read model emette nuovo stato persistito;
+3. totale derivato viene ricalcolato;
+4. UI aggiornata.
+
+Nessun optimistic total basato su stato non ancora persistito.
+
+Il totale deve reagire automaticamente a qualsiasi modifica **persistita** che cambia righe/prezzi/quantità, in particolare:
+- quick add;
+- quantity `+`;
+- quantity `-`;
+- `RIMUOVI`;
+- Addition salvata;
+- Removal salvata;
+- manual price salvato;
+- reset manual price salvato;
+- `MODIFICA TUTTE` salvato;
+- atomic split `MODIFICA UNA`.
+
+Note:
+- Removal ingrediente non abbassa il prezzo secondo le business rule esistenti: può causare una nuova emissione Flow, ma il totale può restare invariato;
+- modifica della sola item note → totale invariato;
+- modifica di `generalNote` (anche dopo `SALVA NOTA`) → totale invariato;
+- editor dirty / form non salvati → totale invariato (resta calcolato dallo stato Room corrente).
+
+#### Pricing esistente (nessuna nuova regola)
+
+ORD-022 non introduce nuove regole di pricing. Usa esclusivamente i valori **già persistiti**:
+- `finalUnitPriceCents`;
+- `quantity`.
+
+Quindi:
+- `automaticExtrasPricing = true` → additions charged già riflesse in `finalUnitPriceCents`;
+- `automaticExtrasPricing = false` → additions charged 0 già riflesse in `finalUnitPriceCents`;
+- `manualUnitPriceCents != null` → precedence già riflessa in `finalUnitPriceCents`;
+- `manualUnitPriceCents = 0` → override valido → `finalUnitPriceCents = 0` → `lineTotalCents = 0`.
+
+ORD-022 **non** deve ricalcolare il prezzo unitario dal catalogo o dalle customization.
+
+#### Atomic split
+
+Dopo ORD-019, source row + new custom row sono due righe persistite. Il totale live è semplicemente la somma dei rispettivi `lineTotalCents`. Nessuna logica speciale di split dentro il calcolo totale.
+
+#### Empty DRAFT
+
+Un DRAFT senza item deve mostrare:
+```text
+TOTALE
+€0,00
+```
+
+Il totale resta visibile anche nello stato vuoto. Non creare una riga prodotto fittizia e non cancellare il DRAFT.
+
+#### Overflow
+
+Se `finalUnitPriceCents * quantity` oppure la somma dei line total supera il range supportato dalle primitive `Money` esistenti → `AmountOverflow` / errore equivalente già usato dal dominio. Vietato overflow silenzioso/wraparound. Non mostrare un totale numericamente corrotto.
+
+#### Fuori scope ORD-022
+
+- `COMPLETA` / Acceptance / Preview / numerazione;
+- write di `orders.totalCents` sul DRAFT;
+- nuovi flussi ACCEPTED/archivio/stampa dedicati.
 
 ## 8. Modifica una / tutte
 
@@ -344,8 +455,17 @@ Il manuale ha precedenza assoluta.
 - ricalcola il final dal pricing automatico.
 
 ### Totali
-`lineTotal = finalUnitPrice * quantity`.
-`orderTotal = somma(lineTotal)`.
+Per ogni riga persistita (in cents / `Money`):
+```text
+lineTotalCents = finalUnitPriceCents * quantity
+orderTotalCents = sum(lineTotalCents di tutti gli order_items persistiti)
+```
+
+Usare esclusivamente `Money` / `Long` cents. Vietati `Double` e `Float`.
+
+Overflow: operazioni checked/safe coerenti con le primitive `Money` esistenti (`addExact` / `multiplyExact` o equivalente). Vietato overflow silenzioso/wraparound. Se `finalUnitPriceCents * quantity` oppure la somma dei line total supera il range supportato → `AmountOverflow` / errore equivalente già usato dal dominio. Non mostrare un totale numericamente corrotto. Non introdurre un nuovo limite monetario arbitrario.
+
+Semantica del totale live DRAFT e del ruolo di `orders.totalCents`: vedi Totale live DRAFT (ORD-022).
 
 ## 12. Snapshot e mutabilità menu
 

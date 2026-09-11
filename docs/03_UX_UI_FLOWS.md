@@ -177,9 +177,40 @@ Semantica di salvataggio/empty/null, guard DRAFT/ACCEPTED, protezione editor dir
 
 `orders.generalNote` non attiva l'highlight viola delle pizze personalizzate.
 
+### Totale live (ORD-022)
+
+Nella schermata ordine DRAFT, il footer/area finale mostra chiaramente:
+
+```text
+TOTALE
+€xx,xx
+```
+
+Regole UX:
+- valore reattivo allo stato **persistito** Room (`order_items`), non a editor/form dirty o catalogo live;
+- totale molto evidente e leggibile;
+- accessibilità coerente con i pattern esistenti;
+- rispettare `safeDrawing` / navigation insets;
+- non cambiare il layout più del necessario.
+
+Empty DRAFT (nessuna riga):
+```text
+TOTALE
+€0,00
+```
+
+Il totale resta visibile anche nello stato vuoto (insieme al messaggio empty state esistente). Non creare righe fittizie.
+
+`COMPLETA`:
+- **fuori scope ORD-022**;
+- se il pulsante/placeholder esiste già, preservarlo senza aggiungere nuove business mutation;
+- Acceptance / numerazione / salvataggio definitivo di `orders.totalCents` appartengono a task/milestone successive.
+
+Semantica di calcolo, source of truth, `orders.totalCents` non-authoritative sul DRAFT, overflow e reattività: vedi `docs/02_BUSINESS_RULES.md` (Totale live DRAFT ORD-022).
+
 Footer/sticky:
-- `TOTALE`;
-- `COMPLETA`.
+- `TOTALE` (live, ORD-022);
+- `COMPLETA` (placeholder/preservato; non implementato da ORD-022).
 
 ### Empty state
 Se nessuna riga:
@@ -187,6 +218,7 @@ Se nessuna riga:
 
 Un DRAFT senza items resta esistente (vuoto); Home/recovery seguono le regole già definite per draft vuoto.
 La sezione `NOTA ORDINE` resta disponibile anche su DRAFT vuoto.
+Il `TOTALE` resta visibile a `€0,00` anche su DRAFT vuoto.
 
 ### Nessun risultato
 `Nessun prodotto trovato.`
