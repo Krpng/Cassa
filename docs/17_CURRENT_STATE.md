@@ -12,17 +12,19 @@ Verified on 2026-09-11:
 
 ```yaml
 branch: main
-HEAD: f880f8ec607266bad2507bcf18bd87ccfead3681
-HEAD commit: "feat: add general order note"
-last completed implementation task: ORD-021
-ORD-001..ORD-021: COMPLETE
+HEAD: c7a94fd802a6300c76b7b9905624c2d824ad98ab
+HEAD commit: "feat: derive live draft total from persisted items"
+last completed implementation task: ORD-022
+ORD-001..ORD-022: COMPLETE
+ORD block M5: COMPLETE
 custom pizza highlight: COMPLETE
-ORD-022: NOT STARTED
+Demo M5: NOT STARTED
+M6: NOT STARTED
 origin/main: synchronized
 working tree: clean
 ```
 
-The new agent must verify that `f880f8ec607266bad2507bcf18bd87ccfead3681` remains `HEAD` / `origin/main`. Do not rewrite history, and keep each approved backlog task isolated.
+The new agent must verify that `c7a94fd802a6300c76b7b9905624c2d824ad98ab` remains `HEAD` / `origin/main`. Do not rewrite history, and keep each approved backlog task isolated.
 
 ## 3. Current milestone
 
@@ -33,9 +35,10 @@ M2 Room: COMPLETE
 M3 Menu/search/manual admin: COMPLETE
 M4 ODS import: COMPLETE
 M5 Draft order core: IN PROGRESS
+M6 Preview/acceptance/numbering: NOT STARTED
 ```
 
-Within M5, `ORD-001` through `ORD-021` are complete, including the post-`ORD-020` customized-pizza row highlight mini-task. `ORD-022` is the next task and has not been started.
+Within M5, `ORD-001` through `ORD-022` are complete (ORD block M5 complete), including the post-`ORD-020` customized-pizza row highlight mini-task. `Demo M5` (end-to-end validation) is the next step and has not been started. Do **not** declare M5 COMPLETE until Demo M5 is executed and approved. Do not invent `ORD-023`. Do not begin M6 / NUM / ACCEPT.
 
 ## 4. Completed tasks
 
@@ -44,26 +47,26 @@ Within M5, `ORD-001` through `ORD-021` are complete, including the post-`ORD-020
 - `DB-001..009`: catalog/order/settings entities, relations, DAO/read models, repository foundation, single-draft invariant, production `CassaDatabase`, and exported schema baseline.
 - `MENU-001..008`: logical catalog CRUD, reactive catalog flows, deterministic product search, menu UI, and product/addition editors.
 - `ODS-001..011`: SAF picker, structural ODS parsing, sheet detection, row/price parsing, validation, planning, preview, atomic Room commit, and flag preservation.
-- `ORD-001..021`: draft lifecycle/recovery/conflict handling, order screen, catalog search/actions, persisted quick-add/list/detail, additions/removals, pricing variants, custom-line behavior, the aggregated-pizza edit-scope prompt, the atomic `MODIFICA UNA` split, draft-list quantity change plus explicit line removal, and the order-level general note.
+- `ORD-001..022`: draft lifecycle/recovery/conflict handling, order screen, catalog search/actions, persisted quick-add/list/detail, additions/removals, pricing variants, custom-line behavior, the aggregated-pizza edit-scope prompt, the atomic `MODIFICA UNA` split, draft-list quantity change plus explicit line removal, the order-level general note, and the live DRAFT total derived from persisted `order_items`.
 - Post-`ORD-020` UX mini-task: customized pizza rows in the draft list use a soft purple background when the pizza is customized.
 
 Relevant additional regression checkpoint:
 
 - `8d4810173847d47afe587f9d189d7b0b8a12b3b7`: safe handling of trailing LibreOffice repeated padding in ODS files.
 
-Tasks after `ORD-021` are not complete unless a later checkpoint explicitly records otherwise. `ORD-022` is not started.
+Tasks after `ORD-022` are not complete unless a later checkpoint explicitly records otherwise. `Demo M5` and M6 are not started.
 
 ## 5. Current next task
 
 ```yaml
-task: ORD-022
-title: Total live from persisted state
+task: Demo M5
+title: M5 end-to-end demo / validation
 priority: P0
 status: NOT STARTED
 milestone: M5 — Draft order core
 ```
 
-Read the exact contract again before coding. `docs/10_IMPLEMENTATION_BACKLOG.md` names the task, while `docs/02_BUSINESS_RULES.md`, `docs/03_UX_UI_FLOWS.md`, `docs/05_DATABASE_SCHEMA.md`, `docs/09_TEST_PLAN.md`, and `docs/16_TRACEABILITY_MATRIX.md` define its supported behavior and tests. Do not invent requirements that those documents do not state. Do not begin `ORD-022` while only documenting this handoff.
+Create a complex draft, kill the app, and resume with identical persisted state as specified by Demo M5 in `docs/10_IMPLEMENTATION_BACKLOG.md`. Do not invent `ORD-023`. Do not begin M6, numbering, acceptance, archive, duplicate, or printing while only documenting this handoff. Do not declare M5 COMPLETE until Demo M5 is executed and approved.
 
 ## 6. Frozen architecture decisions
 
@@ -282,13 +285,22 @@ The following manual checks were explicitly completed on Samsung `SM-S931B`:
 - TEST 3 PASS: clearing the note → functionally persisted `null` after reopen.
 - TEST 4 PASS: `generalNote` and item note independent; item note remains and still triggers purple highlight.
 
+### `ORD-022`
+
+- TEST 1 PASS: empty DRAFT → `TOTALE 0,00 €`; quick-add updates total; reopen total persistent/coherent.
+- TEST 2 PASS: quantity `+` / `-` → live total updated correctly.
+- TEST 3 PASS: Addition updates total; manual price uses override; reset manual returns to automatic.
+- TEST 4 PASS: manual price `€0,00` → line/order total `€0,00`.
+- TEST 5 PASS: `RIMUOVI` last row → empty DRAFT → `TOTALE 0,00 €`.
+- TEST 6 PASS: `3x` standard → `MODIFICA UNA` → `2x` standard + `1x` custom → total equals exact sum of the two persisted rows; reopen unchanged.
+
 Some edge cases are covered by automated tests but were not necessarily repeated manually. Do not describe an automated check as a manual hardware check. In particular, `ORDER-012` transaction rollback is covered by automation and was not provoked manually on the device.
 
 ## 14. Deferred/manual checks still open
 
-- The complete M5 demo (complex draft, process termination, and identical recovery) remains pending until M5 is complete.
+- Demo M5 (complex draft, process termination, and identical recovery) is the next step and remains **NOT STARTED**. Do not declare M5 COMPLETE until Demo M5 is executed and approved.
 - A dedicated manual comparison of both `automaticExtrasPricing=true` and `false` paths was deferred; these paths have automated coverage and must remain green.
-- Acceptance, numbering, archive, duplicate, and final printing flows belong to future milestones and have not been validated as completed features.
+- Acceptance, numbering, archive, duplicate, and final printing flows belong to future milestones (M6+) and have not been validated as completed features.
 - Physical NETUM printer calibration remains open: pairing, width, code page, euro/accent rendering, feed, reconnect, interrupted-print semantics, and repeated-print stability.
 - Hardware items in the checklist of `docs/09_TEST_PLAN.md` and `docs/07_PRINTING_SPEC.md` must not be marked complete without real printer validation.
 
@@ -529,7 +541,79 @@ f880f8ec607266bad2507bcf18bd87ccfead3681
 feat: add general order note
 ```
 
-## 20. Rules for the next coding agent
+## 20. ORD-022 final behavior
+
+`ORD-022` implemented the live DRAFT order total derived from persisted lines.
+
+Source of truth:
+
+- DRAFT live total = derived **only** from persisted `order_items`;
+- never from dirty editors, temporary Compose/ViewModel values, or live catalog / current menu prices.
+
+Formulas (`Money` / `Long` cents only; no `Double` / `Float`):
+
+```text
+lineTotalCents = finalUnitPriceCents * quantity
+orderTotalCents = checked sum of lineTotalCents
+```
+
+`orders.totalCents`:
+
+- **not** authoritative for the DRAFT live total;
+- **not** synchronized by ORD-022 after draft mutations;
+- future Acceptance will persist the definitive snapshot (out of scope).
+
+Reactive path:
+
+```text
+Room mutation completed
+→ Flow/read model emits persisted state
+→ derived total recalculated
+→ UI updates
+```
+
+No optimistic total before persistence.
+
+Empty DRAFT:
+
+- UI shows `TOTALE` `0,00 €` (visible even with zero lines).
+
+No effect on total:
+
+- dirty unsaved editors;
+- live catalog changes;
+- item note alone;
+- `generalNote` (saved or dirty).
+
+Manual price `€0`:
+
+- valid override → `finalUnitPriceCents = 0` → line/order contribution `€0`.
+
+Atomic split:
+
+- no special-case logic; sum the two persisted rows' line totals.
+
+Overflow:
+
+- explicit `AmountOverflow` / equivalent; no silent wraparound / corrupted numeric total.
+
+UI:
+
+- sticky footer `TOTALE` outside the scrollable catalog area;
+- `COMPLETA` unchanged / outside ORD-022 scope.
+
+Automated coverage linked to `ORD-022`:
+
+- `ORDER-040`..`ORDER-058` PASS.
+
+Production commit:
+
+```text
+c7a94fd802a6300c76b7b9905624c2d824ad98ab
+feat: derive live draft total from persisted items
+```
+
+## 21. Rules for the next coding agent
 
 1. Read `AGENTS.md`, `docs/17_CURRENT_STATE.md`, the exact backlog task, linked requirements, linked test plan, and traceability matrix before changing files. Consult `README_CODEX.md` and `docs/11_CODEX_WORKFLOW.md` only for workflow conventions that remain applicable; they are non-normative for Cursor, must not override agent-agnostic instructions, and must not introduce Codex-specific behavior into Cursor work.
 2. Implement one backlog task at a time and stop at its boundary.
@@ -545,32 +629,35 @@ feat: add general order note
 12. Report the exact files changed, test results, assumptions, deferred behavior, and open issues.
 13. Do not change documentation to justify behavior that contradicts higher-precedence requirements.
 14. Stop and report if the task contract is contradictory, requires a destructive migration, or would violate an architectural boundary.
-15. Next task is `ORD-022` — Total live from persisted state. Do not begin it while only updating this handoff document.
+15. Next step is **Demo M5** — M5 end-to-end demo / validation. Do not invent `ORD-023`. Do not begin M6 / NUM / ACCEPT while only updating this handoff document. Do not declare M5 COMPLETE until Demo M5 is executed and approved.
 
-## 21. Verification baseline
+## 22. Verification baseline
 
-Latest verified `ORD-021` baseline:
+Latest verified `ORD-022` baseline:
 
 ```yaml
-./gradlew.bat test: PASS — 336 JVM
+./gradlew.bat test: PASS — 363 JVM
 ./gradlew.bat assembleDebug: PASS
 ./gradlew.bat assembleDebugAndroidTest: PASS
-./gradlew.bat connectedDebugAndroidTest: PASS — 67 tests on Samsung SM-S931B
+./gradlew.bat connectedDebugAndroidTest: PASS — 70 tests on Samsung SM-S931B
 ./gradlew.bat installDebug: PASS
 device: Samsung SM-S931B
 app data cleared: NO
 ```
 
-Documented repository state after the approved `ORD-021` production commit:
+Documented repository state after the approved `ORD-022` production commit:
 
 ```yaml
-HEAD: f880f8ec607266bad2507bcf18bd87ccfead3681
-HEAD commit: "feat: add general order note"
-last completed production task: ORD-021
+HEAD: c7a94fd802a6300c76b7b9905624c2d824ad98ab
+HEAD commit: "feat: derive live draft total from persisted items"
+last completed production task: ORD-022
 custom pizza highlight: COMPLETE
-ORD-001..ORD-021: COMPLETE
-ORD-022: NOT STARTED
-next task: ORD-022 — Total live from persisted state [P0]
+ORD-001..ORD-022: COMPLETE
+ORD block M5: COMPLETE
+Demo M5: NOT STARTED
+M5: IN PROGRESS
+M6: NOT STARTED
+next step: Demo M5 — M5 end-to-end demo / validation
 ```
 
-A later documentation-only update of this handoff file may leave `HEAD` ahead of a previously recorded docs checkpoint without meaning that `ORD-022` has begun. No production code or test file was changed while creating or updating this handoff document.
+A later documentation-only update of this handoff file may leave `HEAD` ahead of a previously recorded docs checkpoint without meaning that Demo M5 or M6 has begun. No production code or test file was changed while creating or updating this handoff document.
