@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.feature.common.CassaBackButton
+import it.krpng.cassa.domain.pricing.OrderTotalResult
 import it.krpng.cassa.ui.theme.customizedPizzaRowBackground
 
 @Composable
@@ -128,8 +129,12 @@ fun NewOrderScreen(
                 onQuickAdd = onQuickAdd,
                 onDismissQuickAddError = onDismissQuickAddError,
                 onDismissLineMutationError = onDismissLineMutationError,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
             )
+            HorizontalDivider()
+            DraftOrderTotalFooter(orderTotal = state.orderTotal)
         } else {
             Box(
                 modifier = Modifier
@@ -185,7 +190,7 @@ private fun OrderCatalogContent(
     modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         CurrentOrderContent(
@@ -326,8 +331,7 @@ private fun CurrentOrderContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .imePadding()
-            .navigationBarsPadding(),
+            .imePadding(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
@@ -413,9 +417,9 @@ private fun CurrentOrderContent(
                                     .semantics {
                                         contentDescription = buildString {
                                             append("Apri dettaglio riga: ${line.quantity}x ")
-                                            append(
-                                                "${line.productName}, ${line.lineTotal.formatEur()}",
-                                            )
+                                            append(line.productName)
+                                            append(", ")
+                                            append(line.lineTotal?.formatEur() ?: "totale non disponibile")
                                             if (line.isCustomizedPizza) {
                                                 append(", personalizzata")
                                             }
@@ -429,7 +433,7 @@ private fun CurrentOrderContent(
                                     fontWeight = FontWeight.SemiBold,
                                 )
                                 Text(
-                                    text = line.lineTotal.formatEur(),
+                                    text = line.lineTotal?.formatEur() ?: "—",
                                     style = MaterialTheme.typography.bodyMedium,
                                 )
                             }
@@ -537,6 +541,46 @@ private fun CurrentOrderContent(
 }
 
 @Composable
+private fun DraftOrderTotalFooter(orderTotal: OrderTotalResult) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(top = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = "TOTALE",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        when (orderTotal) {
+            is OrderTotalResult.Success -> {
+                Text(
+                    text = orderTotal.total.formatEur(),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.semantics {
+                        contentDescription = "Totale ordine: ${orderTotal.total.formatEur()}"
+                    },
+                )
+            }
+            OrderTotalResult.AmountOverflow -> {
+                Text(
+                    text = "Totale non calcolabile",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics {
+                        contentDescription = "Totale ordine non calcolabile per overflow"
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun OrderCatalogResult(
     item: OrderCatalogItem,
     onProductSelected: (Long) -> Unit,
@@ -585,16 +629,16 @@ private fun OrderCatalogResult(
                 modifier = Modifier
                     .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                     .semantics {
-                        contentDescription = "Aggiungi ${item.name}"
+                        contentDescription = if (isQuickAddInProgress) {
+                            "Aggiunta in corso per ${item.name}"
+                        } else {
+                            "Aggiungi ${item.name}"
+                        }
                     },
             ) {
                 if (isQuickAddInProgress) {
                     CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(24.dp)
-                            .semantics {
-                                contentDescription = "Aggiunta in corso per ${item.name}"
-                            },
+                        modifier = Modifier.size(24.dp),
                         strokeWidth = 2.dp,
                     )
                 } else {

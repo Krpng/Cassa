@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -42,8 +43,96 @@ class NewOrderScreenTest {
         composeRule.onNodeWithText("ORDINE CORRENTE").assertIsDisplayed()
         composeRule.onNodeWithText("Aggiungi un prodotto per iniziare l'ordine.")
             .assertIsDisplayed()
+        composeRule.onNodeWithText("TOTALE").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Totale ordine: 0,00 €").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Indietro").performClick()
         composeRule.runOnIdle { assertEquals(1, backClicks) }
+    }
+
+    @Test
+    fun order040_emptyDraftShowsVisibleZeroTotal() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("TOTALE").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Totale ordine: 0,00 €").assertIsDisplayed()
+        composeRule.onNodeWithText("0,00 €").assertIsDisplayed()
+    }
+
+    @Test
+    fun liveTotalFooterShowsSumOfPersistedLineTotals() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        orderLines = listOf(
+                            DraftOrderLine(
+                                itemId = "pizza-id",
+                                quantity = 2,
+                                productName = "Margherita",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(1_400),
+                            ),
+                            DraftOrderLine(
+                                itemId = "coca-id",
+                                quantity = 3,
+                                productName = "Coca Cola",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(750),
+                            ),
+                        ),
+                        orderTotal = it.krpng.cassa.domain.pricing.OrderTotalResult.Success(
+                            it.krpng.cassa.core.money.Money.ofCents(2_150),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("TOTALE").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Totale ordine: 21,50 €").assertIsDisplayed()
+    }
+
+    @Test
+    fun liveTotalFooterShowsOverflowWithoutNumericCorruption() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        orderTotal = it.krpng.cassa.domain.pricing.OrderTotalResult.AmountOverflow,
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("TOTALE").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Totale ordine non calcolabile per overflow")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("Totale non calcolabile").assertIsDisplayed()
     }
 
     @Test
@@ -342,8 +431,9 @@ class NewOrderScreenTest {
         }
 
         composeRule.onNodeWithContentDescription("Aggiunta in corso per Margherita")
+            .performScrollTo()
             .assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Aggiungi Margherita").performClick()
+            .performClick()
         composeRule.onNodeWithText("Impossibile aggiungere il prodotto. Riprova.")
             .assertIsDisplayed()
         composeRule.onNodeWithText("CHIUDI").performClick()
@@ -436,11 +526,20 @@ class NewOrderScreenTest {
     private fun readyState(
         catalogItems: List<OrderCatalogItem> = emptyList(),
         orderLines: List<DraftOrderLine> = emptyList(),
-    ): NewOrderUiState.Ready = NewOrderUiState.Ready(
-        draftId = "draft-id",
-        orderLines = orderLines,
-        searchQuery = "",
-        selectedFilter = OrderCatalogFilter.ALL,
-        catalogItems = catalogItems,
-    )
+        orderTotal: it.krpng.cassa.domain.pricing.OrderTotalResult? = null,
+    ): NewOrderUiState.Ready {
+        val resolvedTotal = orderTotal ?: it.krpng.cassa.domain.pricing.OrderTotalResult.Success(
+            orderLines.mapNotNull { it.lineTotal }.fold(
+                it.krpng.cassa.core.money.Money.ZERO,
+            ) { acc, line -> acc + line },
+        )
+        return NewOrderUiState.Ready(
+            draftId = "draft-id",
+            orderLines = orderLines,
+            orderTotal = resolvedTotal,
+            searchQuery = "",
+            selectedFilter = OrderCatalogFilter.ALL,
+            catalogItems = catalogItems,
+        )
+    }
 }

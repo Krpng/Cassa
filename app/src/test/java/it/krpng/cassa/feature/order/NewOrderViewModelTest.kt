@@ -10,6 +10,7 @@ import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.ProductIngredient
+import it.krpng.cassa.domain.pricing.OrderTotalResult
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
@@ -22,6 +23,8 @@ import it.krpng.cassa.domain.usecase.AddProductToDraft
 import it.krpng.cassa.domain.usecase.ChangeQuantity
 import it.krpng.cassa.domain.usecase.RemoveOrderItem
 import it.krpng.cassa.domain.usecase.UpdateGeneralNote
+import it.krpng.cassa.domain.model.OrderItemAddition
+import it.krpng.cassa.domain.model.OrderItemRemoval
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -65,6 +68,497 @@ class NewOrderViewModelTest {
         assertEquals("", ready.generalNoteEditor)
         assertFalse(ready.canSaveGeneralNote)
     }
+
+    @Test
+    fun `ORDER-040 empty draft live total is zero from persisted items`() = runTest(mainDispatcher) {
+        val viewModel = viewModel(
+            FakeOrderRepository(
+                MutableStateFlow(
+                    draft().copy(total = Money.ofCents(99_99)),
+                ),
+            ),
+            "draft-id",
+        )
+        advanceUntilIdle()
+
+        val ready = viewModel.uiState.value as NewOrderUiState.Ready
+        assertTrue(ready.isDraftEmpty)
+        assertEquals(OrderTotalResult.Success(Money.ZERO), ready.orderTotal)
+    }
+
+    @Test
+    fun `ORDER-041 single persisted line drives live total ignoring orders totalCents`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(
+                FakeOrderRepository(
+                    MutableStateFlow(
+                        draft().copy(
+                            total = Money.ofCents(50_000),
+                            items = listOf(orderItem(quantity = 2, unitPriceCents = 700)),
+                        ),
+                    ),
+                ),
+                "draft-id",
+            )
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(OrderTotalResult.Success(Money.ofCents(1_400)), ready.orderTotal)
+            assertEquals(Money.ofCents(1_400), ready.orderLines.single().lineTotal)
+        }
+
+    @Test
+    fun `ORDER-042 multiple persisted lines sum into live total`() = runTest(mainDispatcher) {
+        val viewModel = viewModel(
+            FakeOrderRepository(
+                MutableStateFlow(
+                    draft().copy(
+                        items = listOf(
+                            orderItem(id = "a", quantity = 2, unitPriceCents = 700, createdSequence = 1),
+                            orderItem(
+                                id = "b",
+                                name = "Coca",
+                                quantity = 3,
+                                unitPriceCents = 250,
+                                createdSequence = 2,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            "draft-id",
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            OrderTotalResult.Success(Money.ofCents(2_150)),
+            (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+        )
+    }
+
+    @Test
+    fun `ORDER-043 quantity change on persisted items updates live total`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(
+                draft().copy(items = listOf(orderItem(quantity = 1, unitPriceCents = 700))),
+            )
+            val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+            advanceUntilIdle()
+            assertEquals(
+                OrderTotalResult.Success(Money.ofCents(700)),
+                (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+            )
+
+            orders.value = draft().copy(
+                items = listOf(orderItem(quantity = 3, unitPriceCents = 700)),
+            )
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(OrderTotalResult.Success(Money.ofCents(2_100)), ready.orderTotal)
+            assertEquals(Money.ofCents(2_100), ready.orderLines.single().lineTotal)
+        }
+
+    @Test
+    fun `ORDER-044 remove last line yields empty draft zero total`() = runTest(mainDispatcher) {
+        val orders = MutableStateFlow<Order?>(
+            draft().copy(items = listOf(orderItem(quantity = 2, unitPriceCents = 700))),
+        )
+        val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+        advanceUntilIdle()
+
+        orders.value = draft().copy(items = emptyList(), total = Money.ofCents(1_400))
+        advanceUntilIdle()
+
+        val ready = viewModel.uiState.value as NewOrderUiState.Ready
+        assertTrue(ready.isDraftEmpty)
+        assertEquals(OrderTotalResult.Success(Money.ZERO), ready.orderTotal)
+    }
+
+    @Test
+    fun `ORDER-045 quick add persisted emission updates live total`() = runTest(mainDispatcher) {
+        val orders = MutableStateFlow<Order?>(draft())
+        val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+        advanceUntilIdle()
+        assertEquals(
+            OrderTotalResult.Success(Money.ZERO),
+            (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+        )
+
+        orders.value = draft().copy(items = listOf(orderItem(quantity = 1, unitPriceCents = 700)))
+        advanceUntilIdle()
+
+        assertEquals(
+            OrderTotalResult.Success(Money.ofCents(700)),
+            (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+        )
+    }
+
+    @Test
+    fun `ORDER-046 addition with automatic extras true uses persisted final unit price`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(
+                FakeOrderRepository(
+                    MutableStateFlow(
+                        draft().copy(
+                            items = listOf(
+                                orderItem(
+                                    finalUnitPriceCents = 900,
+                                    baseUnitPriceCents = 700,
+                                    automaticExtrasTotalCents = 200,
+                                    automaticExtrasPricing = true,
+                                    additions = listOf(
+                                        OrderItemAddition(
+                                            id = "add-1",
+                                            additionId = 1,
+                                            nameSnapshot = "Bufala",
+                                            printedNameSnapshot = "BUFALA",
+                                            listedPrice = Money.ofCents(200),
+                                            chargedPrice = Money.ofCents(200),
+                                            displayOrder = 0,
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                "draft-id",
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                OrderTotalResult.Success(Money.ofCents(900)),
+                (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+            )
+        }
+
+    @Test
+    fun `ORDER-047 addition with automatic extras false uses persisted final without surcharge`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(
+                FakeOrderRepository(
+                    MutableStateFlow(
+                        draft().copy(
+                            items = listOf(
+                                orderItem(
+                                    finalUnitPriceCents = 700,
+                                    baseUnitPriceCents = 700,
+                                    automaticExtrasTotalCents = 0,
+                                    automaticExtrasPricing = false,
+                                    additions = listOf(
+                                        OrderItemAddition(
+                                            id = "add-1",
+                                            additionId = 1,
+                                            nameSnapshot = "Bufala",
+                                            printedNameSnapshot = "BUFALA",
+                                            listedPrice = Money.ofCents(200),
+                                            chargedPrice = Money.ZERO,
+                                            displayOrder = 0,
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                "draft-id",
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                OrderTotalResult.Success(Money.ofCents(700)),
+                (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+            )
+        }
+
+    @Test
+    fun `ORDER-048 manual price uses persisted final unit price`() = runTest(mainDispatcher) {
+        val viewModel = viewModel(
+            FakeOrderRepository(
+                MutableStateFlow(
+                    draft().copy(
+                        items = listOf(
+                            orderItem(
+                                finalUnitPriceCents = 1_000,
+                                baseUnitPriceCents = 700,
+                                manualUnitPriceCents = 1_000,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            "draft-id",
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            OrderTotalResult.Success(Money.ofCents(1_000)),
+            (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+        )
+    }
+
+    @Test
+    fun `ORDER-049 manual euro zero yields zero live total`() = runTest(mainDispatcher) {
+        val viewModel = viewModel(
+            FakeOrderRepository(
+                MutableStateFlow(
+                    draft().copy(
+                        items = listOf(
+                            orderItem(
+                                quantity = 2,
+                                finalUnitPriceCents = 0,
+                                baseUnitPriceCents = 700,
+                                manualUnitPriceCents = 0,
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            "draft-id",
+        )
+        advanceUntilIdle()
+
+        assertEquals(
+            OrderTotalResult.Success(Money.ZERO),
+            (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+        )
+    }
+
+    @Test
+    fun `ORDER-050 reset manual price uses restored persisted final unit price`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(
+                draft().copy(
+                    items = listOf(
+                        orderItem(
+                            finalUnitPriceCents = 1_000,
+                            baseUnitPriceCents = 700,
+                            manualUnitPriceCents = 1_000,
+                        ),
+                    ),
+                ),
+            )
+            val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+            advanceUntilIdle()
+
+            orders.value = draft().copy(
+                items = listOf(
+                    orderItem(
+                        finalUnitPriceCents = 700,
+                        baseUnitPriceCents = 700,
+                        manualUnitPriceCents = null,
+                    ),
+                ),
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                OrderTotalResult.Success(Money.ofCents(700)),
+                (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+            )
+        }
+
+    @Test
+    fun `ORDER-051 atomic split sums both persisted rows without special split logic`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(
+                FakeOrderRepository(
+                    MutableStateFlow(
+                        draft().copy(
+                            items = listOf(
+                                orderItem(
+                                    id = "source",
+                                    quantity = 2,
+                                    unitPriceCents = 700,
+                                    createdSequence = 1,
+                                ),
+                                orderItem(
+                                    id = "custom",
+                                    quantity = 1,
+                                    finalUnitPriceCents = 900,
+                                    baseUnitPriceCents = 700,
+                                    createdSequence = 2,
+                                    additions = listOf(
+                                        OrderItemAddition(
+                                            id = "add-1",
+                                            additionId = 1,
+                                            nameSnapshot = "Bufala",
+                                            printedNameSnapshot = "BUFALA",
+                                            listedPrice = Money.ofCents(200),
+                                            chargedPrice = Money.ofCents(200),
+                                            displayOrder = 0,
+                                        ),
+                                    ),
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                "draft-id",
+            )
+            advanceUntilIdle()
+
+            // 2*700 + 1*900 = 2300 — plain sum of persisted line totals
+            assertEquals(
+                OrderTotalResult.Success(Money.ofCents(2_300)),
+                (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+            )
+        }
+
+    @Test
+    fun `ORDER-052 item note alone does not change live total`() = runTest(mainDispatcher) {
+        val orders = MutableStateFlow<Order?>(
+            draft().copy(items = listOf(orderItem(quantity = 2, unitPriceCents = 700))),
+        )
+        val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+        advanceUntilIdle()
+        val before = (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal
+
+        orders.value = draft().copy(
+            items = listOf(
+                orderItem(quantity = 2, unitPriceCents = 700, note = "Ben cotta"),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(before, (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal)
+        assertEquals(OrderTotalResult.Success(Money.ofCents(1_400)), before)
+    }
+
+    @Test
+    fun `ORDER-053 general note save does not change live total`() = runTest(mainDispatcher) {
+        val orders = MutableStateFlow<Order?>(
+            draft().copy(items = listOf(orderItem(quantity = 2, unitPriceCents = 700))),
+        )
+        val repository = FakeOrderRepository(orders)
+        val viewModel = viewModel(repository, "draft-id")
+        advanceUntilIdle()
+        val before = (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal
+
+        viewModel.updateGeneralNoteEditor("Consegna alle 21")
+        viewModel.saveGeneralNote()
+        advanceUntilIdle()
+
+        val ready = viewModel.uiState.value as NewOrderUiState.Ready
+        assertEquals("Consegna alle 21", ready.persistedGeneralNote)
+        assertEquals(before, ready.orderTotal)
+    }
+
+    @Test
+    fun `ORDER-054 dirty unsaved editors do not change live total`() = runTest(mainDispatcher) {
+        val orders = MutableStateFlow<Order?>(
+            draft().copy(items = listOf(orderItem(quantity = 1, unitPriceCents = 700))),
+        )
+        val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+        advanceUntilIdle()
+        val before = (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal
+
+        viewModel.updateGeneralNoteEditor("Nota non salvata")
+        advanceUntilIdle()
+
+        val ready = viewModel.uiState.value as NewOrderUiState.Ready
+        assertEquals("Nota non salvata", ready.generalNoteEditor)
+        assertNull(ready.persistedGeneralNote)
+        assertEquals(before, ready.orderTotal)
+        assertEquals(OrderTotalResult.Success(Money.ofCents(700)), ready.orderTotal)
+    }
+
+    @Test
+    fun `ORDER-055 catalog live price change does not alter persisted draft total`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(
+                draft().copy(
+                    items = listOf(
+                        orderItem(productId = 1, quantity = 2, unitPriceCents = 700),
+                    ),
+                ),
+            )
+            val products = MutableStateFlow(
+                listOf(product(1, "Margherita", ProductCategory.PIZZA)),
+            )
+            val viewModel = viewModel(FakeOrderRepository(orders), "draft-id", products)
+            advanceUntilIdle()
+            val before = (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal
+
+            products.value = listOf(
+                product(1, "Margherita", ProductCategory.PIZZA).copy(price = Money.ofCents(9_999)),
+            )
+            advanceUntilIdle()
+
+            assertEquals(before, (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal)
+            assertEquals(OrderTotalResult.Success(Money.ofCents(1_400)), before)
+        }
+
+    @Test
+    fun `ORDER-056 reopen derives the same total from persisted items not totalCents`() =
+        runTest(mainDispatcher) {
+            val persisted = draft().copy(
+                total = Money.ofCents(1),
+                items = listOf(orderItem(quantity = 2, unitPriceCents = 700)),
+            )
+            val orders = MutableStateFlow<Order?>(persisted)
+            val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+            advanceUntilIdle()
+            val first = (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal
+
+            viewModel.retry()
+            advanceUntilIdle()
+            val second = (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal
+
+            assertEquals(OrderTotalResult.Success(Money.ofCents(1_400)), first)
+            assertEquals(first, second)
+        }
+
+    @Test
+    fun `ORDER-057 view model surfaces multiplication overflow without corrupted total`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(
+                FakeOrderRepository(
+                    MutableStateFlow(
+                        draft().copy(
+                            items = listOf(
+                                orderItem(
+                                    finalUnitPriceCents = Long.MAX_VALUE,
+                                    quantity = 2,
+                                ),
+                            ),
+                        ),
+                    ),
+                ),
+                "draft-id",
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                OrderTotalResult.AmountOverflow,
+                (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+            )
+        }
+
+    @Test
+    fun `ORDER-058 view model surfaces sum overflow without corrupted total`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(
+                FakeOrderRepository(
+                    MutableStateFlow(
+                        draft().copy(
+                            items = listOf(
+                                orderItem(id = "a", finalUnitPriceCents = Long.MAX_VALUE),
+                                orderItem(id = "b", finalUnitPriceCents = 1, createdSequence = 2),
+                            ),
+                        ),
+                    ),
+                ),
+                "draft-id",
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                OrderTotalResult.AmountOverflow,
+                (viewModel.uiState.value as NewOrderUiState.Ready).orderTotal,
+            )
+        }
 
     @Test
     fun `ORDER-037 dirty general note editor is not overwritten by unrelated order emissions`() =
@@ -594,24 +1088,36 @@ class NewOrderViewModelTest {
         name: String = "Margherita",
         quantity: Int = 1,
         unitPriceCents: Long = 700,
+        baseUnitPriceCents: Long? = null,
+        automaticExtrasTotalCents: Long = 0,
+        finalUnitPriceCents: Long? = null,
+        manualUnitPriceCents: Long? = null,
+        automaticExtrasPricing: Boolean = true,
+        note: String? = null,
         createdSequence: Int = 1,
-    ): OrderItem = OrderItem(
-        id = id,
-        productId = productId,
-        productNameSnapshot = name,
-        productPrintedNameSnapshot = name.uppercase(),
-        categorySnapshot = ProductCategory.PIZZA,
-        quantity = quantity,
-        baseUnitPrice = Money.ofCents(unitPriceCents),
-        automaticExtrasTotal = Money.ZERO,
-        manualUnitPrice = null,
-        finalUnitPrice = Money.ofCents(unitPriceCents),
-        automaticExtrasPricingSnapshot = true,
-        note = null,
-        createdSequence = createdSequence,
-        additions = emptyList(),
-        removals = emptyList(),
-    )
+        additions: List<OrderItemAddition> = emptyList(),
+        removals: List<OrderItemRemoval> = emptyList(),
+    ): OrderItem {
+        val base = baseUnitPriceCents ?: unitPriceCents
+        val finalPrice = finalUnitPriceCents ?: unitPriceCents
+        return OrderItem(
+            id = id,
+            productId = productId,
+            productNameSnapshot = name,
+            productPrintedNameSnapshot = name.uppercase(),
+            categorySnapshot = ProductCategory.PIZZA,
+            quantity = quantity,
+            baseUnitPrice = Money.ofCents(base),
+            automaticExtrasTotal = Money.ofCents(automaticExtrasTotalCents),
+            manualUnitPrice = manualUnitPriceCents?.let(Money::ofCents),
+            finalUnitPrice = Money.ofCents(finalPrice),
+            automaticExtrasPricingSnapshot = automaticExtrasPricing,
+            note = note,
+            createdSequence = createdSequence,
+            additions = additions,
+            removals = removals,
+        )
+    }
 
     private fun product(
         id: Long,

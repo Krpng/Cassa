@@ -11,8 +11,10 @@ import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.model.Product
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.order.GeneralNoteNormalizer
+import it.krpng.cassa.domain.pricing.CalculateOrderTotal
 import it.krpng.cassa.domain.pricing.OrderLineMergeCandidate
 import it.krpng.cassa.domain.pricing.OrderLineMergePolicy
+import it.krpng.cassa.domain.pricing.OrderTotalResult
 import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
@@ -57,7 +59,7 @@ data class DraftOrderLine(
     val itemId: String,
     val quantity: Int,
     val productName: String,
-    val lineTotal: Money,
+    val lineTotal: Money?,
     val isCustomizedPizza: Boolean = false,
 )
 
@@ -67,6 +69,7 @@ sealed interface NewOrderUiState {
     data class Ready(
         val draftId: String,
         val orderLines: List<DraftOrderLine>,
+        val orderTotal: OrderTotalResult,
         val searchQuery: String,
         val selectedFilter: OrderCatalogFilter,
         val catalogItems: List<OrderCatalogItem>,
@@ -287,19 +290,25 @@ class NewOrderViewModel @Inject constructor(
                         order.status != OrderStatus.DRAFT -> NewOrderUiState.NotEditable
                         else -> {
                             val editor = generalNote.editor ?: order.generalNote.orEmpty()
+                            val sortedItems = order.items
+                                .sortedWith(compareBy({ it.createdSequence }, { it.id }))
+                            // Live total from persisted items only — never order.total / catalog.
+                            val totals = CalculateOrderTotal.fromPersistedItems(sortedItems)
+                            val lineTotalById = totals.lineTotals.associate { line ->
+                                line.itemId to line.lineTotal
+                            }
                             NewOrderUiState.Ready(
                                 draftId = order.id,
-                                orderLines = order.items
-                                    .sortedWith(compareBy({ it.createdSequence }, { it.id }))
-                                    .map { item ->
-                                        DraftOrderLine(
-                                            itemId = item.id,
-                                            quantity = item.quantity,
-                                            productName = item.productNameSnapshot,
-                                            lineTotal = item.finalUnitPrice * item.quantity,
-                                            isCustomizedPizza = item.isCustomizedPizzaRow(),
-                                        )
-                                    },
+                                orderLines = sortedItems.map { item ->
+                                    DraftOrderLine(
+                                        itemId = item.id,
+                                        quantity = item.quantity,
+                                        productName = item.productNameSnapshot,
+                                        lineTotal = lineTotalById[item.id],
+                                        isCustomizedPizza = item.isCustomizedPizzaRow(),
+                                    )
+                                },
+                                orderTotal = totals.orderTotal,
                                 searchQuery = query,
                                 selectedFilter = filter,
                                 catalogItems = products.toCatalogItems(query, filter),
