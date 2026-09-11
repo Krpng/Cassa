@@ -218,6 +218,29 @@ DB source of truth.
 
 ### ORD-020 [P0] Remove line/change quantity
 
+Azioni direttamente sulle righe del DRAFT nella schermata ordine.
+
+Quantità lista:
+- ogni riga offre `[-] quantity [+]`;
+- `+`/`-` persistono subito in Room (no dettaglio, no `SALVA`);
+- `quantity >= 1`;
+- `[-]` a `quantity = 1` non muta e non elimina;
+- `quantity = 0` non valido e non è meccanismo di delete;
+- stessa `order_item`: preserva id, `createdSequence`, snapshot, customization; no split/merge; no ricalcolo unit price dal catalogo;
+- `lineTotal = finalUnitPrice * quantity`.
+
+Rimozione:
+- azione esplicita `RIMUOVI` con conferma `Rimuovere questa riga?` / `ANNULLA` / `RIMUOVI`;
+- delete atomico item + child additions/removals secondo schema reale; nessun orphan;
+- `orders.updatedAt` via `ClockProvider`;
+- ultima riga rimossa → DRAFT vuoto esistente; non elimina `orders`.
+
+Guard: order/item esistenti, ownership, solo `DRAFT`; `ACCEPTED` immutabile a repository/domain.
+
+Fuori scope: editor `MODIFICA UNA` + cambio quantity (rifiuto conservativo corrente preservato); ORD-021 general note.
+
+Test: ORDER-013..025.
+
 ### ORD-021 [P0] General note
 
 ### ORD-022 [P0] Total live from persisted state

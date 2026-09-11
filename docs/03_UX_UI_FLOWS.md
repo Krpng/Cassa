@@ -12,7 +12,7 @@
 - Non usare il colore come unico segnale.
 - Stati error/loading/empty espliciti.
 - Evitare dialog non necessari durante il flusso rapido.
-- Conferma obbligatoria solo per azioni distruttive: eliminazione draft, sostituzione draft.
+- Conferma obbligatoria solo per azioni distruttive: eliminazione draft, sostituzione draft, rimozione riga ordine.
 
 ## 2. Information architecture
 
@@ -124,13 +124,33 @@ Tap `+`:
 - quick add standard.
 
 ### Ordine corrente
-Ogni riga mostra:
-- quantità;
+Ogni riga del DRAFT mostra:
+- controlli quantità `[-] quantity [+]`;
 - nome;
 - modifiche;
 - nota sintetica;
 - prezzo finale/line total;
-- affordance per modifica.
+- azione esplicita `RIMUOVI`;
+- tap sulla riga (fuori da `+/-` e `RIMUOVI`) apre il dettaglio.
+
+Regole quantità dalla lista:
+- `[+]` aumenta di 1 e persiste subito;
+- `[-]` con `quantity > 1` diminuisce di 1 e persiste subito;
+- `[-]` con `quantity = 1` è disabilitato/non azionabile e non muta;
+- `quantity = 0` non è ammesso e non elimina la riga.
+
+`RIMUOVI`:
+```text
+Rimuovere questa riga?
+
+[ANNULLA]
+[RIMUOVI]
+```
+
+- `ANNULLA`: nessuna scrittura;
+- `RIMUOVI` confermato: elimina atomicamente la riga e i suoi child modifier.
+
+Touch target almeno `48dp`. `RIMUOVI` resta distinto dai controlli quantità.
 
 Footer/sticky:
 - `TOTALE`;
@@ -139,6 +159,8 @@ Footer/sticky:
 ### Empty state
 Se nessuna riga:
 `Aggiungi un prodotto per iniziare l'ordine.`
+
+Un DRAFT senza items resta esistente (vuoto); Home/recovery seguono le regole già definite per draft vuoto.
 
 ### Nessun risultato
 `Nessun prodotto trovato.`
@@ -153,6 +175,8 @@ Per tutte le categorie:
 - modifica prezzo;
 - salva;
 - annulla.
+
+Il dettaglio resta il flusso di editing avanzato. Il `+/-` e `RIMUOVI` della lista ordine (ORD-020) non sostituiscono e non alterano questo editor.
 
 Per pizza aggiungere:
 - `Aggiunte`;
@@ -218,6 +242,9 @@ Vuoi modificare una pizza o tutte?
 
 `Modifica una`:
 - split atomico solo quando l'utente salva una personalizzazione valida.
+
+Il cambio quantità tramite `+/-` della lista ordine non usa questo prompt.
+Il caso editor `MODIFICA UNA` + cambio quantità nello stesso form resta fuori da ORD-020 e conserva il rifiuto conservativo corrente.
 
 ## 9. Anteprima DRAFT
 

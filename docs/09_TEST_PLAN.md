@@ -159,6 +159,47 @@ manual price rende pizza customized.
 ### ORDER-012
 Failure durante transaction -> struttura originale.
 
+## 8b. Remove line / change quantity (ORD-020)
+
+### ORDER-013
+Lista ordine: standard `2x` → `[+]` → `3x` sullo stesso `orderItemId`, stessa `createdSequence`, stessi snapshot; unit price invariato.
+
+### ORDER-014
+Lista ordine: standard `2x` → `[-]` → `1x` sullo stesso `orderItemId`; nessuna eliminazione.
+
+### ORDER-015
+Lista ordine: `quantity = 1` → `[-]` disabilitato/non azionabile → nessuna mutazione; la riga resta.
+
+### ORDER-016
+Lista ordine: riga customized cambia quantità → stesse Addition/Removal/Note/manual price/snapshot/`createdSequence`; cambia solo `quantity`; `finalUnitPrice` invariato; `lineTotal = finalUnitPrice * quantity`.
+
+### ORDER-017
+`RIMUOVI` su riga standard → conferma → riga assente; `orders` resta; `updatedAt` aggiornato.
+
+### ORDER-018
+`RIMUOVI` su riga customized con Addition e Removal → conferma → riga e child assenti; nessun orphan in `order_item_additions` / `order_item_removals`.
+
+### ORDER-019
+Dialog `Rimuovere questa riga?` → `ANNULLA` → nessuna scrittura; riga e children invariati.
+
+### ORDER-020
+`RIMUOVI` sull'unica riga del DRAFT → conferma → DRAFT esistente ma vuoto; la row `orders` non viene eliminata automaticamente.
+
+### ORDER-021
+`changeQuantity` / `removeOrderItem` con item di un altro order → ownership failure; nessuna scrittura.
+
+### ORDER-022
+Mutation ORD-020 su order `ACCEPTED` → rifiutata; struttura invariata.
+
+### ORDER-023
+Ogni mutation ORD-020 riuscita aggiorna `orders.updatedAt` tramite `ClockProvider`.
+
+### ORDER-024
+Dopo `RIMUOVI` confermato non restano child orphan per l'item eliminato.
+
+### ORDER-025
+Cambio quantità o rimozione persistiti → kill/reopen processo → stesso stato Room (DRAFT, items, children, prezzi).
+
 ## 9. Draft
 
 ### DRAFT-001

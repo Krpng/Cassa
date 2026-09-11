@@ -53,8 +53,8 @@ Duplicazione ordine storico con DRAFT esistente:
 
 Ogni modifica significativa deve essere persistita subito:
 - aggiunta prodotto;
-- rimozione;
-- quantità;
+- rimozione riga ordine;
+- quantità (inclusi `+`/`-` dalla lista ordine);
 - aggiunte;
 - rimozioni ingredienti;
 - nota;
@@ -64,6 +64,8 @@ Ogni modifica significativa deve essere persistita subito:
 Room è la source of truth.
 
 Non mantenere un carrello solo in memoria in attesa di un "salva".
+
+I controlli quantità `+`/`-` della lista ordine persistono immediatamente: non richiedono apertura del dettaglio né `SALVA`.
 
 ## 4. Categorie
 
@@ -142,6 +144,54 @@ Se l'utente imposta quantità 2 all'interno della stessa personalizzazione:
 ```
 resta una riga quantità 2.
 
+### Cambio quantità dalla lista ordine (ORD-020)
+
+Sulla schermata ordine, ogni riga del DRAFT espone `[-] quantity [+]`.
+
+Regole:
+- `quantity` persistita deve restare `>= 1`;
+- `[+]` → `quantity = quantity + 1`;
+- `[-]` con `quantity > 1` → `quantity = quantity - 1`;
+- `[-]` con `quantity = 1` → nessuna mutazione; il controllo è disabilitato/non azionabile;
+- `quantity = 0` non è uno stato valido;
+- il decremento `1 → 0` **non** significa eliminazione della riga.
+
+Il cambio quantità opera sulla stessa `order_item`:
+- stesso `orderItemId`;
+- stesso `createdSequence`;
+- stessi snapshot;
+- per riga customized: stesse Addition, Removal, Note, manual price;
+- nessuna nuova riga, nessuno split, nessun merge;
+- nessun ricalcolo del prezzo unitario dal catalogo live.
+
+Campi unitari conservati invariati:
+- `baseUnitPriceCents`
+- `automaticExtrasTotalCents`
+- `manualUnitPriceCents`
+- `finalUnitPriceCents`
+
+`lineTotal = finalUnitPrice * quantity` con le primitive `Money`/`Long` esistenti.
+
+Questo flusso lista è distinto dall'editor dettaglio e non usa `AggregatedPizzaEditScope`.
+
+### Rimozione riga dalla lista ordine (ORD-020)
+
+L'eliminazione di una riga avviene solo tramite azione esplicita `RIMUOVI`, mai tramite `quantity = 0`.
+
+Dopo conferma:
+- elimina atomicamente `order_item_additions`, `order_item_removals` e `order_item` appartenenti alla riga, secondo lo schema reale (cascade o delete espliciti dei child; nessun child orfano);
+- aggiorna `orders.updatedAt` tramite `ClockProvider`;
+- non elimina automaticamente la row `orders` anche se resta senza items.
+
+Un DRAFT senza items resta un DRAFT vuoto e segue le regole Home/recovery già esistenti.
+
+Guard obbligatori a repository/domain:
+- order esistente;
+- item esistente;
+- item appartenente all'order;
+- `order.status == DRAFT`;
+- `ACCEPTED` immutabile.
+
 ## 8. Modifica una / tutte
 
 Solo caso ufficialmente richiesto:
@@ -164,6 +214,14 @@ Se l'utente vuole personalizzarla:
 - applica la personalizzazione all'intera riga.
 
 Per Frittura/Bibita, eventuali note/prezzo manuale sono proprietà dell'intera riga aggregata nel v1.
+
+### Fuori scope ORD-020 — `MODIFICA UNA` + cambio quantità nell'editor
+
+Il caso editor pizza aggregata → `MODIFICA UNA` → cambio quantità nello stesso form **non** appartiene a ORD-020.
+
+Comportamento conservativo corrente preservato: il salvataggio con quantità modificata in quello scope viene rifiutato.
+
+Non è una business rule generale definitiva. Il `+/-` della lista ordine è un flusso differente.
 
 ## 9. Aggiunte
 
