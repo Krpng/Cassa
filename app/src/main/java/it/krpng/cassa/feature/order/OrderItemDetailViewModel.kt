@@ -40,6 +40,11 @@ data class PizzaRemovalOption(
     val isSelected: Boolean,
 )
 
+enum class AggregatedPizzaEditScope {
+    MODIFY_ONE,
+    MODIFY_ALL,
+}
+
 data class OrderItemDetailUiState(
     val isLoading: Boolean = true,
     val canSave: Boolean = false,
@@ -60,6 +65,8 @@ data class OrderItemDetailUiState(
     val removalMessage: String? = null,
     val automaticExtrasPricingEnabled: Boolean = false,
     val hasExistingNonModifierCustomization: Boolean = false,
+    val showAggregatedPizzaEditPrompt: Boolean = false,
+    val aggregatedPizzaEditScope: AggregatedPizzaEditScope? = null,
     val showQuantityIncreaseConfirmation: Boolean = false,
     val isSaving: Boolean = false,
     val isSaved: Boolean = false,
@@ -197,6 +204,32 @@ class OrderItemDetailViewModel @Inject constructor(
         _uiState.update { state -> state.copy(showQuantityIncreaseConfirmation = false) }
     }
 
+    fun selectModifyOne() {
+        _uiState.update { state ->
+            if (!state.showAggregatedPizzaEditPrompt || state.isSaving) return@update state
+            state.copy(
+                showAggregatedPizzaEditPrompt = false,
+                aggregatedPizzaEditScope = AggregatedPizzaEditScope.MODIFY_ONE,
+                errorMessage = null,
+            ).withModifierAvailability()
+        }
+    }
+
+    fun selectModifyAll() {
+        _uiState.update { state ->
+            if (!state.showAggregatedPizzaEditPrompt || state.isSaving) return@update state
+            state.copy(
+                showAggregatedPizzaEditPrompt = false,
+                aggregatedPizzaEditScope = AggregatedPizzaEditScope.MODIFY_ALL,
+                errorMessage = null,
+            ).withModifierAvailability()
+        }
+    }
+
+    fun cancelAggregatedPizzaEdit() {
+        _uiState.update { state -> state.copy(showAggregatedPizzaEditPrompt = false) }
+    }
+
     fun confirmQuantityIncrease() {
         val state = _uiState.value
         if (!state.showQuantityIncreaseConfirmation || state.isSaving) return
@@ -315,6 +348,12 @@ class OrderItemDetailViewModel @Inject constructor(
             item.manualUnitPrice != null ||
             item.additions.any { addition -> addition.additionId == null } ||
             item.removals.any { removal -> removal.ingredientId == null }
+        val isStandardAggregatedPizza = isPizza &&
+            item.quantity > 1 &&
+            item.additions.isEmpty() &&
+            item.removals.isEmpty() &&
+            !hasExistingNonModifierCustomization
+        val shouldShowAggregatedPrompt = !fieldsInitialized && isStandardAggregatedPizza
         val options = if (isPizza) {
             activeAdditions.map { addition ->
                 PizzaAdditionOption(
@@ -373,6 +412,8 @@ class OrderItemDetailViewModel @Inject constructor(
                 selectedRemovalIngredientIds = selectedRemovalIds,
                 automaticExtrasPricingEnabled = item.automaticExtrasPricingSnapshot,
                 hasExistingNonModifierCustomization = hasExistingNonModifierCustomization,
+                showAggregatedPizzaEditPrompt = current.showAggregatedPizzaEditPrompt ||
+                    shouldShowAggregatedPrompt,
             )
             val initialized = if (fieldsInitialized) {
                 common
@@ -393,8 +434,18 @@ class OrderItemDetailViewModel @Inject constructor(
         quantityIncreaseConfirmed: Boolean = false,
     ) {
         val state = _uiState.value
+        if (state.aggregatedPizzaEditScope == AggregatedPizzaEditScope.MODIFY_ONE) {
+            _uiState.update { current ->
+                current.copy(
+                    errorMessage =
+                        "La modifica di una sola pizza richiede la separazione della riga.",
+                )
+            }
+            return
+        }
         if (
             !quantityIncreaseConfirmed &&
+            state.aggregatedPizzaEditScope != AggregatedPizzaEditScope.MODIFY_ALL &&
             fields.quantity > state.originalQuantity &&
             state.category == ProductCategory.PIZZA &&
             (state.selectedAdditionIds.isNotEmpty() ||
@@ -437,7 +488,11 @@ class OrderItemDetailViewModel @Inject constructor(
                     } else {
                         null
                     },
-                    customizationQuantityIntent = if (quantityIncreaseConfirmed) {
+                    customizationQuantityIntent = if (
+                        quantityIncreaseConfirmed ||
+                        _uiState.value.aggregatedPizzaEditScope ==
+                        AggregatedPizzaEditScope.MODIFY_ALL
+                    ) {
                         CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED
                     } else {
                         CustomizationQuantityIntent.KEEP_CURRENT_SCOPE
@@ -548,10 +603,18 @@ class OrderItemDetailViewModel @Inject constructor(
         val hasCustomization = selectedAdditionIds.isNotEmpty() ||
             selectedRemovalIngredientIds.isNotEmpty() ||
             hasExistingNonModifierCustomization
-        val canEditModifiers = quantity == 1 || hasCustomization
+        val canEditModifiers = quantity == 1 ||
+            hasCustomization ||
+            aggregatedPizzaEditScope != null
         val quantityMessage = if (isUncustomizedMultiple) {
-            "Questa riga contiene $quantity pizze. Le personalizzazioni possono essere " +
-                "modificate da questa schermata solo quando la quantità è 1."
+            when (aggregatedPizzaEditScope) {
+                AggregatedPizzaEditScope.MODIFY_ONE ->
+                    "Hai scelto di personalizzare una sola delle $quantity pizze."
+                AggregatedPizzaEditScope.MODIFY_ALL ->
+                    "Le personalizzazioni saranno applicate a tutte le $quantity pizze."
+                null ->
+                    "Questa riga contiene $quantity pizze. Scegli se modificarne una o tutte."
+            }
         } else {
             null
         }

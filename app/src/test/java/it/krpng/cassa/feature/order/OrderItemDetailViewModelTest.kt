@@ -304,8 +304,9 @@ class OrderItemDetailViewModelTest {
             assertFalse(aggregatedViewModel.uiState.value.canEditAdditions)
             assertTrue(
                 aggregatedViewModel.uiState.value.additionMessage.orEmpty()
-                    .contains("contiene 2 pizze"),
+                    .contains("Scegli se modificarne una o tutte"),
             )
+            assertTrue(aggregatedViewModel.uiState.value.showAggregatedPizzaEditPrompt)
 
             aggregatedViewModel.updateQuantity("1")
             assertTrue(aggregatedViewModel.uiState.value.canEditAdditions)
@@ -326,6 +327,117 @@ class OrderItemDetailViewModelTest {
                 deferredViewModel.uiState.value.additionMessage.orEmpty()
                     .contains("non modificano automaticamente il prezzo"),
             )
+        }
+
+    @Test
+    fun `aggregated standard pizza prompt exposes explicit scopes and cancel never writes`() =
+        runTest(dispatcher) {
+            fun standardDraft() = draft().copy(
+                items = draft().items.map { item ->
+                    item.copy(
+                        quantity = 3,
+                        note = null,
+                        automaticExtrasTotal = Money.ZERO,
+                        finalUnitPrice = item.baseUnitPrice,
+                    )
+                },
+            )
+
+            val cancelledRepository = FakeOrderRepository(standardDraft())
+            val cancelled = viewModel(cancelledRepository)
+            advanceUntilIdle()
+
+            assertTrue(cancelled.uiState.value.showAggregatedPizzaEditPrompt)
+            assertNull(cancelled.uiState.value.aggregatedPizzaEditScope)
+            cancelled.cancelAggregatedPizzaEdit()
+
+            assertFalse(cancelled.uiState.value.showAggregatedPizzaEditPrompt)
+            assertTrue(cancelledRepository.updates.isEmpty())
+
+            val modifyOneRepository = FakeOrderRepository(standardDraft())
+            val modifyOne = viewModel(
+                modifyOneRepository,
+                additionRepository = FakeAdditionRepository(listOf(addition(10, "Provola", 150))),
+            )
+            advanceUntilIdle()
+            modifyOne.selectModifyOne()
+            modifyOne.toggleAddition(10)
+            modifyOne.save()
+            advanceUntilIdle()
+
+            assertEquals(
+                AggregatedPizzaEditScope.MODIFY_ONE,
+                modifyOne.uiState.value.aggregatedPizzaEditScope,
+            )
+            assertTrue(modifyOne.uiState.value.canEditAdditions)
+            assertTrue(modifyOneRepository.updates.isEmpty())
+            assertTrue(
+                modifyOne.uiState.value.errorMessage.orEmpty().contains("separazione della riga"),
+            )
+        }
+
+    @Test
+    fun `modify all customizes the existing aggregated row with explicit apply all intent`() =
+        runTest(dispatcher) {
+            val standard = draft().copy(
+                items = draft().items.map { item ->
+                    item.copy(
+                        quantity = 3,
+                        note = null,
+                        automaticExtrasTotal = Money.ZERO,
+                        finalUnitPrice = item.baseUnitPrice,
+                    )
+                },
+            )
+            val repository = FakeOrderRepository(standard)
+            val viewModel = viewModel(
+                repository,
+                additionRepository = FakeAdditionRepository(listOf(addition(10, "Provola", 150))),
+            )
+            advanceUntilIdle()
+
+            viewModel.selectModifyAll()
+            viewModel.toggleAddition(10)
+            viewModel.updateNote("Ben cotta")
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertFalse(viewModel.uiState.value.showAggregatedPizzaEditPrompt)
+            assertEquals(
+                AggregatedPizzaEditScope.MODIFY_ALL,
+                viewModel.uiState.value.aggregatedPizzaEditScope,
+            )
+            assertTrue(viewModel.uiState.value.canEditAdditions)
+            assertTrue(viewModel.uiState.value.isSaved)
+            assertEquals(1, repository.updates.size)
+            assertEquals("item-id", repository.updates.single().itemId)
+            assertEquals(3, repository.updates.single().quantity)
+            assertEquals(listOf(10L), repository.updates.single().selectedAdditionIds)
+            assertEquals(
+                CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
+                repository.updates.single().customizationQuantityIntent,
+            )
+        }
+
+    @Test
+    fun `customized multiple and non pizza do not show the one all prompt`() =
+        runTest(dispatcher) {
+            val customized = viewModel(FakeOrderRepository(draftWithAddition(quantity = 2)))
+            advanceUntilIdle()
+            assertFalse(customized.uiState.value.showAggregatedPizzaEditPrompt)
+
+            val drinkOrder = draft().copy(
+                items = draft().items.map { item ->
+                    item.copy(
+                        categorySnapshot = ProductCategory.BIBITA,
+                        quantity = 3,
+                        note = null,
+                    )
+                },
+            )
+            val drink = viewModel(FakeOrderRepository(drinkOrder))
+            advanceUntilIdle()
+            assertFalse(drink.uiState.value.showAggregatedPizzaEditPrompt)
         }
 
     @Test

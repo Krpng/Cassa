@@ -483,4 +483,50 @@ class OrderItemDetailScreenTest {
         composeRule.onNodeWithText("CONTINUA").performClick()
         composeRule.runOnIdle { assertEquals(1, continued) }
     }
+
+    @Test
+    fun aggregatedStandardPizzaPromptOffersOneAllAndCancelActions() {
+        var cancelled = 0
+        var modifyOne = 0
+        var modifyAll = 0
+        composeRule.setContent {
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = true,
+                        productName = "Margherita",
+                        automaticUnitPrice = Money.ofCents(700),
+                        quantityInput = "3",
+                        originalQuantity = 3,
+                        category = ProductCategory.PIZZA,
+                        showAggregatedPizzaEditPrompt = true,
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                    onCancelAggregatedPizzaEdit = { cancelled += 1 },
+                    onModifyOne = { modifyOne += 1 },
+                    onModifyAll = { modifyAll += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Vuoi modificare una pizza o tutte?").assertIsDisplayed()
+        composeRule.onNodeWithText("MODIFICA UNA").assertIsEnabled().performClick()
+        composeRule.onNodeWithText("MODIFICA TUTTE").assertIsEnabled().performClick()
+        composeRule.onNodeWithText("ANNULLA").assertIsEnabled().performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(1, modifyOne)
+            assertEquals(1, modifyAll)
+            assertEquals(1, cancelled)
+        }
+    }
 }

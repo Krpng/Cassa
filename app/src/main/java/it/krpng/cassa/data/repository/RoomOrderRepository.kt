@@ -455,12 +455,17 @@ class RoomOrderRepository @Inject constructor(
                 !requestedNote.isNullOrBlank() ||
                 requestedManualUnitPrice != null
 
-        if (
-            existing.item.quantity > 1 &&
-            requestedQuantity > 1 &&
-            (modifierSelectionChanged || (!existingCustomization && resultingCustomization))
-        ) {
-            return UpdateOrderItemResult.AmbiguousPizzaQuantity
+        if (existing.item.quantity > 1 && requestedQuantity > 1) {
+            if (existingCustomization && modifierSelectionChanged) {
+                return UpdateOrderItemResult.AmbiguousPizzaQuantity
+            }
+            if (
+                !existingCustomization &&
+                resultingCustomization &&
+                intent != CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED
+            ) {
+                return UpdateOrderItemResult.AmbiguousPizzaQuantity
+            }
         }
         if (
             requestedQuantity > existing.item.quantity &&

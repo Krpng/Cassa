@@ -674,7 +674,7 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
-    fun standardOneCanBecomeCustomizedMultipleAfterConfirmationButStandardTwoCannot() =
+    fun standardOneNeedsConfirmationAndStandardTwoCanModifyAllWithExplicitScope() =
         runBlocking {
             val draft = (repository.createDraft() as CreateDraftResult.Created).draft
             database.productDao().insert(product(41, "Margherita", ProductCategory.PIZZA, 700))
@@ -733,7 +733,7 @@ class RoomOrderRepositoryTest {
             assertEquals(1_000L, customized.finalUnitPrice.cents)
 
             assertSame(
-                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+                UpdateOrderItemResult.Updated,
                 repository.updateOrderItem(
                     orderId = draft.id,
                     orderItemId = aggregatedItemId,
@@ -748,7 +748,8 @@ class RoomOrderRepositoryTest {
             val aggregated = requireNotNull(repository.getById(draft.id)).items
                 .single { it.id == aggregatedItemId }
             assertEquals(2, aggregated.quantity)
-            assertTrue(aggregated.additions.isEmpty())
+            assertEquals(listOf(acciugheId), aggregated.additions.map { it.additionId })
+            assertEquals(2, requireNotNull(repository.getById(draft.id)).items.size)
         }
 
     @Test

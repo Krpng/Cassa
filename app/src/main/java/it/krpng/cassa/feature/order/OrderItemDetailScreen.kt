@@ -69,6 +69,12 @@ fun OrderItemDetailRoute(
         onRemovalToggled = viewModel::toggleRemoval,
         onCancelQuantityIncrease = viewModel::cancelQuantityIncrease,
         onConfirmQuantityIncrease = viewModel::confirmQuantityIncrease,
+        onCancelAggregatedPizzaEdit = {
+            viewModel.cancelAggregatedPizzaEdit()
+            onBack()
+        },
+        onModifyOne = viewModel::selectModifyOne,
+        onModifyAll = viewModel::selectModifyAll,
     )
 }
 
@@ -89,6 +95,9 @@ fun OrderItemDetailScreen(
     onRemovalToggled: (Long) -> Unit = {},
     onCancelQuantityIncrease: () -> Unit = {},
     onConfirmQuantityIncrease: () -> Unit = {},
+    onCancelAggregatedPizzaEdit: () -> Unit = {},
+    onModifyOne: () -> Unit = {},
+    onModifyAll: () -> Unit = {},
 ) {
     if (state.isLoading) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -434,6 +443,43 @@ fun OrderItemDetailScreen(
             },
             confirmButton = {
                 TextButton(onClick = onConfirmQuantityIncrease) { Text("CONTINUA") }
+            },
+        )
+    }
+
+    if (state.showAggregatedPizzaEditPrompt) {
+        AlertDialog(
+            onDismissRequest = onCancelAggregatedPizzaEdit,
+            title = { Text("Vuoi modificare una pizza o tutte?") },
+            text = {
+                Text(
+                    "La riga contiene ${state.originalQuantity} pizze standard. " +
+                        "Scegli a quali pizze applicare la personalizzazione.",
+                )
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = onCancelAggregatedPizzaEdit,
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text("ANNULLA")
+                }
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(
+                        onClick = onModifyOne,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text("MODIFICA UNA")
+                    }
+                    TextButton(
+                        onClick = onModifyAll,
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text("MODIFICA TUTTE")
+                    }
+                }
             },
         )
     }

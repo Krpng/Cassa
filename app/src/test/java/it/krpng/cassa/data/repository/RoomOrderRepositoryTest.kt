@@ -842,7 +842,7 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
-    fun `aggregated standard cannot become customized but existing note customization can grow`() =
+    fun `aggregated standard requires explicit all scope and existing note customization can grow`() =
         runTest {
             val aggregatedStandard = orderItemEntity(quantity = 2)
             val blockedDao = FakeOrderDao(
@@ -860,11 +860,32 @@ class RoomOrderRepositoryTest {
                     2,
                     "Ben cotta",
                     null,
+                ),
+            )
+            assertNull(blockedDao.updatedOrderItem)
+
+            val modifyAllDao = FakeOrderDao(
+                fullOrder = fullDraft(
+                    items = listOf(
+                        OrderItemWithModifiers(aggregatedStandard, emptyList(), emptyList()),
+                    ),
+                ),
+            )
+            assertSame(
+                UpdateOrderItemResult.Updated,
+                RoomOrderRepository(modifyAllDao, CountingClock(FIXED_NOW)).updateOrderItem(
+                    "draft-id",
+                    "item-id",
+                    2,
+                    "Ben cotta",
+                    null,
                     customizationQuantityIntent =
                         CustomizationQuantityIntent.APPLY_TO_ALL_UNITS_CONFIRMED,
                 ),
             )
-            assertNull(blockedDao.updatedOrderItem)
+            assertEquals("item-id", modifyAllDao.updatedOrderItem?.id)
+            assertEquals(2, modifyAllDao.updatedOrderItem?.quantity)
+            assertEquals("Ben cotta", modifyAllDao.updatedOrderItem?.note)
 
             val noteCustomized = aggregatedStandard.copy(note = "Ben cotta")
             fun customizedDao() = FakeOrderDao(
@@ -1004,7 +1025,7 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
-    fun `pizza addition guards reject non pizza unavailable and ambiguous split`() =
+    fun `pizza addition guards require an explicit scope for aggregated standard`() =
         runTest {
             fun repositoryFor(item: OrderItemEntity, additions: List<AdditionEntity> = emptyList()) =
                 RoomOrderRepository(
@@ -1044,7 +1065,7 @@ class RoomOrderRepositoryTest {
                 ).updateOrderItem("draft-id", "item-id", 2, null, null, listOf(10)),
             )
             assertSame(
-                UpdateOrderItemResult.AmbiguousPizzaQuantity,
+                UpdateOrderItemResult.Updated,
                 repositoryFor(
                     orderItemEntity(2),
                     listOf(additionEntity(10, "Provola", null, 150)),
