@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -317,6 +318,7 @@ class NewOrderScreenTest {
         var selectedFilter: OrderCatalogFilter? = null
         composeRule.setContent {
             val query = remember { mutableStateOf("") }
+            val mode = remember { mutableStateOf(NewOrderWorkspaceMode.MAIN) }
             MaterialTheme {
                 NewOrderScreen(
                     state = readyState(
@@ -325,12 +327,21 @@ class NewOrderScreenTest {
                                 productId = 1,
                                 name = "Quattro formaggi",
                                 price = it.krpng.cassa.core.money.Money.ofCents(900),
-                                matchedIngredient = "Parmigiano Reggiano",
+                                matchedIngredient = if (mode.value == NewOrderWorkspaceMode.SEARCH) {
+                                    "Parmigiano Reggiano"
+                                } else {
+                                    null
+                                },
                             ),
                         ),
-                    ).copy(searchQuery = query.value),
+                    ).copy(
+                        searchQuery = query.value,
+                        workspaceMode = mode.value,
+                    ),
                     onBack = {},
                     onRetry = {},
+                    onOpenSearch = { mode.value = NewOrderWorkspaceMode.SEARCH },
+                    onCloseSearch = { mode.value = NewOrderWorkspaceMode.MAIN },
                     onSearchQueryChanged = {
                         enteredQuery = it
                         query.value = it
@@ -347,6 +358,8 @@ class NewOrderScreenTest {
         composeRule.onNodeWithText("PIZZE").assertIsDisplayed()
         composeRule.onNodeWithText("FRITTURA").assertIsDisplayed()
         composeRule.onNodeWithText("BIBITE").performClick()
+        composeRule.onNodeWithContentDescription("Cerca prodotti").performClick()
+        composeRule.onNodeWithText("Cerca prodotto").assertIsDisplayed()
         composeRule.onNodeWithText("Quattro formaggi").assertIsDisplayed()
         composeRule.onNodeWithText("Contiene: Parmigiano Reggiano").assertIsDisplayed()
         composeRule.onNodeWithText("9,00 €").assertIsDisplayed()
@@ -445,7 +458,7 @@ class NewOrderScreenTest {
     }
 
     @Test
-    fun customizedPizzaRowExposesPersonalizzataSemanticsWithoutChangingStandardRows() {
+    fun order073_customizedPizzaRowExposesPersonalizzataSemanticsWithoutChangingStandardRows() {
         composeRule.setContent {
             MaterialTheme {
                 NewOrderScreen(
@@ -501,7 +514,97 @@ class NewOrderScreenTest {
     }
 
     @Test
+    fun order066_systemBackFromNoteOverlayCancelsWithoutSave() {
+        var cancelClicks = 0
+        var saveClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState().copy(
+                        noteOverlayOpen = true,
+                        generalNoteEditor = "Modifica locale",
+                        canSaveGeneralNote = true,
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onCancelNote = { cancelClicks += 1 },
+                    onSaveGeneralNote = { saveClicks += 1 },
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("NOTA ORDINE").assertIsDisplayed()
+        composeRule.activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.runOnIdle {
+            assertEquals(1, cancelClicks)
+            assertEquals(0, saveClicks)
+        }
+    }
+
+    @Test
+    fun order068_systemBackFromSearchReturnsToOrder() {
+        var closeSearch = 0
+        var backClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState().copy(workspaceMode = NewOrderWorkspaceMode.SEARCH),
+                    onBack = { backClicks += 1 },
+                    onRetry = {},
+                    onCloseSearch = { closeSearch += 1 },
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Cerca prodotto").assertIsDisplayed()
+        composeRule.activity.onBackPressedDispatcher.onBackPressed()
+        composeRule.runOnIdle {
+            assertEquals(1, closeSearch)
+            assertEquals(0, backClicks)
+        }
+    }
+
+    @Test
     fun generalNoteSectionExposesMultilineEditorAndExplicitSave() {
+        composeRule.setContent {
+            val overlayOpen = remember { mutableStateOf(false) }
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState().copy(noteOverlayOpen = overlayOpen.value),
+                    onBack = {},
+                    onRetry = {},
+                    onOpenNote = { overlayOpen.value = true },
+                    onCancelNote = { overlayOpen.value = false },
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("NOTA ORDINE").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Nota ordine").performClick()
+        composeRule.onNodeWithText("NOTA ORDINE").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Nota generale dell'ordine").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Salva nota ordine").assertIsDisplayed()
+        composeRule.onNodeWithText("SALVA").assertIsDisplayed()
+        composeRule.onNodeWithText("ANNULLA").assertIsDisplayed()
+    }
+
+    @Test
+    fun order059_mainScreenHasNoInlineNoteEditor() {
         composeRule.setContent {
             MaterialTheme {
                 NewOrderScreen(
@@ -517,10 +620,296 @@ class NewOrderScreenTest {
             }
         }
 
+        composeRule.onNodeWithContentDescription("Nota generale dell'ordine").assertDoesNotExist()
+        composeRule.onNodeWithText("SALVA NOTA").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Nota ordine").assertIsDisplayed()
+    }
+
+    @Test
+    fun order060_mainScreenHasNoInlineSearchField() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Ricerca prodotti e ingredienti")
+            .assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Cerca prodotti").assertIsDisplayed()
+        composeRule.onNodeWithText("TUTTI").assertIsDisplayed()
+        composeRule.onNodeWithText("TOTALE").assertIsDisplayed()
+    }
+
+    @Test
+    fun order061_062_063_noteOverlayOpenCancelAndPersistedValue() {
+        var cancelClicks = 0
+        var noteChanges = 0
+        composeRule.setContent {
+            val overlayOpen = remember { mutableStateOf(true) }
+            val editor = remember { mutableStateOf("Consegna alle 21") }
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState().copy(
+                        noteOverlayOpen = overlayOpen.value,
+                        generalNoteEditor = editor.value,
+                        persistedGeneralNote = "Consegna alle 21",
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onCancelNote = {
+                        cancelClicks += 1
+                        overlayOpen.value = false
+                    },
+                    onGeneralNoteChanged = {
+                        noteChanges += 1
+                        editor.value = it
+                    },
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
         composeRule.onNodeWithText("NOTA ORDINE").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Nota generale dell'ordine").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Salva nota ordine").assertIsDisplayed()
-        composeRule.onNodeWithText("SALVA NOTA").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Nota generale dell'ordine")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("ANNULLA").performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, cancelClicks)
+            assertEquals(0, noteChanges)
+        }
+    }
+
+    @Test
+    fun order064_065_noteSaveAndFailureKeepOverlaySemantics() {
+        var saveClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState().copy(
+                        noteOverlayOpen = true,
+                        generalNoteEditor = "Testo locale",
+                        canSaveGeneralNote = true,
+                        generalNoteError = "Impossibile salvare la nota ordine. Riprova.",
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSaveGeneralNote = { saveClicks += 1 },
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Testo locale").assertIsDisplayed()
+        composeRule.onNodeWithText("Impossibile salvare la nota ordine. Riprova.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("NOTA ORDINE").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Salva nota ordine").performClick()
+        composeRule.runOnIdle { assertEquals(1, saveClicks) }
+    }
+
+    @Test
+    fun order067_068_searchDedicatedViewAndBack() {
+        var closeSearch = 0
+        composeRule.setContent {
+            val mode = remember { mutableStateOf(NewOrderWorkspaceMode.SEARCH) }
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        catalogItems = listOf(
+                            OrderCatalogItem(
+                                productId = 1,
+                                name = "Margherita",
+                                price = it.krpng.cassa.core.money.Money.ofCents(700),
+                            ),
+                        ),
+                    ).copy(workspaceMode = mode.value),
+                    onBack = {},
+                    onRetry = {},
+                    onCloseSearch = {
+                        closeSearch += 1
+                        mode.value = NewOrderWorkspaceMode.MAIN
+                    },
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Cerca prodotto").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ricerca prodotti e ingredienti")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("ORDINE CORRENTE").assertDoesNotExist()
+        composeRule.onNodeWithText("TOTALE").assertDoesNotExist()
+        composeRule.onNodeWithText("TUTTI").assertIsDisplayed()
+        composeRule.onNodeWithText("PIZZE").assertIsDisplayed()
+        composeRule.onNodeWithText("FRITTURA").assertIsDisplayed()
+        composeRule.onNodeWithText("BIBITE").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Indietro").performClick()
+        composeRule.runOnIdle { assertEquals(1, closeSearch) }
+        composeRule.onNodeWithText("ORDINE CORRENTE").assertIsDisplayed()
+        composeRule.onNodeWithText("TOTALE").assertIsDisplayed()
+    }
+
+    @Test
+    fun order070_quickAddFromSearchKeepsSearchOpen() {
+        var quickAdds = 0
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        catalogItems = listOf(
+                            OrderCatalogItem(
+                                productId = 42,
+                                name = "Margherita",
+                                price = it.krpng.cassa.core.money.Money.ofCents(700),
+                            ),
+                        ),
+                    ).copy(
+                        workspaceMode = NewOrderWorkspaceMode.SEARCH,
+                        searchQuery = "mar",
+                        searchSelectedFilter = OrderCatalogFilter.PIZZAS,
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = { quickAdds += 1 },
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Aggiungi Margherita").performClick()
+        composeRule.onNodeWithText("Cerca prodotto").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Ricerca prodotti e ingredienti")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("PIZZE").assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(1, quickAdds) }
+    }
+
+    @Test
+    fun order075_searchViewShowsCategoryFiltersUnderSearchField() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState().copy(workspaceMode = NewOrderWorkspaceMode.SEARCH),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Ricerca prodotti e ingredienti")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("TUTTI").assertIsDisplayed()
+        composeRule.onNodeWithText("PIZZE").assertIsDisplayed()
+        composeRule.onNodeWithText("FRITTURA").assertIsDisplayed()
+        composeRule.onNodeWithText("BIBITE").assertIsDisplayed()
+        composeRule.onNodeWithText("ORDINE CORRENTE").assertDoesNotExist()
+        composeRule.onNodeWithText("TOTALE").assertDoesNotExist()
+    }
+
+    @Test
+    fun order076_searchFilterChipsDispatchIndependentlyFromMain() {
+        var selected: OrderCatalogFilter? = null
+        composeRule.setContent {
+            val searchFilter = remember { mutableStateOf(OrderCatalogFilter.ALL) }
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState().copy(
+                        workspaceMode = NewOrderWorkspaceMode.SEARCH,
+                        selectedFilter = OrderCatalogFilter.FRIED,
+                        searchSelectedFilter = searchFilter.value,
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {
+                        selected = it
+                        searchFilter.value = it
+                    },
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("PIZZE").performClick()
+        composeRule.runOnIdle { assertEquals(OrderCatalogFilter.PIZZAS, selected) }
+    }
+
+    @Test
+    fun order072_074_headerActionsAndOrd020ControlsRemain() {
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        orderLines = listOf(
+                            DraftOrderLine(
+                                itemId = "pizza-id",
+                                quantity = 2,
+                                productName = "Margherita",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(1_400),
+                            ),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("NOTE").assertIsDisplayed()
+        composeRule.onNodeWithText("CERCA").assertIsDisplayed()
+        composeRule.onNodeWithText("← INDIETRO").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Nota ordine").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Cerca prodotti").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Indietro").assertIsDisplayed()
+        listOf("Nota ordine", "Cerca prodotti", "Indietro").forEach { description ->
+            val bounds = composeRule.onNodeWithContentDescription(description)
+                .fetchSemanticsNode()
+                .boundsInRoot
+            assertTrue(
+                "Touch target for $description must be >= 48dp",
+                bounds.width >= 48f && bounds.height >= 48f,
+            )
+        }
+        composeRule.onNodeWithContentDescription("Aumenta quantità Margherita").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Diminuisci quantità Margherita")
+            .assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Rimuovi Margherita").assertIsDisplayed()
     }
 
     private fun readyState(

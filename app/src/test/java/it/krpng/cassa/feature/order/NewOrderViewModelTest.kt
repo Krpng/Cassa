@@ -630,6 +630,453 @@ class NewOrderViewModelTest {
     }
 
     @Test
+    fun `ORDER-059 main workspace starts without note overlay or search mode`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(FakeOrderRepository(MutableStateFlow(draft())), "draft-id")
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(NewOrderWorkspaceMode.MAIN, ready.workspaceMode)
+            assertFalse(ready.noteOverlayOpen)
+        }
+
+    @Test
+    fun `ORDER-062 note overlay initializes editor from persisted general note`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(
+                FakeOrderRepository(
+                    MutableStateFlow(draft().copy(generalNote = "Consegna alle 21")),
+                ),
+                "draft-id",
+            )
+            advanceUntilIdle()
+
+            viewModel.openNoteOverlay()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertTrue(ready.noteOverlayOpen)
+            assertEquals("Consegna alle 21", ready.generalNoteEditor)
+            assertEquals("Consegna alle 21", ready.persistedGeneralNote)
+            assertFalse(ready.canSaveGeneralNote)
+        }
+
+    @Test
+    fun `ORDER-063 cancel note overlay discards dirty local edits without write`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(draft().copy(generalNote = "Originale"))
+            val repository = FakeOrderRepository(orders)
+            val viewModel = viewModel(repository, "draft-id")
+            advanceUntilIdle()
+
+            viewModel.openNoteOverlay()
+            viewModel.updateGeneralNoteEditor("Modifica non salvata")
+            advanceUntilIdle()
+            assertTrue((viewModel.uiState.value as NewOrderUiState.Ready).canSaveGeneralNote)
+
+            viewModel.cancelNoteOverlay()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertFalse(ready.noteOverlayOpen)
+            assertEquals("Originale", ready.generalNoteEditor)
+            assertEquals("Originale", ready.persistedGeneralNote)
+            assertFalse(ready.canSaveGeneralNote)
+            assertTrue(repository.updateGeneralNoteCalls.isEmpty())
+            assertEquals("Originale", orders.value?.generalNote)
+        }
+
+    @Test
+    fun `ORDER-064 successful note save closes overlay`() = runTest(mainDispatcher) {
+        val orders = MutableStateFlow<Order?>(draft())
+        val repository = FakeOrderRepository(orders)
+        val viewModel = viewModel(repository, "draft-id")
+        advanceUntilIdle()
+
+        viewModel.openNoteOverlay()
+        viewModel.updateGeneralNoteEditor("  Consegna alle 21  ")
+        advanceUntilIdle()
+        viewModel.saveGeneralNote()
+        advanceUntilIdle()
+
+        val ready = viewModel.uiState.value as NewOrderUiState.Ready
+        assertFalse(ready.noteOverlayOpen)
+        assertEquals("Consegna alle 21", ready.persistedGeneralNote)
+        assertEquals("Consegna alle 21", ready.generalNoteEditor)
+        assertEquals(
+            listOf("draft-id" to "  Consegna alle 21  "),
+            repository.updateGeneralNoteCalls,
+        )
+    }
+
+    @Test
+    fun `ORDER-065 note save failure keeps overlay open and local text`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(draft())
+            val repository = FakeOrderRepository(orders).apply {
+                updateGeneralNoteResult = UpdateGeneralNoteResult.PersistenceFailure
+            }
+            val viewModel = viewModel(repository, "draft-id")
+            advanceUntilIdle()
+
+            viewModel.openNoteOverlay()
+            viewModel.updateGeneralNoteEditor("Testo locale")
+            advanceUntilIdle()
+            viewModel.saveGeneralNote()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertTrue(ready.noteOverlayOpen)
+            assertEquals("Testo locale", ready.generalNoteEditor)
+            assertTrue(ready.canSaveGeneralNote)
+            assertEquals("Impossibile salvare la nota ordine. Riprova.", ready.generalNoteError)
+            assertNull(orders.value?.generalNote)
+        }
+
+    @Test
+    fun `ORDER-066 dirty note editor is not overwritten while overlay is open`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(draft())
+            val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+            advanceUntilIdle()
+
+            viewModel.openNoteOverlay()
+            viewModel.updateGeneralNoteEditor("Consegna alle 21")
+            advanceUntilIdle()
+
+            orders.value = draft().copy(items = listOf(orderItem()), generalNote = null)
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertTrue(ready.noteOverlayOpen)
+            assertEquals("Consegna alle 21", ready.generalNoteEditor)
+            assertTrue(ready.canSaveGeneralNote)
+        }
+
+    @Test
+    fun `ORDER-067 open search switches to dedicated search workspace`() =
+        runTest(mainDispatcher) {
+            val products = MutableStateFlow(
+                listOf(product(1, "Margherita", ProductCategory.PIZZA)),
+            )
+            val viewModel = viewModel(
+                FakeOrderRepository(MutableStateFlow(draft())),
+                "draft-id",
+                products,
+            )
+            advanceUntilIdle()
+
+            viewModel.selectFilter(OrderCatalogFilter.PIZZAS)
+            viewModel.openSearch()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(NewOrderWorkspaceMode.SEARCH, ready.workspaceMode)
+            assertEquals(OrderCatalogFilter.PIZZAS, ready.selectedFilter)
+            assertEquals(OrderCatalogFilter.ALL, ready.searchSelectedFilter)
+            assertEquals(listOf("Margherita"), ready.catalogItems.map { it.name })
+        }
+
+    @Test
+    fun `ORDER-068 close search returns to main workspace of same draft`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(FakeOrderRepository(MutableStateFlow(draft())), "draft-id")
+            advanceUntilIdle()
+
+            viewModel.openSearch()
+            viewModel.updateSearchQuery("mar")
+            advanceUntilIdle()
+            viewModel.closeSearch()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(NewOrderWorkspaceMode.MAIN, ready.workspaceMode)
+            assertEquals("draft-id", ready.draftId)
+            assertEquals("mar", ready.searchQuery)
+        }
+
+    @Test
+    fun `ORDER-069 search workspace reuses ProductSearchEngine ranking`() =
+        runTest(mainDispatcher) {
+            val products = listOf(
+                product(1, "Pizza Margherita", ProductCategory.PIZZA),
+                product(2, "Marinara", ProductCategory.PIZZA),
+                product(3, "Acqua", ProductCategory.BIBITA),
+            )
+            val viewModel = viewModel(
+                FakeOrderRepository(MutableStateFlow(draft())),
+                "draft-id",
+                MutableStateFlow(products),
+            )
+            advanceUntilIdle()
+
+            viewModel.openSearch()
+            viewModel.updateSearchQuery("  MAR  ")
+            advanceUntilIdle()
+
+            val expected = it.krpng.cassa.domain.search.ProductSearchEngine
+                .search(products, "  MAR  ")
+                .map { it.product.name }
+            assertEquals(
+                expected,
+                (viewModel.uiState.value as NewOrderUiState.Ready).catalogItems.map { it.name },
+            )
+        }
+
+    @Test
+    fun `ORDER-070 quick add from search keeps search workspace open`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(draft())
+            val repository = FakeOrderRepository(orders)
+            val viewModel = viewModel(repository, "draft-id")
+            advanceUntilIdle()
+
+            viewModel.openSearch()
+            viewModel.updateSearchQuery("mar")
+            advanceUntilIdle()
+            viewModel.quickAdd(42)
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(NewOrderWorkspaceMode.SEARCH, ready.workspaceMode)
+            assertEquals("mar", ready.searchQuery)
+            assertEquals(listOf("draft-id" to 42L), repository.quickAddCalls)
+        }
+
+    @Test
+    fun `ORDER-071 returning from search shows persisted quick-add and live total`() =
+        runTest(mainDispatcher) {
+            val orders = MutableStateFlow<Order?>(draft())
+            val viewModel = viewModel(FakeOrderRepository(orders), "draft-id")
+            advanceUntilIdle()
+
+            viewModel.openSearch()
+            advanceUntilIdle()
+            orders.value = draft().copy(
+                items = listOf(orderItem(quantity = 1, unitPriceCents = 700)),
+            )
+            advanceUntilIdle()
+            assertEquals(
+                NewOrderWorkspaceMode.SEARCH,
+                (viewModel.uiState.value as NewOrderUiState.Ready).workspaceMode,
+            )
+
+            viewModel.closeSearch()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(NewOrderWorkspaceMode.MAIN, ready.workspaceMode)
+            assertEquals("Margherita", ready.orderLines.single().productName)
+            assertEquals(OrderTotalResult.Success(Money.ofCents(700)), ready.orderTotal)
+        }
+
+    @Test
+    fun `ORDER-076 open search defaults search category filter to TUTTI`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(FakeOrderRepository(MutableStateFlow(draft())), "draft-id")
+            advanceUntilIdle()
+
+            viewModel.selectFilter(OrderCatalogFilter.FRIED)
+            advanceUntilIdle()
+            viewModel.openSearch()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(OrderCatalogFilter.ALL, ready.searchSelectedFilter)
+            assertEquals(OrderCatalogFilter.FRIED, ready.selectedFilter)
+        }
+
+    @Test
+    fun `ORDER-077 search PIZZE shows only pizza products`() = runTest(mainDispatcher) {
+        val products = MutableStateFlow(
+            listOf(
+                product(1, "Margherita", ProductCategory.PIZZA),
+                product(2, "Crocchè", ProductCategory.FRITTURA),
+                product(3, "Acqua", ProductCategory.BIBITA),
+            ),
+        )
+        val viewModel = viewModel(
+            FakeOrderRepository(MutableStateFlow(draft())),
+            "draft-id",
+            products,
+        )
+        advanceUntilIdle()
+
+        viewModel.openSearch()
+        viewModel.selectFilter(OrderCatalogFilter.PIZZAS)
+        advanceUntilIdle()
+
+        val ready = viewModel.uiState.value as NewOrderUiState.Ready
+        assertEquals(OrderCatalogFilter.PIZZAS, ready.searchSelectedFilter)
+        assertEquals(listOf("Margherita"), ready.catalogItems.map { it.name })
+    }
+
+    @Test
+    fun `ORDER-078 search FRITTURA shows only fried products`() = runTest(mainDispatcher) {
+        val products = MutableStateFlow(
+            listOf(
+                product(1, "Margherita", ProductCategory.PIZZA),
+                product(2, "Crocchè", ProductCategory.FRITTURA),
+                product(3, "Acqua", ProductCategory.BIBITA),
+            ),
+        )
+        val viewModel = viewModel(
+            FakeOrderRepository(MutableStateFlow(draft())),
+            "draft-id",
+            products,
+        )
+        advanceUntilIdle()
+
+        viewModel.openSearch()
+        viewModel.selectFilter(OrderCatalogFilter.FRIED)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("Crocchè"),
+            (viewModel.uiState.value as NewOrderUiState.Ready).catalogItems.map { it.name },
+        )
+    }
+
+    @Test
+    fun `ORDER-079 search BIBITE shows only drink products`() = runTest(mainDispatcher) {
+        val products = MutableStateFlow(
+            listOf(
+                product(1, "Margherita", ProductCategory.PIZZA),
+                product(2, "Crocchè", ProductCategory.FRITTURA),
+                product(3, "Acqua", ProductCategory.BIBITA),
+            ),
+        )
+        val viewModel = viewModel(
+            FakeOrderRepository(MutableStateFlow(draft())),
+            "draft-id",
+            products,
+        )
+        advanceUntilIdle()
+
+        viewModel.openSearch()
+        viewModel.selectFilter(OrderCatalogFilter.DRINKS)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("Acqua"),
+            (viewModel.uiState.value as NewOrderUiState.Ready).catalogItems.map { it.name },
+        )
+    }
+
+    @Test
+    fun `ORDER-080 query and search category filter combine with AND`() =
+        runTest(mainDispatcher) {
+            val pomodoro = ProductIngredient(
+                ingredient = ingredient(10, "Pomodoro"),
+                displayOrder = 0,
+            )
+            val products = listOf(
+                product(
+                    1,
+                    "Margherita",
+                    ProductCategory.PIZZA,
+                    ingredients = listOf(pomodoro),
+                ),
+                product(
+                    2,
+                    "Supplì",
+                    ProductCategory.FRITTURA,
+                    ingredients = listOf(pomodoro),
+                ),
+                product(3, "Succo pomodoro", ProductCategory.BIBITA),
+            )
+            val viewModel = viewModel(
+                FakeOrderRepository(MutableStateFlow(draft())),
+                "draft-id",
+                MutableStateFlow(products),
+            )
+            advanceUntilIdle()
+
+            viewModel.openSearch()
+            viewModel.updateSearchQuery("pomodoro")
+            viewModel.selectFilter(OrderCatalogFilter.PIZZAS)
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(listOf("Margherita"), ready.catalogItems.map { it.name })
+            assertEquals("Pomodoro", ready.catalogItems.single().matchedIngredient)
+
+            val engineOnly = it.krpng.cassa.domain.search.ProductSearchEngine
+                .search(products, "pomodoro")
+                .map { it.product.name }
+            assertTrue(engineOnly.containsAll(listOf("Margherita", "Supplì", "Succo pomodoro")))
+        }
+
+    @Test
+    fun `ORDER-081 search filter change leaves main filter unchanged`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(FakeOrderRepository(MutableStateFlow(draft())), "draft-id")
+            advanceUntilIdle()
+
+            viewModel.selectFilter(OrderCatalogFilter.FRIED)
+            advanceUntilIdle()
+            viewModel.openSearch()
+            viewModel.selectFilter(OrderCatalogFilter.PIZZAS)
+            advanceUntilIdle()
+            viewModel.closeSearch()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(NewOrderWorkspaceMode.MAIN, ready.workspaceMode)
+            assertEquals(OrderCatalogFilter.FRIED, ready.selectedFilter)
+            assertEquals(OrderCatalogFilter.PIZZAS, ready.searchSelectedFilter)
+        }
+
+    @Test
+    fun `ORDER-082 quick add preserves search query and category filter`() =
+        runTest(mainDispatcher) {
+            val repository = FakeOrderRepository(MutableStateFlow(draft()))
+            val viewModel = viewModel(
+                repository,
+                "draft-id",
+                MutableStateFlow(listOf(product(42, "Margherita", ProductCategory.PIZZA))),
+            )
+            advanceUntilIdle()
+
+            viewModel.openSearch()
+            viewModel.updateSearchQuery("mar")
+            viewModel.selectFilter(OrderCatalogFilter.PIZZAS)
+            advanceUntilIdle()
+            viewModel.quickAdd(42)
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(NewOrderWorkspaceMode.SEARCH, ready.workspaceMode)
+            assertEquals("mar", ready.searchQuery)
+            assertEquals(OrderCatalogFilter.PIZZAS, ready.searchSelectedFilter)
+            assertEquals(listOf("draft-id" to 42L), repository.quickAddCalls)
+        }
+
+    @Test
+    fun `ORDER-083 reopen search resets category filter to TUTTI`() =
+        runTest(mainDispatcher) {
+            val viewModel = viewModel(FakeOrderRepository(MutableStateFlow(draft())), "draft-id")
+            advanceUntilIdle()
+
+            viewModel.openSearch()
+            viewModel.selectFilter(OrderCatalogFilter.DRINKS)
+            advanceUntilIdle()
+            assertEquals(
+                OrderCatalogFilter.DRINKS,
+                (viewModel.uiState.value as NewOrderUiState.Ready).searchSelectedFilter,
+            )
+
+            viewModel.closeSearch()
+            advanceUntilIdle()
+            viewModel.openSearch()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as NewOrderUiState.Ready
+            assertEquals(NewOrderWorkspaceMode.SEARCH, ready.workspaceMode)
+            assertEquals(OrderCatalogFilter.ALL, ready.searchSelectedFilter)
+        }
+
+    @Test
     fun `loads the requested draft id and reflects repository emissions without writes`() =
         runTest(mainDispatcher) {
             val orders = MutableStateFlow<Order?>(draft())
@@ -850,7 +1297,9 @@ class NewOrderViewModelTest {
                 draftId = "draft-id",
                 products = products,
             )
+            advanceUntilIdle()
 
+            viewModel.openSearch()
             viewModel.updateSearchQuery("  MAR  ")
             advanceUntilIdle()
             assertEquals(

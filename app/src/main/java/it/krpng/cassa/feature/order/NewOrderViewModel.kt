@@ -48,6 +48,11 @@ enum class OrderCatalogFilter(
     DRINKS("BIBITE", ProductCategory.BIBITA),
 }
 
+enum class NewOrderWorkspaceMode {
+    MAIN,
+    SEARCH,
+}
+
 data class OrderCatalogItem(
     val productId: Long,
     val name: String,
@@ -70,8 +75,11 @@ sealed interface NewOrderUiState {
         val draftId: String,
         val orderLines: List<DraftOrderLine>,
         val orderTotal: OrderTotalResult,
+        val workspaceMode: NewOrderWorkspaceMode = NewOrderWorkspaceMode.MAIN,
+        val noteOverlayOpen: Boolean = false,
         val searchQuery: String,
         val selectedFilter: OrderCatalogFilter,
+        val searchSelectedFilter: OrderCatalogFilter = OrderCatalogFilter.ALL,
         val catalogItems: List<OrderCatalogItem>,
         val quickAddInProgressProductIds: Set<Long> = emptySet(),
         val quickAddError: String? = null,
@@ -107,6 +115,9 @@ class NewOrderViewModel @Inject constructor(
     private val draftId: String = savedStateHandle.get<String>(DRAFT_ID_ARGUMENT).orEmpty()
     private val searchQuery = MutableStateFlow("")
     private val selectedFilter = MutableStateFlow(OrderCatalogFilter.ALL)
+    private val searchSelectedFilter = MutableStateFlow(OrderCatalogFilter.ALL)
+    private val workspaceMode = MutableStateFlow(NewOrderWorkspaceMode.MAIN)
+    private val noteOverlayOpen = MutableStateFlow(false)
     private val quickAddOperation = MutableStateFlow(QuickAddOperationState())
     private val lineMutationOperation = MutableStateFlow(LineMutationOperationState())
     private val generalNoteLocal = MutableStateFlow(GeneralNoteLocalState())
@@ -122,6 +133,9 @@ class NewOrderViewModel @Inject constructor(
 
     fun retry() {
         generalNoteLocal.value = GeneralNoteLocalState()
+        workspaceMode.value = NewOrderWorkspaceMode.MAIN
+        searchSelectedFilter.value = OrderCatalogFilter.ALL
+        noteOverlayOpen.value = false
         observeOrderAndCatalog()
     }
 
@@ -130,7 +144,33 @@ class NewOrderViewModel @Inject constructor(
     }
 
     fun selectFilter(filter: OrderCatalogFilter) {
-        selectedFilter.value = filter
+        when (workspaceMode.value) {
+            NewOrderWorkspaceMode.MAIN -> selectedFilter.value = filter
+            NewOrderWorkspaceMode.SEARCH -> searchSelectedFilter.value = filter
+        }
+    }
+
+    fun openSearch() {
+        if (_uiState.value !is NewOrderUiState.Ready) return
+        searchSelectedFilter.value = OrderCatalogFilter.ALL
+        workspaceMode.value = NewOrderWorkspaceMode.SEARCH
+    }
+
+    fun closeSearch() {
+        workspaceMode.value = NewOrderWorkspaceMode.MAIN
+    }
+
+    fun openNoteOverlay() {
+        if (_uiState.value !is NewOrderUiState.Ready) return
+        generalNoteLocal.update { state ->
+            state.copy(editor = null, error = null)
+        }
+        noteOverlayOpen.value = true
+    }
+
+    fun cancelNoteOverlay() {
+        generalNoteLocal.value = GeneralNoteLocalState()
+        noteOverlayOpen.value = false
     }
 
     fun quickAdd(productId: Long) {
@@ -224,11 +264,14 @@ class NewOrderViewModel @Inject constructor(
             }
             generalNoteLocal.update { state ->
                 when (result) {
-                    UpdateGeneralNoteResult.Updated -> state.copy(
-                        editor = null,
-                        saveInProgress = false,
-                        error = null,
-                    )
+                    UpdateGeneralNoteResult.Updated -> {
+                        noteOverlayOpen.value = false
+                        state.copy(
+                            editor = null,
+                            saveInProgress = false,
+                            error = null,
+                        )
+                    }
                     else -> state.copy(
                         editor = editorSnapshot,
                         saveInProgress = false,
@@ -275,27 +318,46 @@ class NewOrderViewModel @Inject constructor(
                     orderRepository.observeById(draftId),
                     productRepository.observeActive(),
                     searchQuery,
-                    selectedFilter,
+                    combine(selectedFilter, searchSelectedFilter) { mainFilter, searchFilter ->
+                        CatalogFilterState(
+                            mainFilter = mainFilter,
+                            searchFilter = searchFilter,
+                        )
+                    },
                     combine(
                         quickAddOperation,
                         lineMutationOperation,
                         generalNoteLocal,
-                    ) { quickAdd, lineMutation, generalNote ->
-                        Triple(quickAdd, lineMutation, generalNote)
+                        workspaceMode,
+                        noteOverlayOpen,
+                    ) { quickAdd, lineMutation, generalNote, mode, noteOpen ->
+                        WorkspaceObservation(
+                            quickAdd = quickAdd,
+                            lineMutation = lineMutation,
+                            generalNote = generalNote,
+                            mode = mode,
+                            noteOverlayOpen = noteOpen,
+                        )
                     },
-                ) { order, products, query, filter, operations ->
-                    val (quickAdd, lineMutation, generalNote) = operations
+                ) { order, products, query, filters, workspace ->
                     when {
                         order == null -> NewOrderUiState.NotFound
                         order.status != OrderStatus.DRAFT -> NewOrderUiState.NotEditable
                         else -> {
-                            val editor = generalNote.editor ?: order.generalNote.orEmpty()
+                            val editor = workspace.generalNote.editor
+                                ?: order.generalNote.orEmpty()
                             val sortedItems = order.items
                                 .sortedWith(compareBy({ it.createdSequence }, { it.id }))
                             // Live total from persisted items only — never order.total / catalog.
                             val totals = CalculateOrderTotal.fromPersistedItems(sortedItems)
                             val lineTotalById = totals.lineTotals.associate { line ->
                                 line.itemId to line.lineTotal
+                            }
+                            val catalogItems = when (workspace.mode) {
+                                NewOrderWorkspaceMode.MAIN ->
+                                    products.toCatalogItems("", filters.mainFilter)
+                                NewOrderWorkspaceMode.SEARCH ->
+                                    products.toCatalogItems(query, filters.searchFilter)
                             }
                             NewOrderUiState.Ready(
                                 draftId = order.id,
@@ -309,19 +371,25 @@ class NewOrderViewModel @Inject constructor(
                                     )
                                 },
                                 orderTotal = totals.orderTotal,
+                                workspaceMode = workspace.mode,
+                                noteOverlayOpen = workspace.noteOverlayOpen,
                                 searchQuery = query,
-                                selectedFilter = filter,
-                                catalogItems = products.toCatalogItems(query, filter),
-                                quickAddInProgressProductIds = quickAdd.pendingCounts.keys,
-                                quickAddError = quickAdd.error,
-                                lineMutationInProgressItemIds = lineMutation.pendingCounts.keys,
-                                lineMutationError = lineMutation.error,
+                                selectedFilter = filters.mainFilter,
+                                searchSelectedFilter = filters.searchFilter,
+                                catalogItems = catalogItems,
+                                quickAddInProgressProductIds =
+                                    workspace.quickAdd.pendingCounts.keys,
+                                quickAddError = workspace.quickAdd.error,
+                                lineMutationInProgressItemIds =
+                                    workspace.lineMutation.pendingCounts.keys,
+                                lineMutationError = workspace.lineMutation.error,
                                 generalNoteEditor = editor,
                                 persistedGeneralNote = order.generalNote,
-                                canSaveGeneralNote = !generalNote.saveInProgress &&
+                                canSaveGeneralNote = !workspace.generalNote.saveInProgress &&
                                     GeneralNoteNormalizer.normalize(editor) != order.generalNote,
-                                generalNoteSaveInProgress = generalNote.saveInProgress,
-                                generalNoteError = generalNote.error,
+                                generalNoteSaveInProgress =
+                                    workspace.generalNote.saveInProgress,
+                                generalNoteError = workspace.generalNote.error,
                             )
                         }
                     }
@@ -482,4 +550,17 @@ private data class GeneralNoteLocalState(
     val editor: String? = null,
     val saveInProgress: Boolean = false,
     val error: String? = null,
+)
+
+private data class CatalogFilterState(
+    val mainFilter: OrderCatalogFilter,
+    val searchFilter: OrderCatalogFilter,
+)
+
+private data class WorkspaceObservation(
+    val quickAdd: QuickAddOperationState,
+    val lineMutation: LineMutationOperationState,
+    val generalNote: GeneralNoteLocalState,
+    val mode: NewOrderWorkspaceMode,
+    val noteOverlayOpen: Boolean,
 )

@@ -1,5 +1,6 @@
 package it.krpng.cassa.feature.order
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,13 +29,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -44,9 +46,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import it.krpng.cassa.feature.common.CassaBackButton
 import it.krpng.cassa.domain.pricing.OrderTotalResult
 import it.krpng.cassa.ui.theme.customizedPizzaRowBackground
 
@@ -61,6 +64,10 @@ fun NewOrderRoute(
         state = viewModel.uiState.collectAsStateWithLifecycle().value,
         onBack = onBack,
         onRetry = viewModel::retry,
+        onOpenNote = viewModel::openNoteOverlay,
+        onCancelNote = viewModel::cancelNoteOverlay,
+        onOpenSearch = viewModel::openSearch,
+        onCloseSearch = viewModel::closeSearch,
         onSearchQueryChanged = viewModel::updateSearchQuery,
         onFilterSelected = viewModel::selectFilter,
         onProductSelected = onProductSelected,
@@ -85,6 +92,10 @@ fun NewOrderScreen(
     state: NewOrderUiState,
     onBack: () -> Unit,
     onRetry: () -> Unit,
+    onOpenNote: () -> Unit = {},
+    onCancelNote: () -> Unit = {},
+    onOpenSearch: () -> Unit = {},
+    onCloseSearch: () -> Unit = {},
     onSearchQueryChanged: (String) -> Unit,
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
@@ -99,91 +110,207 @@ fun NewOrderScreen(
     onDismissQuickAddError: () -> Unit,
     onDismissLineMutationError: () -> Unit = {},
 ) {
+    val ready = state as? NewOrderUiState.Ready
+    val noteOverlayOpen = ready?.noteOverlayOpen == true
+    val searchMode = ready?.workspaceMode == NewOrderWorkspaceMode.SEARCH
+
+    BackHandler(enabled = noteOverlayOpen) {
+        onCancelNote()
+    }
+    BackHandler(enabled = searchMode && !noteOverlayOpen) {
+        onCloseSearch()
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .safeDrawingPadding()
             .padding(horizontal = 24.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CassaBackButton(onClick = onBack)
-        Text(
-            text = "Nuovo ordine",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-        )
-
-        if (state is NewOrderUiState.Ready) {
-            OrderCatalogContent(
-                state = state,
+        if (ready != null && searchMode) {
+            SearchWorkspaceHeader(onBack = onCloseSearch)
+            Text(
+                text = "Cerca prodotto",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            SearchWorkspaceContent(
+                state = ready,
                 onSearchQueryChanged = onSearchQueryChanged,
                 onFilterSelected = onFilterSelected,
                 onProductSelected = onProductSelected,
-                onOrderItemSelected = onOrderItemSelected,
-                onIncreaseLineQuantity = onIncreaseLineQuantity,
-                onDecreaseLineQuantity = onDecreaseLineQuantity,
-                onRemoveLine = onRemoveLine,
-                onGeneralNoteChanged = onGeneralNoteChanged,
-                onSaveGeneralNote = onSaveGeneralNote,
-                onDismissGeneralNoteError = onDismissGeneralNoteError,
                 onQuickAdd = onQuickAdd,
                 onDismissQuickAddError = onDismissQuickAddError,
-                onDismissLineMutationError = onDismissLineMutationError,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
             )
-            HorizontalDivider()
-            DraftOrderTotalFooter(orderTotal = state.orderTotal)
         } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center,
-            ) {
-                when (state) {
-                    NewOrderUiState.Loading -> CircularProgressIndicator(
-                        modifier = Modifier.semantics {
-                            contentDescription = "Caricamento ordine"
-                        },
+            if (ready != null) {
+                MainOrderHeader(
+                    onNote = onOpenNote,
+                    onSearch = onOpenSearch,
+                    onBack = onBack,
+                )
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    HeaderTextAction(
+                        label = "← INDIETRO",
+                        contentDescription = "Indietro",
+                        onClick = onBack,
                     )
+                }
+            }
+            Text(
+                text = "Nuovo ordine",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+            )
 
-                    NewOrderUiState.NotFound -> ProblemContent(
-                        message = "L'ordine non è più disponibile.",
-                        onRetry = onRetry,
-                    )
+            if (ready != null) {
+                MainOrderContent(
+                    state = ready,
+                    onFilterSelected = onFilterSelected,
+                    onProductSelected = onProductSelected,
+                    onOrderItemSelected = onOrderItemSelected,
+                    onIncreaseLineQuantity = onIncreaseLineQuantity,
+                    onDecreaseLineQuantity = onDecreaseLineQuantity,
+                    onRemoveLine = onRemoveLine,
+                    onQuickAdd = onQuickAdd,
+                    onDismissQuickAddError = onDismissQuickAddError,
+                    onDismissLineMutationError = onDismissLineMutationError,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                )
+                HorizontalDivider()
+                DraftOrderTotalFooter(orderTotal = ready.orderTotal)
+            } else {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    when (state) {
+                        NewOrderUiState.Loading -> CircularProgressIndicator(
+                            modifier = Modifier.semantics {
+                                contentDescription = "Caricamento ordine"
+                            },
+                        )
 
-                    NewOrderUiState.NotEditable -> ProblemContent(
-                        message = "Questo ordine non è una bozza modificabile.",
-                        onRetry = onRetry,
-                    )
+                        NewOrderUiState.NotFound -> ProblemContent(
+                            message = "L'ordine non è più disponibile.",
+                            onRetry = onRetry,
+                        )
 
-                    is NewOrderUiState.Failure -> ProblemContent(
-                        message = state.message,
-                        onRetry = onRetry,
-                    )
+                        NewOrderUiState.NotEditable -> ProblemContent(
+                            message = "Questo ordine non è una bozza modificabile.",
+                            onRetry = onRetry,
+                        )
 
-                    is NewOrderUiState.Ready -> Unit
+                        is NewOrderUiState.Failure -> ProblemContent(
+                            message = state.message,
+                            onRetry = onRetry,
+                        )
+
+                        is NewOrderUiState.Ready -> Unit
+                    }
                 }
             }
         }
     }
+
+    if (ready != null && noteOverlayOpen) {
+        GeneralNoteOverlay(
+            editor = ready.generalNoteEditor,
+            canSave = ready.canSaveGeneralNote,
+            saveInProgress = ready.generalNoteSaveInProgress,
+            error = ready.generalNoteError,
+            onEditorChanged = onGeneralNoteChanged,
+            onCancel = onCancelNote,
+            onSave = onSaveGeneralNote,
+            onDismissError = onDismissGeneralNoteError,
+        )
+    }
 }
 
 @Composable
-private fun OrderCatalogContent(
+private fun MainOrderHeader(
+    onNote: () -> Unit,
+    onSearch: () -> Unit,
+    onBack: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HeaderTextAction(
+            label = "NOTE",
+            contentDescription = "Nota ordine",
+            onClick = onNote,
+        )
+        Box(
+            modifier = Modifier.weight(1f),
+            contentAlignment = Alignment.Center,
+        ) {
+            HeaderTextAction(
+                label = "CERCA",
+                contentDescription = "Cerca prodotti",
+                onClick = onSearch,
+            )
+        }
+        HeaderTextAction(
+            label = "← INDIETRO",
+            contentDescription = "Indietro",
+            onClick = onBack,
+        )
+    }
+}
+
+@Composable
+private fun SearchWorkspaceHeader(onBack: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+    ) {
+        HeaderTextAction(
+            label = "← INDIETRO",
+            contentDescription = "Indietro",
+            onClick = onBack,
+        )
+    }
+}
+
+@Composable
+private fun HeaderTextAction(
+    label: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    TextButton(
+        onClick = onClick,
+        modifier = Modifier
+            .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+            .semantics { this.contentDescription = contentDescription },
+    ) {
+        Text(label)
+    }
+}
+
+@Composable
+private fun MainOrderContent(
     state: NewOrderUiState.Ready,
-    onSearchQueryChanged: (String) -> Unit,
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
     onOrderItemSelected: (String) -> Unit,
     onIncreaseLineQuantity: (String) -> Unit,
     onDecreaseLineQuantity: (String) -> Unit,
     onRemoveLine: (String) -> Unit,
-    onGeneralNoteChanged: (String) -> Unit,
-    onSaveGeneralNote: () -> Unit,
-    onDismissGeneralNoteError: () -> Unit,
     onQuickAdd: (Long) -> Unit,
     onDismissQuickAddError: () -> Unit,
     onDismissLineMutationError: () -> Unit,
@@ -193,21 +320,76 @@ private fun OrderCatalogContent(
         modifier = modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        CurrentOrderContent(
+        CurrentOrderLines(
             orderLines = state.orderLines,
             lineMutationInProgressItemIds = state.lineMutationInProgressItemIds,
-            generalNoteEditor = state.generalNoteEditor,
-            canSaveGeneralNote = state.canSaveGeneralNote,
-            generalNoteSaveInProgress = state.generalNoteSaveInProgress,
-            generalNoteError = state.generalNoteError,
             onOrderItemSelected = onOrderItemSelected,
             onIncreaseLineQuantity = onIncreaseLineQuantity,
             onDecreaseLineQuantity = onDecreaseLineQuantity,
             onRemoveLine = onRemoveLine,
-            onGeneralNoteChanged = onGeneralNoteChanged,
-            onSaveGeneralNote = onSaveGeneralNote,
-            onDismissGeneralNoteError = onDismissGeneralNoteError,
         )
+        CategoryFilterChips(
+            selected = state.selectedFilter,
+            onFilterSelected = onFilterSelected,
+        )
+        state.quickAddError?.let { message ->
+            ErrorBanner(message = message, onDismiss = onDismissQuickAddError)
+        }
+        state.lineMutationError?.let { message ->
+            ErrorBanner(message = message, onDismiss = onDismissLineMutationError)
+        }
+        CatalogList(
+            items = state.catalogItems,
+            emptyMessage = "Nessun prodotto attivo.",
+            quickAddInProgressProductIds = state.quickAddInProgressProductIds,
+            onProductSelected = onProductSelected,
+            onQuickAdd = onQuickAdd,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun CategoryFilterChips(
+    selected: OrderCatalogFilter,
+    onFilterSelected: (OrderCatalogFilter) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(
+            items = OrderCatalogFilter.entries,
+            key = OrderCatalogFilter::name,
+        ) { filter ->
+            FilterChip(
+                selected = filter == selected,
+                onClick = { onFilterSelected(filter) },
+                label = { Text(filter.label) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SearchWorkspaceContent(
+    state: NewOrderUiState.Ready,
+    onSearchQueryChanged: (String) -> Unit,
+    onFilterSelected: (OrderCatalogFilter) -> Unit,
+    onProductSelected: (Long) -> Unit,
+    onQuickAdd: (Long) -> Unit,
+    onDismissQuickAddError: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .imePadding(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         OutlinedTextField(
             value = state.searchQuery,
             onValueChange = onSearchQueryChanged,
@@ -220,118 +402,83 @@ private fun OrderCatalogContent(
             label = { Text("CERCA") },
             singleLine = true,
         )
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        CategoryFilterChips(
+            selected = state.searchSelectedFilter,
+            onFilterSelected = onFilterSelected,
+        )
+        state.quickAddError?.let { message ->
+            ErrorBanner(message = message, onDismiss = onDismissQuickAddError)
+        }
+        CatalogList(
+            items = state.catalogItems,
+            emptyMessage = if (state.searchQuery.isBlank()) {
+                "Nessun prodotto attivo."
+            } else {
+                "Nessun risultato."
+            },
+            quickAddInProgressProductIds = state.quickAddInProgressProductIds,
+            onProductSelected = onProductSelected,
+            onQuickAdd = onQuickAdd,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun CatalogList(
+    items: List<OrderCatalogItem>,
+    emptyMessage: String,
+    quickAddInProgressProductIds: Set<Long>,
+    onProductSelected: (Long) -> Unit,
+    onQuickAdd: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (items.isEmpty()) {
+        Box(
+            modifier = modifier,
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = emptyMessage,
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(
-                items = OrderCatalogFilter.entries,
-                key = OrderCatalogFilter::name,
-            ) { filter ->
-                FilterChip(
-                    selected = filter == state.selectedFilter,
-                    onClick = { onFilterSelected(filter) },
-                    label = { Text(filter.label) },
+                items = items,
+                key = OrderCatalogItem::productId,
+            ) { item ->
+                OrderCatalogResult(
+                    item = item,
+                    onProductSelected = onProductSelected,
+                    onQuickAdd = onQuickAdd,
+                    isQuickAddInProgress = item.productId in quickAddInProgressProductIds,
                 )
-            }
-        }
-        state.quickAddError?.let { message ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = message,
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                TextButton(onClick = onDismissQuickAddError) {
-                    Text("CHIUDI")
-                }
-            }
-        }
-        state.lineMutationError?.let { message ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = message,
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                TextButton(onClick = onDismissLineMutationError) {
-                    Text("CHIUDI")
-                }
-            }
-        }
-        if (state.catalogItems.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = if (state.searchQuery.isBlank()) {
-                        "Nessun prodotto attivo."
-                    } else {
-                        "Nessun risultato."
-                    },
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(
-                    items = state.catalogItems,
-                    key = OrderCatalogItem::productId,
-                ) { item ->
-                    OrderCatalogResult(
-                        item = item,
-                        onProductSelected = onProductSelected,
-                        onQuickAdd = onQuickAdd,
-                        isQuickAddInProgress = item.productId in
-                            state.quickAddInProgressProductIds,
-                    )
-                }
             }
         }
     }
 }
 
 @Composable
-private fun CurrentOrderContent(
+private fun CurrentOrderLines(
     orderLines: List<DraftOrderLine>,
     lineMutationInProgressItemIds: Set<String>,
-    generalNoteEditor: String,
-    canSaveGeneralNote: Boolean,
-    generalNoteSaveInProgress: Boolean,
-    generalNoteError: String?,
     onOrderItemSelected: (String) -> Unit,
     onIncreaseLineQuantity: (String) -> Unit,
     onDecreaseLineQuantity: (String) -> Unit,
     onRemoveLine: (String) -> Unit,
-    onGeneralNoteChanged: (String) -> Unit,
-    onSaveGeneralNote: () -> Unit,
-    onDismissGeneralNoteError: () -> Unit,
 ) {
     var pendingRemovalItemId by remember { mutableStateOf<String?>(null) }
     val pendingRemovalLine = orderLines.firstOrNull { it.itemId == pendingRemovalItemId }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .imePadding(),
+        modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
@@ -419,7 +566,10 @@ private fun CurrentOrderContent(
                                             append("Apri dettaglio riga: ${line.quantity}x ")
                                             append(line.productName)
                                             append(", ")
-                                            append(line.lineTotal?.formatEur() ?: "totale non disponibile")
+                                            append(
+                                                line.lineTotal?.formatEur()
+                                                    ?: "totale non disponibile",
+                                            )
                                             if (line.isCustomizedPizza) {
                                                 append(", personalizzata")
                                             }
@@ -451,57 +601,6 @@ private fun CurrentOrderContent(
                         }
                         HorizontalDivider()
                     }
-                }
-            }
-        }
-
-        Text(
-            text = "NOTA ORDINE",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-        OutlinedTextField(
-            value = generalNoteEditor,
-            onValueChange = onGeneralNoteChanged,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 96.dp)
-                .semantics {
-                    contentDescription = "Nota generale dell'ordine"
-                },
-            minLines = 3,
-            maxLines = 6,
-            keyboardOptions = KeyboardOptions(
-                capitalization = KeyboardCapitalization.Sentences,
-            ),
-            enabled = !generalNoteSaveInProgress,
-        )
-        Button(
-            onClick = onSaveGeneralNote,
-            enabled = canSaveGeneralNote && !generalNoteSaveInProgress,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .semantics {
-                    contentDescription = "Salva nota ordine"
-                },
-        ) {
-            Text(if (generalNoteSaveInProgress) "SALVATAGGIO..." else "SALVA NOTA")
-        }
-        generalNoteError?.let { message ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = message,
-                    modifier = Modifier.weight(1f),
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                TextButton(onClick = onDismissGeneralNoteError) {
-                    Text("CHIUDI")
                 }
             }
         }
@@ -537,6 +636,112 @@ private fun CurrentOrderContent(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun GeneralNoteOverlay(
+    editor: String,
+    canSave: Boolean,
+    saveInProgress: Boolean,
+    error: String?,
+    onEditorChanged: (String) -> Unit,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+    onDismissError: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+                .imePadding()
+                .navigationBarsPadding(),
+            shape = MaterialTheme.shapes.large,
+            tonalElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "NOTA ORDINE",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                OutlinedTextField(
+                    value = editor,
+                    onValueChange = onEditorChanged,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp)
+                        .semantics {
+                            contentDescription = "Nota generale dell'ordine"
+                        },
+                    minLines = 4,
+                    maxLines = 8,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                    ),
+                    enabled = !saveInProgress,
+                )
+                error?.let { message ->
+                    ErrorBanner(message = message, onDismiss = onDismissError)
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = onCancel,
+                        enabled = !saveInProgress,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .semantics { contentDescription = "Annulla nota ordine" },
+                    ) {
+                        Text("ANNULLA")
+                    }
+                    Button(
+                        onClick = onSave,
+                        enabled = canSave && !saveInProgress,
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp)
+                            .semantics { contentDescription = "Salva nota ordine" },
+                    ) {
+                        Text(if (saveInProgress) "SALVATAGGIO..." else "SALVA")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ErrorBanner(
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = message,
+            modifier = Modifier.weight(1f),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        TextButton(onClick = onDismiss) {
+            Text("CHIUDI")
+        }
     }
 }
 
