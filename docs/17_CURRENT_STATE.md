@@ -8,23 +8,36 @@ The normative sources remain, in precedence order, `AGENTS.md`, `docs/00_SOURCE_
 
 ## 2. Last approved production checkpoint
 
-Verified on 2026-09-11:
+Verified on 2026-09-12:
 
 ```yaml
 branch: main
-HEAD: c7a94fd802a6300c76b7b9905624c2d824ad98ab
-HEAD commit: "feat: derive live draft total from persisted items"
-last completed implementation task: ORD-022
+HEAD: 67d599257ce29974447ea2f61a5cac7ea9b2cfad
+HEAD commit: "feat: compact order workspace with search filters"
+last completed implementation task: M5 UX refinement — compact order workspace
 ORD-001..ORD-022: COMPLETE
-ORD block M5: COMPLETE
+ORDER-059..ORDER-074: PASS / COMPLETE
+ORDER-075..ORDER-083: PASS / COMPLETE
+compact workspace refinement: COMPLETE
 custom pizza highlight: COMPLETE
 Demo M5: NOT STARTED
+M5: IN PROGRESS
 M6: NOT STARTED
 origin/main: synchronized
 working tree: clean
 ```
 
-The new agent must verify that `c7a94fd802a6300c76b7b9905624c2d824ad98ab` remains `HEAD` / `origin/main`. Do not rewrite history, and keep each approved backlog task isolated.
+Contract docs for this UX shell:
+
+```text
+3803df3822f24ab33e7273e935c45acac70747ea
+docs: freeze compact order workspace ux
+
+4dfb4c530669d967d353ea9f4ba840009a771f44
+docs: add search category filter contract
+```
+
+The new agent must verify that `67d599257ce29974447ea2f61a5cac7ea9b2cfad` remains `HEAD` / `origin/main`. Do not rewrite history, and keep each approved backlog task isolated.
 
 ## 3. Current milestone
 
@@ -38,7 +51,7 @@ M5 Draft order core: IN PROGRESS
 M6 Preview/acceptance/numbering: NOT STARTED
 ```
 
-Within M5, `ORD-001` through `ORD-022` are complete (ORD block M5 complete), including the post-`ORD-020` customized-pizza row highlight mini-task. `Demo M5` (end-to-end validation) is the next step and has not been started. Do **not** declare M5 COMPLETE until Demo M5 is executed and approved. Do not invent `ORD-023`. Do not begin M6 / NUM / ACCEPT.
+Within M5, `ORD-001` through `ORD-022` are complete (ORD block M5 complete), including the post-`ORD-020` customized-pizza row highlight mini-task and the **M5 UX refinement — compact order workspace** (with SEARCH category filters). `Demo M5` (end-to-end validation) is the next step and has not been started. Do **not** declare M5 COMPLETE until Demo M5 is executed and approved. Do not invent `ORD-023`. Do not begin M6 / NUM / ACCEPT.
 
 ## 4. Completed tasks
 
@@ -49,12 +62,13 @@ Within M5, `ORD-001` through `ORD-022` are complete (ORD block M5 complete), inc
 - `ODS-001..011`: SAF picker, structural ODS parsing, sheet detection, row/price parsing, validation, planning, preview, atomic Room commit, and flag preservation.
 - `ORD-001..022`: draft lifecycle/recovery/conflict handling, order screen, catalog search/actions, persisted quick-add/list/detail, additions/removals, pricing variants, custom-line behavior, the aggregated-pizza edit-scope prompt, the atomic `MODIFICA UNA` split, draft-list quantity change plus explicit line removal, the order-level general note, and the live DRAFT total derived from persisted `order_items`.
 - Post-`ORD-020` UX mini-task: customized pizza rows in the draft list use a soft purple background when the pizza is customized.
+- M5 UX refinement — compact order workspace: COMPLETE (`ORDER-059`..`ORDER-083`), including dedicated SEARCH category filters independent from MAIN.
 
 Relevant additional regression checkpoint:
 
 - `8d4810173847d47afe587f9d189d7b0b8a12b3b7`: safe handling of trailing LibreOffice repeated padding in ODS files.
 
-Tasks after `ORD-022` are not complete unless a later checkpoint explicitly records otherwise. `Demo M5` and M6 are not started.
+Tasks after the compact-workspace UX refinement are not complete unless a later checkpoint explicitly records otherwise. `Demo M5` and M6 are not started. Do not declare M5 COMPLETE.
 
 ## 5. Current next task
 
@@ -294,6 +308,14 @@ The following manual checks were explicitly completed on Samsung `SM-S931B`:
 - TEST 5 PASS: `RIMUOVI` last row → empty DRAFT → `TOTALE 0,00 €`.
 - TEST 6 PASS: `3x` standard → `MODIFICA UNA` → `2x` standard + `1x` custom → total equals exact sum of the two persisted rows; reopen unchanged.
 
+### M5 UX refinement — compact order workspace (Samsung visual)
+
+- TEST VISIVO 1 PASS: MAIN compact; catalog vertical space correct with empty DRAFT and with an order line.
+- TEST VISIVO 2 PASS: `NOTE` overlay; cancel / save / reopen correct.
+- TEST VISIVO 3 PASS: dedicated `CERCA`; quick-add; return to the same DRAFT.
+- TEST VISIVO 4 PASS: system Back from SEARCH and from NOTE overlay.
+- TEST VISIVO 5 PASS: SEARCH filters `TUTTI` / `PIZZE` / `FRITTURA` / `BIBITE`; query + category AND; quick-add preserves query/filter; MAIN and SEARCH independent; reopen SEARCH → `TUTTI`.
+
 Some edge cases are covered by automated tests but were not necessarily repeated manually. Do not describe an automated check as a manual hardware check. In particular, `ORDER-012` transaction rollback is covered by automation and was not provoked manually on the device.
 
 ## 14. Deferred/manual checks still open
@@ -505,16 +527,19 @@ Field:
 - `orders.generalNote` (schema already present; no migration);
 - distinct from `order_items.note`.
 
-UI (New Order / DRAFT):
+UI (New Order / DRAFT) — shell after compact workspace:
 
 ```text
+NOTE → overlay/modal
 NOTA ORDINE
 [multiline]
-[SALVA NOTA]
+[ANNULLA] [SALVA]
 ```
 
-- after order lines, before final total/actions area;
-- explicit save only — no per-keystroke autosave / debounce.
+- header action `NOTE` opens the overlay (inline editor / `SALVA NOTA` removed from MAIN);
+- explicit save only — no per-keystroke autosave / debounce;
+- `ANNULLA` / system Back from overlay: no persistence;
+- `SALVA` uses the existing `UpdateGeneralNote` path.
 
 Normalization:
 
@@ -613,7 +638,65 @@ c7a94fd802a6300c76b7b9905624c2d824ad98ab
 feat: derive live draft total from persisted items
 ```
 
-## 21. Rules for the next coding agent
+## 21. M5 UX refinement — compact order workspace
+
+Completed mini-task after `ORD-022`. Production commit:
+
+```text
+67d599257ce29974447ea2f61a5cac7ea9b2cfad
+feat: compact order workspace with search filters
+```
+
+Automated coverage:
+
+- `ORDER-059`..`ORDER-074`: PASS / COMPLETE
+- `ORDER-075`..`ORDER-083`: PASS / COMPLETE
+
+### MAIN shell
+
+```text
+[ NOTE ]        [ CERCA ]        [ ← INDIETRO ]
+```
+
+- inline general-note editor: removed
+- inline search field: removed
+- categories preserved: `TUTTI` / `PIZZE` / `FRITTURA` / `BIBITE`
+- catalog preserved
+- sticky `TOTALE` preserved (ORD-022)
+- vertical catalog space increased on portrait smartphones
+
+### NOTE
+
+- `NOTE` opens a modal/overlay
+- `generalNote` semantics: ORD-021 unchanged
+- `ANNULLA`: no persistence
+- `SALVA`: existing `UpdateGeneralNote` path
+- save failure: local text preserved; overlay stays open; retry possible
+- system Back from overlay: cancel / no write
+
+### CERCA
+
+- dedicated in-feature `SEARCH` mode
+- no new Navigation destination
+- search field + filters `TUTTI` / `PIZZE` / `FRITTURA` / `BIBITE`
+- search engine: existing implementation reused
+- query + category: AND
+- default SEARCH category: `TUTTI`
+- MAIN category state independent from SEARCH category
+- quick-add preserves SEARCH mode, query, and SEARCH category
+- reopen SEARCH: category resets to `TUTTI`
+- system Back / `INDIETRO`: return to the same DRAFT with MAIN filter unchanged
+
+### Invariants unchanged by this UX shell
+
+- quick-add business behavior: unchanged
+- search ranking: unchanged
+- ORD-020: unchanged
+- ORD-021: unchanged
+- ORD-022: unchanged
+- DB / schema / migration: unchanged
+
+## 22. Rules for the next coding agent
 
 1. Read `AGENTS.md`, `docs/17_CURRENT_STATE.md`, the exact backlog task, linked requirements, linked test plan, and traceability matrix before changing files. Consult `README_CODEX.md` and `docs/11_CODEX_WORKFLOW.md` only for workflow conventions that remain applicable; they are non-normative for Cursor, must not override agent-agnostic instructions, and must not introduce Codex-specific behavior into Cursor work.
 2. Implement one backlog task at a time and stop at its boundary.
@@ -631,29 +714,32 @@ feat: derive live draft total from persisted items
 14. Stop and report if the task contract is contradictory, requires a destructive migration, or would violate an architectural boundary.
 15. Next step is **Demo M5** — M5 end-to-end demo / validation. Do not invent `ORD-023`. Do not begin M6 / NUM / ACCEPT while only updating this handoff document. Do not declare M5 COMPLETE until Demo M5 is executed and approved.
 
-## 22. Verification baseline
+## 23. Verification baseline
 
-Latest verified `ORD-022` baseline:
+Latest verified compact-workspace UX baseline:
 
 ```yaml
-./gradlew.bat test: PASS — 363 JVM
+./gradlew.bat test: PASS — 382 JVM
 ./gradlew.bat assembleDebug: PASS
 ./gradlew.bat assembleDebugAndroidTest: PASS
-./gradlew.bat connectedDebugAndroidTest: PASS — 70 tests on Samsung SM-S931B
+./gradlew.bat connectedDebugAndroidTest: PASS — 81 tests on Samsung SM-S931B
 ./gradlew.bat installDebug: PASS
+manual visual tests 1..5: PASS
 device: Samsung SM-S931B
 app data cleared: NO
+Samsung stay-awake: OFF
 ```
 
-Documented repository state after the approved `ORD-022` production commit:
+Documented repository state after the approved compact-workspace production commit:
 
 ```yaml
-HEAD: c7a94fd802a6300c76b7b9905624c2d824ad98ab
-HEAD commit: "feat: derive live draft total from persisted items"
-last completed production task: ORD-022
-custom pizza highlight: COMPLETE
+HEAD: 67d599257ce29974447ea2f61a5cac7ea9b2cfad
+HEAD commit: "feat: compact order workspace with search filters"
+last completed production task: M5 UX refinement — compact order workspace
 ORD-001..ORD-022: COMPLETE
-ORD block M5: COMPLETE
+ORDER-059..ORDER-083: COMPLETE
+compact workspace refinement: COMPLETE
+custom pizza highlight: COMPLETE
 Demo M5: NOT STARTED
 M5: IN PROGRESS
 M6: NOT STARTED
