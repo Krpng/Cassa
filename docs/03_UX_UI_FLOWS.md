@@ -134,7 +134,7 @@ Obiettivo: liberare spazio verticale per il catalogo su smartphone portrait senz
 `TUTTI | PIZZE | FRITTURA | BIBITE`
 
 Sulla schermata principale i filtri categoria guidano il catalogo inline.
-La ricerca dedicata (`CERCA`) è un percorso aggiuntivo separato e **non** richiede il selettore categorie nella stessa vista (cerca sull'intero catalogo attivo con la logica esistente).
+La vista dedicata `CERCA` ha un **proprio** selettore categorie (stesse etichette), indipendente dal filtro MAIN: vedi sezione *Vista dedicata CERCA*.
 
 ### Catalogo principale (schermata ordine)
 
@@ -230,34 +230,75 @@ Tap `CERCA` apre una vista dedicata alla ricerca (preferire stato/feature locale
 ```text
                         [ ← INDIETRO ]
 
-CERCA / Cerca prodotto
+Cerca prodotto
 [campo ricerca]
+TUTTI | PIZZE | FRITTURA | BIBITE
 [risultati]
 ```
 
-Subito sotto il campo compaiono i prodotti corrispondenti alla query.
+Layout filtri:
+- subito sotto il campo ricerca;
+- subito sopra i risultati;
+- stile e comportamento coerenti con i chip della schermata MAIN;
+- preferire riuso del componente/filtro esistente invece di duplicare UI;
+- la lista risultati continua a occupare tutto lo spazio verticale restante.
 
 In questa vista **non** mostrare:
 - editor general note;
 - lista ordine;
-- selettore categorie;
 - sticky totale;
 
 salvo necessità tecnica/accessibilità non invasiva.
 
-`INDIETRO` (nella vista CERCA):
-- torna alla schermata ordine corrente;
-- stesso DRAFT.
+#### Filtro categoria in CERCA (indipendente da MAIN)
+
+All'apertura di `CERCA`:
+- search category filter = `TUTTI` (default).
+
+Il filtro della vista `CERCA` è **indipendente** dal filtro categoria della schermata MAIN.
+
+Esempio:
+- MAIN = `FRITTURA`;
+- apro `CERCA` → search filter = `TUTTI`;
+- in `CERCA` seleziono `PIZZE`;
+- torno a MAIN → MAIN resta `FRITTURA`.
+
+Riaprendo successivamente `CERCA`:
+- search category filter riparte da `TUTTI`.
+
+Nessuna persistenza DB/DataStore per questo stato UI (solo stato feature/in-memory della sessione di ricerca).
+
+Semantica filtri (come in MAIN):
+- `TUTTI` → nessun filtro categoria;
+- `PIZZE` → `category == PIZZA`;
+- `FRITTURA` → `category == FRITTURA`;
+- `BIBITE` → `category == BIBITA`.
+
+#### Query + categoria (AND)
+
+Query e category filter lavorano in **AND**:
+- risultato = prodotto che soddisfa la ricerca esistente **e** la categoria selezionata (se non `TUTTI`).
+
+Esempio: query `pomodoro` + filtro `PIZZE` → solo pizze che matchano `pomodoro`.
 
 Semantica ricerca: **invariata** rispetto al motore esistente:
 - nome + ingredienti;
 - case / accent tolerant;
 - ranking corrente;
-- solo prodotti attivi.
+- solo prodotti attivi;
+- **non** creare un secondo search engine.
+
+Il category filter si applica ai candidati/risultati **senza** alterare ranking e normalizzazione del motore esistente.
+
+`INDIETRO` (nella vista CERCA):
+- torna alla schermata ordine corrente;
+- stesso DRAFT;
+- filtro MAIN invariato.
 
 Quick-add (`+`) da risultato:
 - persiste tramite lo stesso flow ORD esistente;
 - **resta** nella schermata CERCA (non chiude la ricerca);
+- query e category filter della ricerca restano invariati;
 - nessuna modifica a merge policy, quantity rules, pricing, snapshots, total calculation.
 
 Placeholder campo: `Cerca prodotto o ingrediente...` (o equivalente coerente).

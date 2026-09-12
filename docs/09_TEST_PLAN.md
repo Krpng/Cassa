@@ -332,13 +332,13 @@ Overlay → `SALVA` fallisce → overlay resta aperto; testo locale preservato; 
 Overlay dirty + Flow da quantity/remove/item → editor locale **non** sovrascritto (contratto ORD-021 dirty).
 
 ### ORDER-067
-Tap `CERCA` → apre vista dedicata ricerca (campo + risultati); senza lista ordine, categorie, nota, sticky totale.
+Tap `CERCA` → apre vista dedicata ricerca (campo + risultati); senza lista ordine, nota, sticky totale.
 
 ### ORDER-068
 Da vista `CERCA`, `INDIETRO` → torna alla schermata ordine dello stesso DRAFT.
 
 ### ORDER-069
-Stessa query nella vista `CERCA` → stessi risultati/ranking del motore di ricerca esistente (nome+ingredienti, case/accent tolerant, solo active).
+Stessa query nella vista `CERCA` (con filtro search `TUTTI`) → stessi risultati/ranking del motore di ricerca esistente (nome+ingredienti, case/accent tolerant, solo active).
 
 ### ORDER-070
 Quick-add `+` da risultato `CERCA` → persiste col flow ORD esistente; la vista `CERCA` resta aperta.
@@ -354,6 +354,33 @@ Custom pizza highlight (viola) invariato dopo refinement.
 
 ### ORDER-074
 Header `NOTE` / `CERCA` / `INDIETRO`: touch target `>= 48dp` e content description accessibili distinti.
+
+### ORDER-075
+Vista `CERCA`: presenti filtri `TUTTI | PIZZE | FRITTURA | BIBITE` subito sotto il campo ricerca e sopra i risultati (stile coerente con MAIN).
+
+### ORDER-076
+Apertura `CERCA` → search category filter default = `TUTTI` (indipendente dal filtro categoria corrente di MAIN).
+
+### ORDER-077
+In `CERCA`, filtro `PIZZE` → solo prodotti `category == PIZZA` (rispetto a query corrente / blank).
+
+### ORDER-078
+In `CERCA`, filtro `FRITTURA` → solo prodotti `category == FRITTURA`.
+
+### ORDER-079
+In `CERCA`, filtro `BIBITE` → solo prodotti `category == BIBITA`.
+
+### ORDER-080
+Query non vuota + filtro categoria search (es. `pomodoro` + `PIZZE`) → intersezione AND: match ricerca esistente **e** categoria selezionata; ranking/normalizzazione del motore invariati.
+
+### ORDER-081
+Cambio filtro nella vista `CERCA` → filtro categoria della schermata MAIN **invariato** al ritorno (`INDIETRO`).
+
+### ORDER-082
+Quick-add da `CERCA` → query e search category filter restano invariati; vista ricerca resta aperta.
+
+### ORDER-083
+Chiudi `CERCA` e riapri → search category filter riparte da `TUTTI` (nessuna persistenza DB/DataStore dello stato filtro search).
 
 ## 9. Draft
 
