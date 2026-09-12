@@ -328,16 +328,16 @@ TOTALE
 
 Il totale resta visibile anche nello stato vuoto (insieme al messaggio empty state esistente). Non creare righe fittizie.
 
-`COMPLETA`:
-- **fuori scope ORD-022**;
-- se il pulsante/placeholder esiste già, preservarlo senza aggiungere nuove business mutation;
-- Acceptance / numerazione / salvataggio definitivo di `orders.totalCents` appartengono a task/milestone successive.
-
-Semantica di calcolo, source of truth, `orders.totalCents` non-authoritative sul DRAFT, overflow e reattività: vedi `docs/02_BUSINESS_RULES.md` (Totale live DRAFT ORD-022).
+`COMPLETA` (FREEZE-B / M6):
+- disponibile **solo** se il DRAFT persistito contiene almeno un `order_item`;
+- DRAFT vuoto: `COMPLETA` **disabled**, non apre preview, **zero** consumo numerazione, **zero** write;
+- se abilitato, apre l'acceptance preview read-only (sezione 9).
 
 Footer/sticky (solo schermata principale):
 - `TOTALE` (live, ORD-022);
-- `COMPLETA` (placeholder/preservato; non implementato da ORD-022).
+- `COMPLETA` (FREEZE-B; enabled solo con ≥1 item persistito).
+
+Semantica di calcolo, source of truth, `orders.totalCents` non-authoritative sul DRAFT, overflow e reattività: vedi `docs/02_BUSINESS_RULES.md` (Totale live DRAFT ORD-022).
 
 ### Empty state
 Se nessuna riga:
@@ -431,60 +431,100 @@ Vuoi modificare una pizza o tutte?
 Il cambio quantità tramite `+/-` della lista ordine non usa questo prompt.
 Il caso editor `MODIFICA UNA` + cambio quantità nello stesso form resta fuori da ORD-020 e conserva il rifiuto conservativo corrente.
 
-## 9. Anteprima DRAFT
+## 9. Acceptance preview (FREEZE-B / M6)
 
-Ordine visivo:
-1. PIZZE
-2. FRITTURA
-3. BIBITE
+Entry: `COMPLETA` dalla schermata DRAFT (solo se ≥1 `order_item` persistito).
 
-Categorie vuote omesse.
+### Source of truth
 
-Azioni:
-- `MODIFICA`;
-- `STAMPA` (bozza);
-- `ACCETTA`;
-- `ACCETTA E STAMPA`;
-- `HOME`;
-- `NUOVO ORDINE`.
+**Solo** DRAFT persistito da Room. Non usare editor dirty / local unsaved state.
 
-`HOME` non elimina il draft.
+### Mutazioni
 
-`NUOVO ORDINE` mentre il DRAFT corrente esiste applica la regola single-draft:
-- `RIPRENDI` (resta sul corrente);
-- `ELIMINA E CREA NUOVO`;
-- `ANNULLA`.
+- **zero** write Room;
+- **zero** allocazione/consumo numero;
+- **zero** update di `orders.totalCents`.
 
-### Errore ordine vuoto
-Non consentire apertura/accettazione oppure mostra:
-`Aggiungi almeno un prodotto.`
+### Ordinamento
+
+Categorie nell'ordine fisso:
+
+1. `PIZZE`
+2. `FRITTURA`
+3. `BIBITE`
+
+Categorie vuote **non** mostrate. Dentro ogni categoria: `createdSequence ASC`. Nessun sorting alfabetico e nessuna rilettura catalogo per riordinare.
+
+### Contenuto riga (snapshot persistiti)
+
+- quantity;
+- name / printed name secondo UX esistente;
+- additions;
+- removals;
+- item note;
+- finalUnitPrice;
+- line total (`finalUnitPriceCents * quantity`).
+
+Mostrare anche, se presenti/applicabili:
+
+- `generalNote`;
+- totale preview derivato: `SUM(finalUnitPriceCents * quantity)` con Money semantics ORD-022;
+- **ignorare** un eventuale `orders.totalCents` stale durante DRAFT.
+
+Overflow del totale checked: acceptance non consentita; nessuna mutation; nessun numero; errore esplicito.
+
+### Azioni preview — M6
+
+Esporre **solo**:
+
+- `[ INDIETRO / ANNULLA ]`
+- `[ ACCETTA ]`
+
+**Non** mostrare ancora in M6:
+
+- `ACCETTA E STAMPA`
+- `STAMPA BOZZA`
+
+(appartengono alle milestone PRINT successive).
+
+System Back: chiude preview → torna al DRAFT; zero mutation; zero consumo.
+
+`ACCETTA`: esegue `AcceptOrder` atomico (business §18 / schema §16). Durante accept: CTA disabled/in-progress.
 
 ## 10. Stato durante Accept
 
 Proteggere doppio tap:
+
 - disabilitare CTA;
 - mostrare progress minimale.
 
-Il dominio resta comunque responsabile dell'idempotenza.
+Il dominio resta comunque responsabile dell'idempotenza (`AlreadyAccepted` / `OrderNotDraft`).
 
-## 11. Schermata Accepted
+## 11. Schermata Accepted (FREEZE-B / M6)
 
-Dopo `ACCETTA` o `ACCETTA E STAMPA`:
-- **non tornare automaticamente Home**.
+Dopo `ACCETTA` riuscita:
+
+- **restare** sulla schermata ordine `ACCEPTED` (read-only);
+- **non** tornare automaticamente Home.
 
 Mostra:
-- numero grande;
-- ordine;
-- totale;
-- data/ora su schermo;
-- `STAMPA`/`RISTAMPA`;
-- `HOME`;
-- `NUOVO ORDINE`.
 
-Nascondi:
+- `displayNumber` (grande);
+- ordine (snapshot);
+- `totalCents` snapshot;
+- data/ora su schermo se già prevista dall'UX esistente.
+
+CTA M6:
+
+- `[ STAMPA ]` — **presente ma DISABLED** fino all'integrazione PRINT successiva (nessuna simulazione stampa);
+- `[ HOME ]` — torna Home;
+- `[ NUOVO ORDINE ]` — crea/apre un nuovo DRAFT tramite il flusso normale; il vecchio `ACCEPTED` **non** viene riutilizzato.
+
+Nascondi / rimuovi dopo successo:
+
 - `ACCETTA`;
-- `ACCETTA E STAMPA`;
-- modifica.
+- `ACCETTA E STAMPA` (non presente in M6);
+- qualsiasi modifica ordine/item.
 
 ## 12. Stampa fallita
 
@@ -641,12 +681,14 @@ Se errori bloccanti:
 
 ## 19. Impostazioni numerazione
 
-Radio/segmented:
-- `Numerazione ordinata`;
-- `Numerazione casuale progressiva`.
+Radio/segmented (quando la UI Settings sarà proprietaria di **NUM-005** / D-040):
 
-Cambio immediato per le prossime accettazioni.
-Non riscrive ordini esistenti.
+- `Numerazione ordinata` (`SEQUENTIAL`);
+- `Numerazione casuale progressiva` (`RANDOM`).
+
+Default: `SEQUENTIAL`. Cambio immediato per le prossime accettazioni. Non riscrive ordini esistenti. Non resetta `nextSequentialNumber` né `randomSeed`/`randomCycle`/`randomPosition`.
+
+**M6 CONTRACT FREEZE:** se manca ancora una Settings UI, **non** inventarla in produzione in questo freeze; ownership TBD documentata in D-040 / backlog NUM-005.
 
 ## 20. Impostazioni stampante
 

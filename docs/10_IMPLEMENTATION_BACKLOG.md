@@ -315,38 +315,50 @@ Demo M5:
 
 ## M6 — Preview, acceptance, numbering
 
-### NUM-001 [P0] Sequential service/state
+Status milestone: **NOT STARTED** (contract FREEZE-A + FREEZE-B COMPLETE). Non marcare task IMPLEMENTED finché non implementati.
+
+### NUM-001 [P0] Sequential service/state — READY
 Test NUM-T001..006.
 
-### NUM-002 [P0] Random code formatter
+### NUM-002 [P0] Random code formatter — READY
+Mapping indice ↔ `[A-Z][0-9][0-9]`; test NUM-T010, NUM-T017.
 
-### NUM-003 [P0] Stable random permutation generator
+### NUM-003 [P0] Stable random permutation generator — READY
+Contratto FREEZE-A: XorShift32 + Fisher–Yates bit-stable; test NUM-T016, NUM-T014.
 
-### NUM-004 [P0] Random state/cycles
-2600 distinct.
+### NUM-004 [P0] Random state/cycles — BLOCKED BY NUM-003; contract READY
+2600 distinct, cycle 2, seed once; test NUM-T011..013, NUM-T018..019.
 
-### NUM-005 [P0] Mode switch preservation
+### NUM-005 [P0] Mode switch preservation — contract READY; UI ownership TBD (D-040)
+Stati SEQUENTIAL/RANDOM indipendenti; default SEQUENTIAL. Se Settings UI assente: non inventarla in M6 freeze; ownership UI esplicita in D-040 prima dell'integrazione Settings. Test NUM-T006, NUM-T015.
 
-### ACCEPT-001 [P0] Preview screen category ordering
+### ACCEPT-001 [P0] Preview screen category ordering — READY
+`PIZZE`→`FRITTURA`→`BIBITE`; within `createdSequence ASC`; zero writes. Test ACCEPT-T008..012, ACCEPT-T020.
 
-### ACCEPT-002 [P0] Draft actions
-Azioni: Modifica, Stampa bozza, Accetta, Accetta e stampa, Home, Nuovo ordine con gestione conflitto DRAFT.
+### ACCEPT-002 [P0] Draft / preview actions (scope M6) — READY
+`COMPLETA` (enabled solo con items) → preview read-only con `[INDIETRO/ANNULLA]` + `[ACCETTA]` only. **Non** in M6: `ACCETTA E STAMPA`, `STAMPA BOZZA`. Test ACCEPT-T008..009, ACCEPT-T020.
 
+### ACCEPT-003 [P0] AcceptOrder transaction — contract READY
+Dipende da NUM-001 (+ NUM-003 se mode RANDOM). Test ACCEPT-T001, ACCEPT-T004..005, ACCEPT-T013..016, ACCEPT-T018.
 
-### ACCEPT-003 [P0] AcceptOrder transaction
+### ACCEPT-004 [P0] Double-accept protection — contract READY
+Test ACCEPT-T003, ACCEPT-T017; NUM-T005.
 
-### ACCEPT-004 [P0] Double-accept protection
+### ACCEPT-005 [P0] Accepted screen immutability — contract READY
+Test ACCEPT-T007; SNAP-*.
 
-### ACCEPT-005 [P0] Accepted screen immutability
+### ACCEPT-006 [P0] Remain on Accepted after accept — contract READY
+Test ACCEPT-T006, ACCEPT-T019.
 
-### ACCEPT-006 [P0] Remain on Accepted after accept
+### ACCEPT-007 [P0] Hide accept CTAs + M6 STAMPA disabled — contract READY
+Test ACCEPT-T019.
 
-### ACCEPT-007 [P0] Hide accept CTAs
-
-Test: ACCEPT + NUM.
+Test: ACCEPT-T001..020 + NUM-T001..019.
 
 Demo M6:
-- ordine Accepted numerato e immutabile.
+- ordine Accepted numerato e immutabile;
+- preview non consuma numeri;
+- STAMPA visibile disabled.
 
 ## M7 — Today/archive/duplicate
 

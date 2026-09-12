@@ -284,7 +284,7 @@ Non introdurre write aggiuntive a `orders.totalCents` per:
 
 Il totale DRAFT viene **derivato** dagli item persistiti.
 
-Il futuro flusso di Acceptance ricalcolerà il totale dagli item persistiti e salverà lo snapshot definitivo in `orders.totalCents`; Acceptance, numerazione e salvataggio definitivo di `orders.totalCents` sono **fuori scope ORD-022**.
+Il futuro flusso di Acceptance (FREEZE-B / M6) ricalcolerà il totale dagli item persistiti e salverà lo snapshot definitivo in `orders.totalCents`; Acceptance, numerazione e salvataggio definitivo di `orders.totalCents` restano **fuori scope ORD-022** (appartengono ad ACCEPT-003 / M6).
 
 Separazione congelata:
 - DRAFT live total = valore **derivato** dagli `order_items` persistiti;
@@ -511,35 +511,109 @@ Per ogni businessDate:
 Cambio modalità e ritorno a sequenziale nello stesso giorno:
 - riprende dal successivo sequenziale non consumato.
 
-## 15. Numerazione casuale
+## 15. Numerazione casuale (FREEZE-A)
+
+### Formato e spazio
 
 Formato:
-`[A-Z][00-99]`.
+`[A-Z][0-9][0-9]` (equivalente a `[A-Z][00-99]`).
 
-Spazio:
-26 * 100 = 2.600 codici.
+Mappatura canonica indice → codice:
 
-Primo ciclo di una businessDate:
-- nessuna ripetizione.
+```text
+0    → A00
+1    → A01
+...
+99   → A99
+100  → B00
+...
+2599 → Z99
+```
 
-Dopo 2.600 assegnazioni:
-- incrementa `randomCycle` (ciclo 1 -> 2);
-- genera nuova sequenza/permutazione;
-- i codici possono ripetersi rispetto al ciclo precedente.
+Spazio: **2600** codici per ciclo. Nessuna ripetizione **dentro** lo stesso ciclo.
 
-Ogni businessDate è indipendente.
+### Stato persistito (indipendente da SEQUENTIAL)
 
-Implementazione:
-- deterministica per `randomSeed + randomCycle`;
-- posizione persistita;
-- generatore di permutazione stabile attraverso riavvii;
-- non usare rejection sampling vicino all'esaurimento.
+Per ogni `businessDate`, in `numbering_state`:
 
-`numberingCycle` viene salvato nell'ordine casuale ma non mostrato/stampato.
+- `randomSeed` (Long, creato una sola volta alla prima necessità RANDOM);
+- `randomCycle` (Int, parte da `1`);
+- `randomPosition` (Int, parte da `0`).
+
+Lo stato SEQUENTIAL (`nextSequentialNumber`) è **separato**. Cambio modalità `SEQUENTIAL ↔ RANDOM` **non** resetta nessuno dei due stati. Gli ordini `ACCEPTED` esistenti non vengono mai riscritti.
+
+### Seed
+
+Alla prima necessità RANDOM, se `randomSeed` non esiste ancora per quella `businessDate`:
+
+1. generare un seed **una sola volta** tramite provider iniettabile/testabile (domain **non** dipende da API Android);
+2. persistere `randomSeed`;
+3. inizializzare `randomCycle = 1`, `randomPosition = 0`.
+
+Dopo la creazione: `randomSeed` resta stabile. Nell'MVP **non** esiste reset manuale del seed. Avanzamento di ciclo: **non** si genera un nuovo seed (si riusa lo stesso `randomSeed` + nuovo `randomCycle`).
+
+### Algoritmo obbligatorio — XorShift32 + Fisher–Yates (bit-stable)
+
+**Vietato** come contratto implicito della sequenza:
+
+- `kotlin.random.Random`
+- `java.util.Random`
+- `Collections.shuffle` / equivalenti non specificati
+
+Contratto congelato:
+
+1. **PRNG XorShift32** su stato a 32 bit (operazioni bit-wise; trattare lo stato come unsigned a 32 bit):
+
+```text
+fun nextUInt32(state: UInt): Pair<UInt, UInt> {
+    var x = state
+    x = x xor (x shl 13)
+    x = x xor (x shr 17)
+    x = x xor (x shl 5)
+    return x to x   // (newState, raw)
+}
+```
+
+2. **Seed di ciclo** (stabile):
+
+```text
+cycleSeed32 = (randomSeed xor (randomCycle.toLong() * 0x9E3779B97F4A7C15L)).toUInt()
+if (cycleSeed32 == 0u) cycleSeed32 = 0xA5A5A5A5u   // XorShift32 non ammette stato 0
+```
+
+3. **Fisher–Yates** sugli indici `0..2599`:
+
+```text
+perm[i] = i for i in 0..2599
+state = cycleSeed32
+for i from 2599 down to 1:
+    (state, raw) = nextUInt32(state)
+    j = (raw % (i + 1).toUInt()).toInt()   // bounded index in 0..i
+    swap(perm[i], perm[j])
+```
+
+4. Codice emesso: `indexToCode(perm[randomPosition])` con la mappatura canonica sopra.
+
+La stessa coppia `(randomSeed, randomCycle)` produce **sempre** la stessa permutazione su ogni restart / versione compatibile. Qualità richiesta: **pseudocasuale per numerazione visuale**, non crittografica.
+
+### Consumo e cicli
+
+- Primo ciclo: `randomCycle = 1`, `randomPosition = 0`.
+- Ogni acceptance RANDOM **riuscita** consuma esattamente `permutation[randomPosition]` e incrementa `randomPosition` **atomicamente** nella stessa transazione `AcceptOrder`.
+- Dopo la posizione `2599` consumata: al prossimo consume → `randomCycle += 1`, `randomPosition = 0`, nuova permutazione deterministica da `randomSeed + nuovo cycle`.
+- Un codice può ricomparire in un ciclo successivo; **mai** due volte nello stesso ciclo.
+- Calcolare/mostrare un codice **senza** Accept riuscito **non** consuma nulla.
+
+### Restart / process death
+
+Stesso `randomSeed` + stesso `randomCycle` + stessa `randomPosition` → stesso prossimo codice. Nessun consumo per il solo fatto di riaprire l'app.
 
 ## 16. Cambio modalità numerazione
 
-Esempio valido:
+`NumberingMode`: `SEQUENTIAL | RANDOM`. Default: **`SEQUENTIAL`**.
+
+Esempio valido sullo stesso giorno:
+
 ```text
 001
 002
@@ -548,42 +622,76 @@ M81
 003
 ```
 
-Lo stato sequenziale e casuale della stessa businessDate devono essere preservati separatamente.
+Lo stato sequenziale e casuale della stessa `businessDate` devono essere preservati separatamente. Il cambio vale solo per le acceptance **future**.
+
+Ownership UI di selezione modalità: vedi backlog **NUM-005** / decisione D-040 (TBD before NUM-005 integration). Questo freeze **non** introduce una Settings UI di produzione.
 
 ## 17. Assegnazione numero
 
-Numero assegnato esclusivamente durante `AcceptOrder`.
+Numero assegnato esclusivamente durante `AcceptOrder` riuscito (transazione Room commitata).
 
-Non assegnare:
+Non assegnare / non consumare:
+
 - alla creazione draft;
-- in anteprima;
-- su stampa bozza.
+- all'apertura di `COMPLETA` / acceptance preview;
+- su stampa bozza;
+- per il solo calcolo “prossimo codice”.
 
-## 18. AcceptOrder
+## 18. AcceptOrder (FREEZE-B — atomicità)
 
-Transazione atomica:
-1. carica DRAFT;
-2. verifica `status == DRAFT`;
-3. verifica almeno una riga;
-4. calcola totale;
-5. calcola businessDate;
-6. legge modalità numerazione business-critical;
-7. carica/crea numbering state;
-8. assegna displayNumber;
-9. aggiorna numbering state;
-10. imposta status Accepted;
-11. imposta acceptedAt;
-12. imposta businessDate;
-13. salva total;
-14. imposta draftSlot null;
-15. commit.
+### Preview vs Accept
 
-Solo dopo commit:
-- se azione `ACCETTA E STAMPA`, avvia stampa.
+- `COMPLETA` apre solo una **acceptance preview read-only**: **zero** write Room, **zero** consumo numerazione, **zero** update di `orders.totalCents`.
+- Solo `ACCETTA` esegue `AcceptOrder`.
 
-Doppio tap / concorrenza:
-- una sola transizione può riuscire;
-- una seconda chiamata su Accepted fallisce senza consumare numero.
+### Transazione atomica unica
+
+`ACCETTA` esegue **una sola** `@Transaction` Room. Precondizioni:
+
+- order exists;
+- `status == DRAFT`;
+- almeno 1 `order_item` persistito.
+
+Dentro la stessa transazione:
+
+1. rileggere ordine + items persistiti;
+2. ricalcolare totale checked: `SUM(finalUnitPriceCents * quantity)` (stessa Money semantics di ORD-022); overflow → fail, nessuna mutation, nessun numero consumato;
+3. ottenere un singolo `now` da `ClockProvider`;
+4. calcolare `businessDate(now)`;
+5. allocare il prossimo `displayNumber` secondo `NumberingMode` corrente;
+6. avanzare `numbering_state`;
+7. impostare:
+   - `status = ACCEPTED`
+   - `displayNumber = allocated`
+   - `acceptedAt = now`
+   - `businessDate = calculated`
+   - `totalCents = recalculated persisted total` (snapshot)
+   - `draftSlot = null`
+   - `updatedAt = now`
+8. commit.
+
+Tutto oppure niente. Se qualsiasi passo fallisce: ordine resta `DRAFT`, `numbering_state` invariato, nessun numero consumato.
+
+### Doppio accept / concorrenza
+
+- UI: `ACCETTA` disabled/in-progress dopo il primo tap.
+- Repository/domain: guard obbligatorio indipendente dalla UI.
+- Due richieste concorrenti sullo stesso DRAFT: una sola completa; un solo numero; un solo `ACCEPTED`. La seconda → risultato tipizzato `AlreadyAccepted` / `OrderNotDraft` senza mutation e senza consumo.
+
+### Crash / process death mid-Accept
+
+Grazie alla singola Room transaction, dopo restart solo:
+
+- **A)** `DRAFT` completamente invariato + `numbering_state` invariato; oppure
+- **B)** `ACCEPTED` completamente persistito + `numbering_state` avanzato esattamente una volta.
+
+Stato parziale **vietato**. Test P0 dedicato obbligatorio.
+
+### Post-accept
+
+Ordine `ACCEPTED` immutabile (items, additions, removals, notes, prezzi, quantità, `generalNote`, totale snapshot, `displayNumber`). Guard repository/use case, non solo UI. Nessuna rilettura catalogo può alterare gli snapshot.
+
+In **M6**, dopo successo: restare sulla schermata `ACCEPTED` read-only. CTA stampa integrate (`ACCETTA E STAMPA`, stampa bozza da preview) **non** fanno parte dello scope UI M6 congelato qui; vedi FREEZE-B UX. Stampa dopo accept resta definita in §20 e nella milestone PRINT, senza consumare/riassegnare numeri.
 
 ## 19. Stampa bozza
 

@@ -12,10 +12,11 @@ Verified on 2026-09-12:
 
 ```yaml
 branch: main
-HEAD: 3830754dede13ea80b270f02cb68d5fb61377f69
-HEAD commit: "fix: prevent draft replacement dialog loop"
+HEAD: fcafbba8c327602c6e44d421bc81d7862068923d
+HEAD commit: "docs: finalize m5 milestone"
 last UX production commit: 67d599257ce29974447ea2f61a5cac7ea9b2cfad
 last UX production commit message: "feat: compact order workspace with search filters"
+last bugfix commit: 3830754dede13ea80b270f02cb68d5fb61377f69
 ORD-001..ORD-022: COMPLETE
 ORDER-059..ORDER-083: COMPLETE
 compact workspace refinement: COMPLETE
@@ -23,9 +24,11 @@ custom pizza highlight: COMPLETE
 Draft conflict delete popup loop regression: FIXED
 Demo M5: COMPLETE
 M5: COMPLETE
+PRE-M6 CONTRACT / READINESS AUDIT: COMPLETE
+M6 CONTRACT FREEZE (FREEZE-A + FREEZE-B): COMPLETE (docs only; uncommitted until user requests commit)
 M6: NOT STARTED
-next step: pre-M6 contract/readiness audit
-origin/main: synchronized
+next step: M6 implementation starting at NUM-001 (only when explicitly authorized)
+origin/main: synchronized at fcafbba (freeze docs may be local uncommitted)
 ```
 
 Contract docs for the compact UX shell:
@@ -59,7 +62,7 @@ M5 Draft order core: COMPLETE
 M6 Preview/acceptance/numbering: NOT STARTED
 ```
 
-M5 is **COMPLETE**: `ORD-001`..`ORD-022`, compact order workspace (`ORDER-059`..`ORDER-083`), and Demo M5 end-to-end validation are done. Do **not** begin M6 production implementation yet. Next step is a **pre-M6 contract/readiness audit** (mark future tasks READY or NEEDS CONTRACT FREEZE) before writing new production code. Do not invent `ORD-023`. Acceptance, numbering, archive, duplicate, and printing remain out of scope until their milestones/contracts are ready.
+M5 is **COMPLETE**: `ORD-001`..`ORD-022`, compact order workspace (`ORDER-059`..`ORDER-083`), and Demo M5 end-to-end validation are done. Pre-M6 audit and **M6 CONTRACT FREEZE** (FREEZE-A random numbering + FREEZE-B acceptance preview/UX) are **COMPLETE** in normative docs. Do **not** begin M6 production implementation until explicitly authorized. Do not invent `ORD-023`. NUM/ACCEPT tasks are contract READY (see backlog); archive, duplicate, and printing remain later milestones.
 
 ## 4. Completed tasks
 
@@ -83,14 +86,15 @@ M6 and later milestones are **NOT STARTED**. Do not treat acceptance, numbering,
 ## 5. Current next task
 
 ```yaml
-task: pre-M6 contract/readiness audit
-title: Verify future M6+ tasks READY vs NEEDS CONTRACT FREEZE
+task: M6 implementation (NUM-001 first) — ONLY when explicitly authorized
+title: Implement sequential numbering service per FREEZE-A/B contracts
 priority: P0
 status: NOT STARTED
-milestone: post-M5 / pre-M6
+depends_on: M6 CONTRACT FREEZE COMPLETE
+milestone: M6
 ```
 
-Do **not** start M6 production coding from this handoff alone. First audit the forthcoming backlog items and mark each as `READY` or `NEEDS CONTRACT FREEZE` before implementing. Do not invent unfinished M5 features. Do not begin NUM / ACCEPT / archive / duplicate / printing implementation until the audit and any required freezes are done.
+Do **not** start M6 production coding without an explicit user authorize. Contracts for NUM-001..005 and ACCEPT-001..007 are READY (NUM-004 blocked by NUM-003 implementation; NUM-005 UI ownership D-040 TBD). Do not invent unfinished M5 features. Do not begin ARCH/PRINT/BT/HW from this handoff.
 
 ## 6. Frozen architecture decisions
 
@@ -373,7 +377,7 @@ Some edge cases are covered by automated tests but were not necessarily repeated
 - Acceptance, numbering, archive, duplicate, and final printing flows belong to future milestones (M6+) and have **not** been validated as completed features and are **not** implemented by M5.
 - Physical NETUM printer calibration remains open: pairing, width, code page, euro/accent rendering, feed, reconnect, interrupted-print semantics, and repeated-print stability.
 - Hardware items in the checklist of `docs/09_TEST_PLAN.md` and `docs/07_PRINTING_SPEC.md` must not be marked complete without real printer validation.
-- Pre-M6 contract/readiness audit remains the next documentation/governance step before M6 production code.
+- Pre-M6 audit + M6 CONTRACT FREEZE (FREEZE-A/B) are COMPLETE in docs; M6 production remains NOT STARTED until authorized.
 
 ## 15. ORD-018 final behavior
 
@@ -775,7 +779,7 @@ M5 does **not** implement or validate:
 - fake printing
 - physical NETUM printing
 
-Those belong to later milestones after the pre-M6 readiness audit / contract freezes.
+Those belong to later milestones after M6; M6 contracts are frozen (FREEZE-A/B) but production is NOT STARTED.
 
 ## 22. Rules for the next coding agent
 
@@ -793,7 +797,7 @@ Those belong to later milestones after the pre-M6 readiness audit / contract fre
 12. Report the exact files changed, test results, assumptions, deferred behavior, and open issues.
 13. Do not change documentation to justify behavior that contradicts higher-precedence requirements.
 14. Stop and report if the task contract is contradictory, requires a destructive migration, or would violate an architectural boundary.
-15. Next step is the **pre-M6 contract/readiness audit**. Do not begin M6 / NUM / ACCEPT / archive / duplicate / printing production implementation from this handoff alone. Mark forthcoming tasks `READY` or `NEEDS CONTRACT FREEZE` before writing new production code.
+15. Next implementable M6 task is **NUM-001** only when explicitly authorized. Do not begin M6 / NUM / ACCEPT / archive / duplicate / printing production implementation without authorization. FREEZE-A/B contracts are COMPLETE.
 
 ## 23. Verification baseline
 
@@ -819,21 +823,20 @@ Historical note — compact-workspace UX verification immediately after `67d5992
 ./gradlew.bat connectedDebugAndroidTest: PASS — 81 tests on Samsung SM-S931B
 ```
 
-Documented repository state for this M5 final checkpoint (including regression fix):
+Documented repository state after M6 CONTRACT FREEZE (docs only; may be uncommitted):
 
 ```yaml
-HEAD: 3830754dede13ea80b270f02cb68d5fb61377f69
-HEAD commit: "fix: prevent draft replacement dialog loop"
-last UX production commit: 67d599257ce29974447ea2f61a5cac7ea9b2cfad
+Source HEAD before freeze: fcafbba8c327602c6e44d421bc81d7862068923d
+HEAD commit: "docs: finalize m5 milestone"
+last bugfix commit: 3830754dede13ea80b270f02cb68d5fb61377f69
 ORD-001..ORD-022: COMPLETE
 ORDER-059..ORDER-083: COMPLETE
-compact workspace refinement: COMPLETE
-custom pizza highlight: COMPLETE
-Draft conflict delete popup loop regression: FIXED
 Demo M5: COMPLETE
 M5: COMPLETE
+PRE-M6 AUDIT: COMPLETE
+M6 CONTRACT FREEZE: COMPLETE
 M6: NOT STARTED
-next step: pre-M6 contract/readiness audit
+next step: NUM-001 when explicitly authorized
 ```
 
-A later documentation-only update of this handoff file may leave `HEAD` ahead of a previously recorded production commit without meaning that M6 has begun. No production code or test file was changed while creating or updating this handoff document.
+A documentation-only freeze does not mean M6 has begun. No production code or test code was changed by FREEZE-A/B.

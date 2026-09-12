@@ -21,10 +21,13 @@ Questa matrice collega requisiti, backlog e test.
 | Removals | ORD-012 | PRICE-002, PRINT-T006 |
 | Manual price | ORD-014/015 | PRICE-004/005 |
 | Accepted immutable | ACCEPT-003/005/007 | ACCEPT-T003/007 |
-| Atomic accept | ACCEPT-003/004 | ACCEPT-T001..005 |
+| Atomic accept | ACCEPT-003/004 | ACCEPT-T001..005, ACCEPT-T013..018 |
+| Acceptance preview (zero write / zero number) | ACCEPT-001/002 | ACCEPT-T008..012, ACCEPT-T020 |
+| Accept total snapshot from persisted items | ACCEPT-003 | ACCEPT-T012/013/016 |
+| Post-accept M6 UI (STAMPA disabled) | ACCEPT-006/007 | ACCEPT-T006/019 |
 | Sequential numbering | NUM-001 | NUM-T001..006 |
-| Random numbering | NUM-002..004 | NUM-T010..015 |
-| Mode switch | NUM-005 | NUM-T006/T015 |
+| Random numbering (FREEZE-A) | NUM-002..004 | NUM-T010..019 |
+| Mode switch (states independent; UI TBD D-040) | NUM-005 | NUM-T006/T015 |
 | Today/archive | ARCH-001..005 | ARCH-T001..005 |
 | Historical snapshots | DB-004, ARCH-005 | SNAP-001..004 |
 | Duplicate | ARCH-006/007 | DUP-001..005 |

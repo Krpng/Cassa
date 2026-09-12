@@ -76,6 +76,18 @@ Restart simulato: stesso seed/position produce sequenza coerente senza duplicate
 ### NUM-T015
 Switch Sequential/Random non resetta randomPosition.
 
+### NUM-T016 [P0] FREEZE-A algorithm
+XorShift32 + Fisher–Yates: stessa `(randomSeed, randomCycle)` → stessa permutazione bit-identica; vietato usare Random/shuffle non specificati come contratto.
+
+### NUM-T017 [P0] Index mapping
+`0→A00`, `99→A99`, `100→B00`, `2599→Z99`.
+
+### NUM-T018 [P0] Seed once
+Prima necessità RANDOM crea e persiste seed una sola volta; restart non rigenera; avanzamento ciclo **non** cambia seed.
+
+### NUM-T019 [P0] Preview/display non consuma
+Calcolare/mostrare prossimo codice senza Accept riuscito lascia `randomPosition` invariato.
+
 ## 5. Pricing
 
 ### PRICE-001
@@ -402,13 +414,13 @@ Empty draft not shown recovery.
 ### DRAFT-006
 Home non elimina draft.
 
-## 10. Accept
+## 10. Accept / Preview (FREEZE-B)
 
 ### ACCEPT-T001
 DRAFT non vuoto -> Accepted con numero/date/total.
 
 ### ACCEPT-T002
-Empty draft -> rejected.
+Empty draft -> rejected (e `COMPLETA` disabled: non apre preview).
 
 ### ACCEPT-T003
 Accepted -> second Accept rejected.
@@ -423,7 +435,46 @@ acceptedAt/businessDate use same logical now.
 UI remains Accepted screen after success.
 
 ### ACCEPT-T007
-Accepted update methods rejected.
+Accepted update methods rejected (repository/use case).
+
+### ACCEPT-T008 [P0] Preview zero writes
+Aprire `COMPLETA` / chiudere preview (INDIETRO/Back) → nessuna mutation Room.
+
+### ACCEPT-T009 [P0] Preview zero number consume
+Aprire preview → `numbering_state` invariato (SEQUENTIAL e RANDOM).
+
+### ACCEPT-T010 [P0] Preview category order
+Solo categorie non vuote nell'ordine `PIZZE` → `FRITTURA` → `BIBITE`.
+
+### ACCEPT-T011 [P0] Preview within-category order
+Dentro categoria: `createdSequence ASC` (no alpha, no catalog re-read).
+
+### ACCEPT-T012 [P0] Preview total ignores stale `orders.totalCents`
+Totale preview = `SUM(finalUnitPriceCents * quantity)` da items persistiti.
+
+### ACCEPT-T013 [P0] Accept recalculates + snapshots total
+`AcceptOrder` scrive `totalCents` dal ricalcolo checked items; non dal totale DRAFT stale.
+
+### ACCEPT-T014 [P0] Accept atomic with numbering
+Fallimento qualsiasi passo → DRAFT + numbering invariati; successo → ACCEPTED + numbering avanzato una volta.
+
+### ACCEPT-T015 [P0] Accept failure consumes zero number
+Precondizione fallita / overflow → zero consume.
+
+### ACCEPT-T016 [P0] Overflow blocks accept
+Overflow Money → errore esplicito, zero write, zero number.
+
+### ACCEPT-T017 [P0] Concurrent / double accept
+Due Accept sullo stesso DRAFT → un solo ACCEPTED, un solo numero; seconda `AlreadyAccepted`/`OrderNotDraft`.
+
+### ACCEPT-T018 [P0] Process death mid-accept
+Dopo restart solo stato A (DRAFT+numbering invariati) o B (ACCEPTED+numbering avanzato una volta); vietato parziale.
+
+### ACCEPT-T019 [P0] Post-accept CTAs M6
+Dopo successo: CTAs accept assenti; `STAMPA` visibile ma disabled; `HOME` ok; `NUOVO ORDINE` apre fresh DRAFT (non riusa ACCEPTED).
+
+### ACCEPT-T020 [P1] Empty DRAFT COMPLETA
+`COMPLETA` disabled su DRAFT senza items; tap non apre preview.
 
 ## 11. Snapshot
 

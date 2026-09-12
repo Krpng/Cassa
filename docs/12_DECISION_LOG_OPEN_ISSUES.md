@@ -21,10 +21,10 @@ unique draft slot.
 05:00 Europe/Rome.
 
 ### D-007 Numbering
-Sequential o Random daily.
+`NumberingMode`: `SEQUENTIAL | RANDOM`. Default `SEQUENTIAL`. Daily state per `businessDate`. Mode switch preserves both independent states; affects only future accepts.
 
 ### D-008 Random code
-A-Z + 00-99, 2600/ciclo, no repeat within cycle.
+`[A-Z][0-9][0-9]`, 2600/ciclo, no repeat within cycle. FREEZE-A: XorShift32 + Fisher–Yates bit-stable; seed once; cycle advance keeps same seed.
 
 ### D-009 Categories
 Pizze/Frittura/Bibite.
@@ -91,6 +91,12 @@ Commit first, print after.
 
 ### D-030 Non-fiscal
 No RT.
+
+### D-040 Numbering mode Settings UI ownership (TBD before NUM-005)
+Contract: mode switch semantics READY (FREEZE-A). Production Settings UI for choosing `SEQUENTIAL|RANDOM` is **not** invented by the M6 contract freeze. Ownership TBD before NUM-005 integration (Settings screen task vs NUM-005 itself). Until then, tests may inject mode via repository/settings fake.
+
+### D-041 M6 FREEZE-A / FREEZE-B (2026-09-12)
+Congelati: algoritmo random XorShift32+Fisher–Yates; acceptance preview zero-write/zero-consume; AcceptOrder singola Room transaction; post-accept `STAMPA` visible disabled in M6; no `ACCETTA E STAMPA` / `STAMPA BOZZA` in preview M6. M6 production remains NOT STARTED.
 
 ## Reconciliation decisions made in final pack
 

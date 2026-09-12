@@ -172,10 +172,15 @@ PK: `businessDate`.
 | randomPosition | Int | 0 |
 | updatedAt | Long | |
 
-Quando cambia ciclo random:
+Quando cambia ciclo random (dopo consume della posizione 2599):
 - `randomCycle += 1`;
-- nuova seed;
-- `randomPosition = 0`.
+- **stesso** `randomSeed` (non rigenerare);
+- `randomPosition = 0`;
+- nuova permutazione deterministica da `(randomSeed, randomCycle)` per FREEZE-A (XorShift32 + Fisher–Yates).
+
+Alla prima necessità RANDOM, se `randomSeed` assente: generare una sola volta via provider iniettabile e persistere. MVP: nessun reset manuale del seed.
+
+`SEQUENTIAL` e `RANDOM` condividono la riga `numbering_state` per `businessDate` ma i campi di stato **non** si azzerano al cambio modalità.
 
 ## 12. Printer settings
 
@@ -239,7 +244,9 @@ Room/database + dominio devono garantire:
 
 Le regole category/modifier possono essere nel dominio anche se SQLite non ha check complessi.
 
-## 16. Transazione `AcceptOrder`
+## 16. Transazione `AcceptOrder` (FREEZE-B)
+
+Una sola `@Transaction` Room. Preview/`COMPLETA` **non** entra qui (zero write, zero consume).
 
 Pseudocodice:
 
@@ -247,39 +254,50 @@ Pseudocodice:
 @Transaction
 acceptOrder(orderId):
     order = get(orderId)
-    require(order.status == DRAFT)
-    items = getFullItems(orderId)
+    require(order exists && order.status == DRAFT)
+    items = getFullPersistedItems(orderId)
     require(items.isNotEmpty())
 
-    now = clock.now()
+    total = checkedSum(finalUnitPriceCents * quantity)   // ORD-022 Money; overflow => abort
+    now = clockProvider.now()                            // singolo logical now
     businessDate = calculator(now, settings)
-    total = calculateFromPersistedItems(items)
+    mode = settings.numberingMode                        // SEQUENTIAL | RANDOM
 
     state = getOrCreateNumberingState(businessDate)
+    // RANDOM first-need: if randomSeed missing, generate once via injectable SeedProvider, persist
 
-    if settings.numberingMode == SEQUENTIAL:
-        display = format(state.nextSequentialNumber)
+    if mode == SEQUENTIAL:
+        display = formatSequential(state.nextSequentialNumber)
         state.nextSequentialNumber += 1
         cycle = null
     else:
-        display = permutation(state.seed, state.cycle)[state.position]
+        perm = xorShift32FisherYates(state.randomSeed, state.randomCycle)  // FREEZE-A
+        display = indexToCode(perm[state.randomPosition])
         cycle = state.randomCycle
-        advanceRandomState(state)
+        if state.randomPosition == 2599:
+            state.randomCycle += 1
+            state.randomPosition = 0
+            // seed UNCHANGED
+        else:
+            state.randomPosition += 1
 
-    update state
-
+    update numbering_state
     update order:
         status=ACCEPTED
         draftSlot=null
         displayNumber=display
-        numberingMode=settings.mode
-        numberingCycle=cycle
+        numberingMode=mode
+        numberingCycle=cycle   // solo RANDOM; non stampato in UI
         businessDate=...
         acceptedAt=now
-        totalCents=total
+        totalCents=total       // snapshot from persisted items; ignore stale draft totalCents
+        updatedAt=now
+    // commit: all-or-nothing
 ```
 
-Nota: `clock.now()` idealmente ottenuto prima o passato alla transazione, ma business decision e DB updates devono usare lo stesso timestamp.
+Fallimento / crash mid-transaction: solo stati A (tutto DRAFT + numbering invariato) o B (ACCEPTED completo + numbering avanzato una volta). Doppio accept concorrente: una sola riuscita; seconda `AlreadyAccepted`/`OrderNotDraft` senza consume.
+
+Nota: `clockProvider.now()` e tutti i campi timestamp della stessa accept usano lo stesso logical `now`.
 
 ## 17. Transazione split
 
