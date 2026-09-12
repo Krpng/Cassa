@@ -303,6 +303,58 @@ Totale live calcolato da item persistiti → kill/reopen o Home → riapri DRAFT
 ### ORDER-058
 Somma dei `lineTotalCents` oltre il range `Money` supportato → `AmountOverflow` / errore equivalente; nessun totale numericamente corrotto/wraparound.
 
+## 8e. Compact order workspace (M5 UX refinement)
+
+Mini-task UX: liberare spazio verticale sulla schermata DRAFT spostando nota e ricerca fuori dalla shell principale. Nessuna modifica a ORD-019/020/021 persistence semantics / ORD-022 total / search algorithm / quick-add business / highlight / Home-recovery.
+
+### ORDER-059
+Schermata principale DRAFT: assente editor inline `NOTA ORDINE` e assente pulsante inline `SALVA NOTA`.
+
+### ORDER-060
+Schermata principale DRAFT: assente campo ricerca inline; presenti header `NOTE` / `CERCA` / `INDIETRO`, `ORDINE CORRENTE`, categorie, catalogo, sticky `TOTALE`.
+
+### ORDER-061
+Tap `NOTE` → apre overlay/modal `NOTA ORDINE` separato dalla schermata ordine.
+
+### ORDER-062
+Apertura overlay → editor inizializzato dal `generalNote` persistito (vuoto se `null`).
+
+### ORDER-063
+Overlay dirty → `ANNULLA` chiude senza mutation; `generalNote` persistito invariato; modifiche locali scartate.
+
+### ORDER-064
+Overlay → `SALVA` riuscito → `UpdateGeneralNote` / normalizzazione ORD-021; overlay chiuso; ritorno all'ordine con nota persistita.
+
+### ORDER-065
+Overlay → `SALVA` fallisce → overlay resta aperto; testo locale preservato; errore visibile; retry possibile; persistito invariato.
+
+### ORDER-066
+Overlay dirty + Flow da quantity/remove/item → editor locale **non** sovrascritto (contratto ORD-021 dirty).
+
+### ORDER-067
+Tap `CERCA` → apre vista dedicata ricerca (campo + risultati); senza lista ordine, categorie, nota, sticky totale.
+
+### ORDER-068
+Da vista `CERCA`, `INDIETRO` → torna alla schermata ordine dello stesso DRAFT.
+
+### ORDER-069
+Stessa query nella vista `CERCA` → stessi risultati/ranking del motore di ricerca esistente (nome+ingredienti, case/accent tolerant, solo active).
+
+### ORDER-070
+Quick-add `+` da risultato `CERCA` → persiste col flow ORD esistente; la vista `CERCA` resta aperta.
+
+### ORDER-071
+Dopo quick-add da `CERCA` → `INDIETRO` all'ordine → prodotto/qty aggiornati nello stato Room; sticky `TOTALE` coerente (ORD-022).
+
+### ORDER-072
+Schermata principale dopo refinement: controlli ORD-020 (`+/-`, `RIMUOVI`, tap riga) invariati nel comportamento.
+
+### ORDER-073
+Custom pizza highlight (viola) invariato dopo refinement.
+
+### ORDER-074
+Header `NOTE` / `CERCA` / `INDIETRO`: touch target `>= 48dp` e content description accessibili distinti.
+
 ## 9. Draft
 
 ### DRAFT-001

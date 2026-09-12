@@ -15,6 +15,7 @@ Questa matrice collega requisiti, backlog e test.
 | Remove line / change quantity | ORD-020 | ORDER-013..025 |
 | General note | ORD-021 | ORDER-026..039 |
 | Live total from persisted items | ORD-022 | ORDER-040..058 |
+| Compact order workspace (note/search shell) | M5 UX refinement | ORDER-059..074 |
 | Additions | ORD-011/013 | PRICE, PRINT |
 | Removals | ORD-012 | PRICE-002, PRINT-T006 |
 | Manual price | ORD-014/015 | PRICE-004/005 |

@@ -89,20 +89,55 @@ Se vuoto:
 
 ## 5. Nuovo ordine
 
-### Header
-- back/home non distruttivo;
-- eventuale indicazione `Ordine in corso`.
+### Header (M5 UX — compact order workspace)
 
-### Ricerca
-Placeholder:
-`Cerca prodotto o ingrediente...`
+Nella parte alta della schermata principale del DRAFT, tre azioni testuali coerenti visivamente con l'attuale `INDIETRO` / `CassaBackButton`:
 
-### Filtri
+```text
+[ NOTE ]        [ CERCA ]        [ ← INDIETRO ]
+```
+
+Posizionamento:
+- `NOTE` → alto sinistra;
+- `CERCA` → alto centro;
+- `INDIETRO` → alto destra.
+
+Regole:
+- touch target `>= 48dp`;
+- accessibilità corretta (content description distinti);
+- stile coerente con `CassaBackButton` senza obbligatoriamente duplicarne l'implementazione se non appropriato;
+- `INDIETRO` resta non distruttivo (stesso significato di back/home attuale).
+
+Sotto l'header: titolo `Nuovo ordine` (o indicazione equivalente `Ordine in corso` se già prevista).
+
+### Schermata principale — contenuto (compact)
+
+La schermata principale **non** contiene più:
+- editor inline `NOTA ORDINE`;
+- pulsante inline `SALVA NOTA`;
+- campo ricerca inline.
+
+La schermata principale **mantiene**:
+- `Nuovo ordine`;
+- `ORDINE CORRENTE` + righe ordine;
+- selettore categorie `TUTTI | PIZZE | FRITTURA | BIBITE`;
+- elenco catalogo/prodotti della categoria selezionata;
+- sticky `TOTALE` (ORD-022).
+
+Controlli ORD-020 invariati: `+/-`, `RIMUOVI`, tap riga → dettaglio.
+Custom pizza highlight invariato.
+
+Obiettivo: liberare spazio verticale per il catalogo su smartphone portrait senza rimuovere funzioni.
+
+### Filtri (schermata principale)
+
 `TUTTI | PIZZE | FRITTURA | BIBITE`
 
-Filtro e ricerca si combinano.
+Sulla schermata principale i filtri categoria guidano il catalogo inline.
+La ricerca dedicata (`CERCA`) è un percorso aggiuntivo separato e **non** richiede il selettore categorie nella stessa vista (cerca sull'intero catalogo attivo con la logica esistente).
 
-### Risultati
+### Catalogo principale (schermata ordine)
+
 Riga:
 ```text
 Margherita
@@ -110,7 +145,7 @@ Pomodoro, Fior di latte... (opzionale/compatto)
 € 7,00                         [+]
 ```
 
-Se match ingrediente:
+Se match ingrediente (solo nella vista `CERCA` dedicata):
 ```text
 Margherita
 Contiene: Parmigiano
@@ -121,7 +156,7 @@ Tap riga:
 - apre dettaglio.
 
 Tap `+`:
-- quick add standard.
+- quick add standard (stesso flow ORD esistente).
 
 ### Ordine corrente
 Ogni riga del DRAFT mostra:
@@ -152,30 +187,80 @@ Rimuovere questa riga?
 
 Touch target almeno `48dp`. `RIMUOVI` resta distinto dai controlli quantità.
 
-### Nota ordine (ORD-021)
+### Nota ordine — overlay (ORD-021 + M5 UX compact)
 
-Nella schermata principale del DRAFT (`Nuovo ordine` / ordine in corso), dopo l'elenco delle righe e prima dell'area finale totale/azioni, una sezione distinta:
+`NOTE` apre una sovraimpressione/modal chiaramente separata dalla schermata ordine.
 
 ```text
 NOTA ORDINE
 [campo multilinea]
-[SALVA NOTA]
+[ANNULLA]  [SALVA]
 ```
 
-Regole UX:
-- chiaramente riconoscibile come nota dell'**intero ordine**, non di una singola riga;
-- campo multilinea leggibile, con scrolling/layout adeguati;
-- salvataggio **solo** tramite `SALVA NOTA` (nessun autosave per carattere);
-- `SALVA NOTA` può essere disabilitato quando il testo editor coincide con il valore persistito;
-- touch target `>= 48dp`;
-- con tastiera aperta: campo usabile e `SALVA NOTA` raggiungibile (`imePadding` / `navigationBarsPadding` appropriati);
-- accessibilità coerente con i pattern esistenti;
-- la sezione **non** è sticky se il layout attuale non lo richiede;
-- i controlli ORD-020 (`+/-`, `RIMUOVI`, tap riga → dettaglio) restano invariati.
+All'apertura:
+- editor inizializzato dal `generalNote` **persistito**;
+- dirty = false rispetto al valore Room.
 
-Semantica di salvataggio/empty/null, guard DRAFT/ACCEPTED, protezione editor dirty da riemissioni Flow, e recovery: vedi `docs/02_BUSINESS_RULES.md` (Nota generale ordine ORD-021).
+`ANNULLA`:
+- chiude overlay;
+- nessuna mutation;
+- modifiche locali non salvate scartate;
+- `generalNote` persistito invariato.
 
+`SALVA`:
+- usa `UpdateGeneralNote` esistente;
+- normalizzazione / guard / `updatedAt` ORD-021 invariati;
+- successo → chiude overlay e torna all'ordine;
+- fallimento → overlay resta aperto, testo locale preservato, errore visibile, retry possibile.
+
+Flow re-emission mentre l'overlay è dirty:
+- **non** sovrascrive il testo digitato (stesso contratto ORD-021).
+
+Blank/whitespace → persisted `null`. Nessun autosave.
+
+`NOTE` resta disponibile anche su DRAFT vuoto.
+
+Semantica normativa completa: `docs/02_BUSINESS_RULES.md` (Nota generale ordine ORD-021).
 `orders.generalNote` non attiva l'highlight viola delle pizze personalizzate.
+
+### Vista dedicata CERCA (M5 UX compact)
+
+Tap `CERCA` apre una vista dedicata alla ricerca (preferire stato/feature locale; nuova Navigation destination solo se strettamente necessaria).
+
+```text
+                        [ ← INDIETRO ]
+
+CERCA / Cerca prodotto
+[campo ricerca]
+[risultati]
+```
+
+Subito sotto il campo compaiono i prodotti corrispondenti alla query.
+
+In questa vista **non** mostrare:
+- editor general note;
+- lista ordine;
+- selettore categorie;
+- sticky totale;
+
+salvo necessità tecnica/accessibilità non invasiva.
+
+`INDIETRO` (nella vista CERCA):
+- torna alla schermata ordine corrente;
+- stesso DRAFT.
+
+Semantica ricerca: **invariata** rispetto al motore esistente:
+- nome + ingredienti;
+- case / accent tolerant;
+- ranking corrente;
+- solo prodotti attivi.
+
+Quick-add (`+`) da risultato:
+- persiste tramite lo stesso flow ORD esistente;
+- **resta** nella schermata CERCA (non chiude la ricerca);
+- nessuna modifica a merge policy, quantity rules, pricing, snapshots, total calculation.
+
+Placeholder campo: `Cerca prodotto o ingrediente...` (o equivalente coerente).
 
 ### Totale live (ORD-022)
 
@@ -191,7 +276,8 @@ Regole UX:
 - totale molto evidente e leggibile;
 - accessibilità coerente con i pattern esistenti;
 - rispettare `safeDrawing` / navigation insets;
-- non cambiare il layout più del necessario.
+- sticky nella schermata **principale**;
+- **non** mostrare un secondo totale nella vista CERCA.
 
 Empty DRAFT (nessuna riga):
 ```text
@@ -208,7 +294,7 @@ Il totale resta visibile anche nello stato vuoto (insieme al messaggio empty sta
 
 Semantica di calcolo, source of truth, `orders.totalCents` non-authoritative sul DRAFT, overflow e reattività: vedi `docs/02_BUSINESS_RULES.md` (Totale live DRAFT ORD-022).
 
-Footer/sticky:
+Footer/sticky (solo schermata principale):
 - `TOTALE` (live, ORD-022);
 - `COMPLETA` (placeholder/preservato; non implementato da ORD-022).
 
@@ -217,7 +303,7 @@ Se nessuna riga:
 `Aggiungi un prodotto per iniziare l'ordine.`
 
 Un DRAFT senza items resta esistente (vuoto); Home/recovery seguono le regole già definite per draft vuoto.
-La sezione `NOTA ORDINE` resta disponibile anche su DRAFT vuoto.
+L'azione `NOTE` resta disponibile anche su DRAFT vuoto.
 Il `TOTALE` resta visibile a `€0,00` anche su DRAFT vuoto.
 
 ### Nessun risultato
