@@ -12,22 +12,23 @@ Verified on 2026-09-12:
 
 ```yaml
 branch: main
-HEAD: 67d599257ce29974447ea2f61a5cac7ea9b2cfad
-HEAD commit: "feat: compact order workspace with search filters"
-last completed implementation task: M5 UX refinement — compact order workspace
+HEAD: 3830754dede13ea80b270f02cb68d5fb61377f69
+HEAD commit: "fix: prevent draft replacement dialog loop"
+last UX production commit: 67d599257ce29974447ea2f61a5cac7ea9b2cfad
+last UX production commit message: "feat: compact order workspace with search filters"
 ORD-001..ORD-022: COMPLETE
-ORDER-059..ORDER-074: PASS / COMPLETE
-ORDER-075..ORDER-083: PASS / COMPLETE
+ORDER-059..ORDER-083: COMPLETE
 compact workspace refinement: COMPLETE
 custom pizza highlight: COMPLETE
-Demo M5: NOT STARTED
-M5: IN PROGRESS
+Draft conflict delete popup loop regression: FIXED
+Demo M5: COMPLETE
+M5: COMPLETE
 M6: NOT STARTED
+next step: pre-M6 contract/readiness audit
 origin/main: synchronized
-working tree: clean
 ```
 
-Contract docs for this UX shell:
+Contract docs for the compact UX shell:
 
 ```text
 3803df3822f24ab33e7273e935c45acac70747ea
@@ -37,7 +38,14 @@ docs: freeze compact order workspace ux
 docs: add search category filter contract
 ```
 
-The new agent must verify that `67d599257ce29974447ea2f61a5cac7ea9b2cfad` remains `HEAD` / `origin/main`. Do not rewrite history, and keep each approved backlog task isolated.
+Post-Demo M5 regression fix (M5 remains COMPLETE):
+
+```text
+3830754dede13ea80b270f02cb68d5fb61377f69
+fix: prevent draft replacement dialog loop
+```
+
+The new agent must verify that `3830754dede13ea80b270f02cb68d5fb61377f69` remains `HEAD` / `origin/main` when starting from this handoff (or a later approved checkpoint). Do not rewrite history, and keep each approved backlog task isolated.
 
 ## 3. Current milestone
 
@@ -47,11 +55,11 @@ M1 Core/domain: COMPLETE
 M2 Room: COMPLETE
 M3 Menu/search/manual admin: COMPLETE
 M4 ODS import: COMPLETE
-M5 Draft order core: IN PROGRESS
+M5 Draft order core: COMPLETE
 M6 Preview/acceptance/numbering: NOT STARTED
 ```
 
-Within M5, `ORD-001` through `ORD-022` are complete (ORD block M5 complete), including the post-`ORD-020` customized-pizza row highlight mini-task and the **M5 UX refinement — compact order workspace** (with SEARCH category filters). `Demo M5` (end-to-end validation) is the next step and has not been started. Do **not** declare M5 COMPLETE until Demo M5 is executed and approved. Do not invent `ORD-023`. Do not begin M6 / NUM / ACCEPT.
+M5 is **COMPLETE**: `ORD-001`..`ORD-022`, compact order workspace (`ORDER-059`..`ORDER-083`), and Demo M5 end-to-end validation are done. Do **not** begin M6 production implementation yet. Next step is a **pre-M6 contract/readiness audit** (mark future tasks READY or NEEDS CONTRACT FREEZE) before writing new production code. Do not invent `ORD-023`. Acceptance, numbering, archive, duplicate, and printing remain out of scope until their milestones/contracts are ready.
 
 ## 4. Completed tasks
 
@@ -63,24 +71,26 @@ Within M5, `ORD-001` through `ORD-022` are complete (ORD block M5 complete), inc
 - `ORD-001..022`: draft lifecycle/recovery/conflict handling, order screen, catalog search/actions, persisted quick-add/list/detail, additions/removals, pricing variants, custom-line behavior, the aggregated-pizza edit-scope prompt, the atomic `MODIFICA UNA` split, draft-list quantity change plus explicit line removal, the order-level general note, and the live DRAFT total derived from persisted `order_items`.
 - Post-`ORD-020` UX mini-task: customized pizza rows in the draft list use a soft purple background when the pizza is customized.
 - M5 UX refinement — compact order workspace: COMPLETE (`ORDER-059`..`ORDER-083`), including dedicated SEARCH category filters independent from MAIN.
+- Demo M5: COMPLETE (manual Samsung validation tests 1..4 PASS).
+- Draft conflict delete popup loop regression: FIXED (`3830754` — M5 remains COMPLETE).
 
 Relevant additional regression checkpoint:
 
 - `8d4810173847d47afe587f9d189d7b0b8a12b3b7`: safe handling of trailing LibreOffice repeated padding in ODS files.
 
-Tasks after the compact-workspace UX refinement are not complete unless a later checkpoint explicitly records otherwise. `Demo M5` and M6 are not started. Do not declare M5 COMPLETE.
+M6 and later milestones are **NOT STARTED**. Do not treat acceptance, numbering, archive, duplication of accepted orders, fake printing, or physical NETUM printing as implemented.
 
 ## 5. Current next task
 
 ```yaml
-task: Demo M5
-title: M5 end-to-end demo / validation
+task: pre-M6 contract/readiness audit
+title: Verify future M6+ tasks READY vs NEEDS CONTRACT FREEZE
 priority: P0
 status: NOT STARTED
-milestone: M5 — Draft order core
+milestone: post-M5 / pre-M6
 ```
 
-Create a complex draft, kill the app, and resume with identical persisted state as specified by Demo M5 in `docs/10_IMPLEMENTATION_BACKLOG.md`. Do not invent `ORD-023`. Do not begin M6, numbering, acceptance, archive, duplicate, or printing while only documenting this handoff. Do not declare M5 COMPLETE until Demo M5 is executed and approved.
+Do **not** start M6 production coding from this handoff alone. First audit the forthcoming backlog items and mark each as `READY` or `NEEDS CONTRACT FREEZE` before implementing. Do not invent unfinished M5 features. Do not begin NUM / ACCEPT / archive / duplicate / printing implementation until the audit and any required freezes are done.
 
 ## 6. Frozen architecture decisions
 
@@ -229,6 +239,31 @@ Preserve all parts of the resolved behavior:
 - navigate once on success;
 - a Room `Flow` re-emission must not reopen the dialog.
 
+#### Draft conflict delete popup loop regression — FIXED
+
+Found after Demo M5, fixed before the final M5 docs checkpoint commit. M5 stays **COMPLETE**.
+
+```text
+3830754dede13ea80b270f02cb68d5fb61377f69
+fix: prevent draft replacement dialog loop
+```
+
+Root cause:
+
+- during the transition from the conflict dialog to the secondary replace confirmation,
+  disposing the first `AlertDialog` invoked `onDismissRequest` → `cancelNewOrderConflict()` → `clearConflict()`;
+- that cleared `showReplaceConfirmation` and restarted the conflict cycle.
+
+Frozen fix:
+
+- `cancelNewOrderConflict()` is a no-op when `showReplaceConfirmation == true` or `isNewOrderOperationInProgress == true`;
+- conflict dialog closed before the mutation;
+- in-progress gate active;
+- Flow cannot reopen the conflict during replace;
+- success → navigation once;
+- failure → dialog restorable;
+- double action → no double replace / navigation.
+
 ### ODS LibreOffice repeat padding
 
 Trailing repeated empty cells/rows must be skipped or bounded safely. Do not restore behavior that expands spreadsheet padding into oversized in-memory rows or raises the previous 256-cell false positive on the real LibreOffice file.
@@ -316,15 +351,29 @@ The following manual checks were explicitly completed on Samsung `SM-S931B`:
 - TEST VISIVO 4 PASS: system Back from SEARCH and from NOTE overlay.
 - TEST VISIVO 5 PASS: SEARCH filters `TUTTI` / `PIZZE` / `FRITTURA` / `BIBITE`; query + category AND; quick-add preserves query/filter; MAIN and SEARCH independent; reopen SEARCH → `TUTTI`.
 
+### Demo M5 (Samsung end-to-end)
+
+- DEMO M5 TEST 1 PASS: complex persisted DRAFT with `2x` standard pizza, `1x` separately customized pizza (Addition, Removal, item note), second pizza with manual price, Frittura, Bibita, multiline general order note, and persisted live total.
+- DEMO M5 TEST 2 PASS: live quantity mutation, custom pizza modification, additional Addition, manual price update, general note update; persisted total updates correctly; no duplicate/merge regression.
+- DEMO M5 TEST 3 PASS: remove app from Recents → reopen → same DRAFT recovered (rows, quantities, customizations, item note, manual price, general note, total).
+- DEMO M5 TEST 4 PASS: Android Force Stop → reopen → Room recovery identical (same items/ordering/quantities/Addition/Removal/item note/manual price/general note/total); no duplicate DRAFT/rows; no catalog repricing; no crash.
+
+### Draft conflict delete popup loop (Samsung regression)
+
+- BUGFIX POPUP LOOP — TEST 1 PASS: existing DRAFT → Home → `NUOVO ORDINE` → `ELIMINA E CREA NUOVO` → confirm → new DRAFT → no popup loop → navigation once.
+- BUGFIX POPUP LOOP — TEST 2 PASS: `ANNULLA` conflict → existing DRAFT preserved → no navigation → conflict can reopen normally on the next attempt.
+- BUGFIX POPUP LOOP — TEST 3 PASS: system Back → cancel/no mutation; repeated/double confirmation → one replace → one navigation → no duplicate DRAFT.
+
 Some edge cases are covered by automated tests but were not necessarily repeated manually. Do not describe an automated check as a manual hardware check. In particular, `ORDER-012` transaction rollback is covered by automation and was not provoked manually on the device.
 
 ## 14. Deferred/manual checks still open
 
-- Demo M5 (complex draft, process termination, and identical recovery) is the next step and remains **NOT STARTED**. Do not declare M5 COMPLETE until Demo M5 is executed and approved.
+- Demo M5 is **COMPLETE**. Do not reopen M5 work unless a regression requires a dedicated fix task.
 - A dedicated manual comparison of both `automaticExtrasPricing=true` and `false` paths was deferred; these paths have automated coverage and must remain green.
-- Acceptance, numbering, archive, duplicate, and final printing flows belong to future milestones (M6+) and have not been validated as completed features.
+- Acceptance, numbering, archive, duplicate, and final printing flows belong to future milestones (M6+) and have **not** been validated as completed features and are **not** implemented by M5.
 - Physical NETUM printer calibration remains open: pairing, width, code page, euro/accent rendering, feed, reconnect, interrupted-print semantics, and repeated-print stability.
 - Hardware items in the checklist of `docs/09_TEST_PLAN.md` and `docs/07_PRINTING_SPEC.md` must not be marked complete without real printer validation.
+- Pre-M6 contract/readiness audit remains the next documentation/governance step before M6 production code.
 
 ## 15. ORD-018 final behavior
 
@@ -696,6 +745,38 @@ Automated coverage:
 - ORD-022: unchanged
 - DB / schema / migration: unchanged
 
+### M5 frozen outcome
+
+With Demo M5 complete, M5 now guarantees:
+
+- persistent single active DRAFT
+- quick-add
+- aggregation rules
+- customized pizza no-merge rules
+- atomic single-unit split
+- quantity management
+- explicit line removal
+- additions/removals
+- item notes
+- manual pricing
+- general order note
+- persisted-derived live total
+- compact mobile workspace
+- dedicated search workspace
+- search category filters
+- process-death recovery
+
+M5 does **not** implement or validate:
+
+- acceptance
+- order numbering
+- accepted-order archive
+- duplication of accepted order
+- fake printing
+- physical NETUM printing
+
+Those belong to later milestones after the pre-M6 readiness audit / contract freezes.
+
 ## 22. Rules for the next coding agent
 
 1. Read `AGENTS.md`, `docs/17_CURRENT_STATE.md`, the exact backlog task, linked requirements, linked test plan, and traceability matrix before changing files. Consult `README_CODEX.md` and `docs/11_CODEX_WORKFLOW.md` only for workflow conventions that remain applicable; they are non-normative for Cursor, must not override agent-agnostic instructions, and must not introduce Codex-specific behavior into Cursor work.
@@ -712,38 +793,47 @@ Automated coverage:
 12. Report the exact files changed, test results, assumptions, deferred behavior, and open issues.
 13. Do not change documentation to justify behavior that contradicts higher-precedence requirements.
 14. Stop and report if the task contract is contradictory, requires a destructive migration, or would violate an architectural boundary.
-15. Next step is **Demo M5** — M5 end-to-end demo / validation. Do not invent `ORD-023`. Do not begin M6 / NUM / ACCEPT while only updating this handoff document. Do not declare M5 COMPLETE until Demo M5 is executed and approved.
+15. Next step is the **pre-M6 contract/readiness audit**. Do not begin M6 / NUM / ACCEPT / archive / duplicate / printing production implementation from this handoff alone. Mark forthcoming tasks `READY` or `NEEDS CONTRACT FREEZE` before writing new production code.
 
 ## 23. Verification baseline
 
-Latest verified compact-workspace UX baseline:
+Latest verified M5-complete baseline (Demo M5 + draft-conflict popup-loop regression fix):
+
+```yaml
+./gradlew.bat test: PASS — 384 JVM
+./gradlew.bat assembleDebug: PASS
+./gradlew.bat assembleDebugAndroidTest: PASS
+./gradlew.bat connectedDebugAndroidTest: PASS — 82 tests on Samsung SM-S931B
+./gradlew.bat installDebug: PASS
+compact workspace visual tests 1..5: PASS
+Demo M5 tests 1..4: PASS
+BUGFIX POPUP LOOP tests 1..3: PASS
+device: Samsung SM-S931B
+app data cleared: NO
+```
+
+Historical note — compact-workspace UX verification immediately after `67d5992` (before the popup-loop regression fix) was:
 
 ```yaml
 ./gradlew.bat test: PASS — 382 JVM
-./gradlew.bat assembleDebug: PASS
-./gradlew.bat assembleDebugAndroidTest: PASS
 ./gradlew.bat connectedDebugAndroidTest: PASS — 81 tests on Samsung SM-S931B
-./gradlew.bat installDebug: PASS
-manual visual tests 1..5: PASS
-device: Samsung SM-S931B
-app data cleared: NO
-Samsung stay-awake: OFF
 ```
 
-Documented repository state after the approved compact-workspace production commit:
+Documented repository state for this M5 final checkpoint (including regression fix):
 
 ```yaml
-HEAD: 67d599257ce29974447ea2f61a5cac7ea9b2cfad
-HEAD commit: "feat: compact order workspace with search filters"
-last completed production task: M5 UX refinement — compact order workspace
+HEAD: 3830754dede13ea80b270f02cb68d5fb61377f69
+HEAD commit: "fix: prevent draft replacement dialog loop"
+last UX production commit: 67d599257ce29974447ea2f61a5cac7ea9b2cfad
 ORD-001..ORD-022: COMPLETE
 ORDER-059..ORDER-083: COMPLETE
 compact workspace refinement: COMPLETE
 custom pizza highlight: COMPLETE
-Demo M5: NOT STARTED
-M5: IN PROGRESS
+Draft conflict delete popup loop regression: FIXED
+Demo M5: COMPLETE
+M5: COMPLETE
 M6: NOT STARTED
-next step: Demo M5 — M5 end-to-end demo / validation
+next step: pre-M6 contract/readiness audit
 ```
 
-A later documentation-only update of this handoff file may leave `HEAD` ahead of a previously recorded docs checkpoint without meaning that Demo M5 or M6 has begun. No production code or test file was changed while creating or updating this handoff document.
+A later documentation-only update of this handoff file may leave `HEAD` ahead of a previously recorded production commit without meaning that M6 has begun. No production code or test file was changed while creating or updating this handoff document.
