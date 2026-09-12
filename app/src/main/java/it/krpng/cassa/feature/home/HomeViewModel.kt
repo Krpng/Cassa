@@ -58,7 +58,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun startNewOrder() {
-        if (newOrderJob?.isActive == true) return
+        if (_uiState.value.isNewOrderOperationInProgress || newOrderJob?.isActive == true) return
 
         _uiState.update {
             it.copy(
@@ -76,7 +76,7 @@ class HomeViewModel @Inject constructor(
                 }
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: Exception) {
+            } catch (_: Exception) {
                 showOperationError("Impossibile creare un nuovo ordine.")
             }
         }
@@ -101,15 +101,25 @@ class HomeViewModel @Inject constructor(
     }
 
     fun cancelNewOrderConflict() {
-        if (_uiState.value.isNewOrderOperationInProgress) return
+        val current = _uiState.value
+        // Secondary confirmation replaces the conflict dialog in composition; the disposed
+        // conflict AlertDialog may still invoke onDismissRequest. Do not clear the replace
+        // flow when that happens (regression: ELIMINA → confirmation wiped → conflict loops).
+        if (current.isNewOrderOperationInProgress || current.showReplaceConfirmation) return
         clearConflict()
     }
 
     fun confirmReplaceDraft() {
         val current = _uiState.value
         val conflict = current.newOrderConflict ?: return
-        if (!current.showReplaceConfirmation || current.isNewOrderOperationInProgress) return
+        if (!current.showReplaceConfirmation ||
+            current.isNewOrderOperationInProgress ||
+            newOrderJob?.isActive == true
+        ) {
+            return
+        }
 
+        // Close both dialogs before the mutation so Flow / dismiss callbacks cannot reopen them.
         _uiState.update {
             it.copy(
                 newOrderConflict = null,

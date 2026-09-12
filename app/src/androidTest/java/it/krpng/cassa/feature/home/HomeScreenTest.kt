@@ -133,7 +133,12 @@ class HomeScreenTest {
                     onConflictReplaceRequest = {
                         state.value = state.value.copy(showReplaceConfirmation = true)
                     },
-                    onConflictCancel = {},
+                    onConflictCancel = {
+                        // Mirror ViewModel: ignore dismiss while secondary confirmation is open.
+                        if (!state.value.showReplaceConfirmation) {
+                            state.value = state.value.copy(newOrderConflict = null)
+                        }
+                    },
                     onReplaceConfirm = { replacementConfirmed = true },
                     onReplaceCancel = {
                         state.value = state.value.copy(showReplaceConfirmation = false)
@@ -152,7 +157,68 @@ class HomeScreenTest {
 
         composeRule.onNodeWithText("ANNULLA").performClick()
         composeRule.onNodeWithText("Eliminare l'ordine in corso?").assertDoesNotExist()
+        composeRule.onNodeWithText("Esiste già un ordine in corso.").assertIsDisplayed()
         composeRule.runOnIdle { assertFalse(replacementConfirmed) }
+    }
+
+    @Test
+    fun replaceConfirmationSurvivesConflictDialogDisposeDuringTransition() {
+        val state = mutableStateOf(
+            HomeUiState(
+                isLoading = false,
+                newOrderConflict = draftSummary(),
+            ),
+        )
+        composeRule.setContent {
+            MaterialTheme {
+                HomeScreen(
+                    state = state.value,
+                    onNewOrder = {},
+                    onResumeDraft = {},
+                    onConflictResume = {},
+                    onConflictReplaceRequest = {
+                        state.value = state.value.copy(showReplaceConfirmation = true)
+                    },
+                    onConflictCancel = {
+                        if (!state.value.showReplaceConfirmation &&
+                            !state.value.isNewOrderOperationInProgress
+                        ) {
+                            state.value = state.value.copy(
+                                newOrderConflict = null,
+                                showReplaceConfirmation = false,
+                            )
+                        }
+                    },
+                    onReplaceConfirm = {
+                        state.value = state.value.copy(
+                            newOrderConflict = null,
+                            showReplaceConfirmation = false,
+                            isNewOrderOperationInProgress = true,
+                        )
+                    },
+                    onReplaceCancel = {
+                        if (!state.value.isNewOrderOperationInProgress) {
+                            state.value = state.value.copy(showReplaceConfirmation = false)
+                        }
+                    },
+                    onTodayOrders = {},
+                    onArchive = {},
+                    onMenu = {},
+                    onSettings = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("ELIMINA E CREA NUOVO").performClick()
+        composeRule.onNodeWithText("Eliminare l'ordine in corso?").assertIsDisplayed()
+        composeRule.onNodeWithText("ELIMINA E CREA NUOVO").performClick()
+        composeRule.runOnIdle {
+            assertEquals(null, state.value.newOrderConflict)
+            assertFalse(state.value.showReplaceConfirmation)
+            assertEquals(true, state.value.isNewOrderOperationInProgress)
+        }
+        composeRule.onNodeWithText("Esiste già un ordine in corso.").assertDoesNotExist()
+        composeRule.onNodeWithText("Eliminare l'ordine in corso?").assertDoesNotExist()
     }
 
     private fun draftSummary(): HomeDraftSummary = HomeDraftSummary(

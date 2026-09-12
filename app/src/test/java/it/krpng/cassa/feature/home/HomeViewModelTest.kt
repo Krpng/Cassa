@@ -189,6 +189,69 @@ class HomeViewModelTest {
         }
 
     @Test
+    fun `conflict dialog dismiss during replace confirmation does not wipe ELIMINA flow`() =
+        runTest(mainDispatcher) {
+            val repository = FakeOrderRepository(MutableStateFlow(draftWithItems()))
+            val viewModel = HomeViewModel(repository)
+
+            viewModel.startNewOrder()
+            advanceUntilIdle()
+            viewModel.requestReplaceDraft()
+            assertTrue(viewModel.uiState.value.showReplaceConfirmation)
+            assertEquals("draft-id", viewModel.uiState.value.newOrderConflict?.draftId)
+
+            // Simulates AlertDialog onDismissRequest when the conflict dialog is replaced by
+            // the secondary "Eliminare l'ordine in corso?" confirmation in composition.
+            viewModel.cancelNewOrderConflict()
+            advanceUntilIdle()
+
+            val state = viewModel.uiState.value
+            assertEquals("draft-id", state.newOrderConflict?.draftId)
+            assertTrue(state.showReplaceConfirmation)
+            assertFalse(state.isNewOrderOperationInProgress)
+            assertEquals(0, repository.replaceCalls)
+        }
+
+    @Test
+    fun `replace success keeps dialogs closed across late Flow emissions and navigates once`() =
+        runTest(mainDispatcher) {
+            val replacement = emptyDraft("replacement-id")
+            val repository = FakeOrderRepository(
+                activeDrafts = MutableStateFlow(draftWithItems()),
+                replaceResult = ReplaceDraftResult.Created(replacement),
+            )
+            val viewModel = HomeViewModel(repository)
+            val events = mutableListOf<HomeNavigationEvent>()
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+                viewModel.navigationEvents.collect(events::add)
+            }
+
+            viewModel.startNewOrder()
+            advanceUntilIdle()
+            viewModel.requestReplaceDraft()
+            viewModel.cancelNewOrderConflict() // disposed conflict dialog during transition
+            viewModel.confirmReplaceDraft()
+            viewModel.confirmReplaceDraft()
+            viewModel.cancelNewOrderConflict()
+            viewModel.cancelReplaceDraft()
+            advanceUntilIdle()
+
+            assertEquals(listOf(HomeNavigationEvent.OpenDraft("replacement-id")), events)
+            assertNull(viewModel.uiState.value.newOrderConflict)
+            assertFalse(viewModel.uiState.value.showReplaceConfirmation)
+            assertEquals(1, repository.replaceCalls)
+
+            repository.activeDrafts.value = draftWithItems()
+            repository.activeDrafts.value = replacement
+            repository.activeDrafts.value = draftWithItems()
+            advanceUntilIdle()
+
+            assertNull(viewModel.uiState.value.newOrderConflict)
+            assertFalse(viewModel.uiState.value.showReplaceConfirmation)
+            assertEquals(listOf(HomeNavigationEvent.OpenDraft("replacement-id")), events)
+        }
+
+    @Test
     fun `replacement failure keeps conflict recoverable and does not create separately`() =
         runTest(mainDispatcher) {
             val repository = FakeOrderRepository(
