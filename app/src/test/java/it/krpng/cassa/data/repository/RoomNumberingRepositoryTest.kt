@@ -2,6 +2,7 @@ package it.krpng.cassa.data.repository
 
 import it.krpng.cassa.data.database.dao.NumberingStateDao
 import it.krpng.cassa.data.database.entity.NumberingStateEntity
+import it.krpng.cassa.data.database.entity.NumberingStateRow
 import it.krpng.cassa.domain.numbering.NumberingSeedProvider
 import it.krpng.cassa.domain.numbering.RandomCodeFormatter
 import it.krpng.cassa.domain.numbering.StableRandomPermutation
@@ -626,8 +627,21 @@ class RoomNumberingRepositoryTest {
             }
         }
 
-        override suspend fun get(businessDate: String): NumberingStateEntity? =
-            states[businessDate]
+        /** Test helper for inspecting valid fake state (not a DAO override). */
+        fun get(businessDate: String): NumberingStateEntity? = states[businessDate]
+
+        override suspend fun getRaw(businessDate: String): NumberingStateRow? =
+            states[businessDate]?.let { entity ->
+                NumberingStateRow(
+                    businessDate = entity.businessDate,
+                    nextSequentialNumber = entity.nextSequentialNumber,
+                    randomCycle = entity.randomCycle,
+                    randomSeed = entity.randomSeed,
+                    randomSeedInitialized = entity.randomSeedInitialized,
+                    randomPosition = entity.randomPosition,
+                    updatedAt = entity.updatedAt,
+                )
+            }
 
         override suspend fun insert(state: NumberingStateEntity): Long {
             if (states.containsKey(state.businessDate)) {

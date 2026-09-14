@@ -2,6 +2,7 @@ package it.krpng.cassa.data.repository
 
 import it.krpng.cassa.data.database.dao.NumberingStateDao
 import it.krpng.cassa.data.database.entity.NumberingStateEntity
+import it.krpng.cassa.data.database.entity.NumberingStateRow
 import it.krpng.cassa.domain.numbering.NumberingSeedProvider
 import it.krpng.cassa.domain.numbering.RandomCodeFormatter
 import it.krpng.cassa.domain.numbering.SequentialAllocationResult
@@ -20,6 +21,9 @@ import javax.inject.Inject
  *
  * New rows default to `randomSeedInitialized = false` with `randomSeed = 0L` filler.
  * First RANDOM need generates and persists an authoritative seed once.
+ *
+ * Reads go through [NumberingStateRow] so corrupted DB values are validated here
+ * into typed InvalidState instead of crashing [NumberingStateEntity] construction.
  */
 class RoomNumberingRepository @Inject constructor(
     private val numberingStateDao: NumberingStateDao,
@@ -33,8 +37,13 @@ class RoomNumberingRepository @Inject constructor(
             return AllocateSequentialResult.InvalidState
         }
 
-        val state = getOrCreateState(businessDate, updatedAt)
-            ?: return AllocateSequentialResult.PersistenceFailure
+        val state = when (val loaded = getOrCreateState(businessDate, updatedAt)) {
+            is LoadedNumberingState.Ready -> loaded.state
+            LoadedNumberingState.InvalidState ->
+                return AllocateSequentialResult.InvalidState
+            LoadedNumberingState.PersistenceFailure ->
+                return AllocateSequentialResult.PersistenceFailure
+        }
 
         return when (
             val allocation = SequentialNumberAllocator.allocate(state.nextSequentialNumber)
@@ -71,8 +80,13 @@ class RoomNumberingRepository @Inject constructor(
             return AllocateRandomResult.InvalidState
         }
 
-        val existing = getOrCreateState(businessDate, updatedAt)
-            ?: return AllocateRandomResult.PersistenceFailure
+        val existing = when (val loaded = getOrCreateState(businessDate, updatedAt)) {
+            is LoadedNumberingState.Ready -> loaded.state
+            LoadedNumberingState.InvalidState ->
+                return AllocateRandomResult.InvalidState
+            LoadedNumberingState.PersistenceFailure ->
+                return AllocateRandomResult.PersistenceFailure
+        }
 
         val state = if (existing.randomSeedInitialized) {
             existing
@@ -133,8 +147,13 @@ class RoomNumberingRepository @Inject constructor(
     private suspend fun getOrCreateState(
         businessDate: String,
         updatedAt: Long,
-    ): NumberingStateEntity? {
-        numberingStateDao.get(businessDate)?.let { return it }
+    ): LoadedNumberingState {
+        numberingStateDao.getRaw(businessDate)?.let { row ->
+            return when (val validated = validatePersistedRow(row)) {
+                is RowValidation.Valid -> LoadedNumberingState.Ready(validated.entity)
+                RowValidation.Invalid -> LoadedNumberingState.InvalidState
+            }
+        }
 
         val created = NumberingStateEntity(
             businessDate = businessDate,
@@ -147,10 +166,56 @@ class RoomNumberingRepository @Inject constructor(
         )
         val insertedRowId = numberingStateDao.insert(created)
         return if (insertedRowId != -1L) {
-            created
+            LoadedNumberingState.Ready(created)
         } else {
-            numberingStateDao.get(businessDate)
+            val raced = numberingStateDao.getRaw(businessDate)
+                ?: return LoadedNumberingState.PersistenceFailure
+            when (val validated = validatePersistedRow(raced)) {
+                is RowValidation.Valid -> LoadedNumberingState.Ready(validated.entity)
+                RowValidation.Invalid -> LoadedNumberingState.InvalidState
+            }
         }
+    }
+
+    /**
+     * Mirrors [NumberingStateEntity] invariants without auto-repair.
+     * Invalid rows stay as-is in SQLite; callers return typed InvalidState.
+     */
+    private fun validatePersistedRow(row: NumberingStateRow): RowValidation {
+        if (row.nextSequentialNumber <= 0L) {
+            return RowValidation.Invalid
+        }
+        if (row.randomCycle <= 0) {
+            return RowValidation.Invalid
+        }
+        if (row.randomPosition < 0) {
+            return RowValidation.Invalid
+        }
+        return RowValidation.Valid(
+            NumberingStateEntity(
+                businessDate = row.businessDate,
+                nextSequentialNumber = row.nextSequentialNumber,
+                randomCycle = row.randomCycle,
+                randomSeed = row.randomSeed,
+                randomSeedInitialized = row.randomSeedInitialized,
+                randomPosition = row.randomPosition,
+                updatedAt = row.updatedAt,
+            ),
+        )
+    }
+
+    private sealed interface LoadedNumberingState {
+        data class Ready(val state: NumberingStateEntity) : LoadedNumberingState
+
+        data object InvalidState : LoadedNumberingState
+
+        data object PersistenceFailure : LoadedNumberingState
+    }
+
+    private sealed interface RowValidation {
+        data class Valid(val entity: NumberingStateEntity) : RowValidation
+
+        data object Invalid : RowValidation
     }
 
     private companion object {

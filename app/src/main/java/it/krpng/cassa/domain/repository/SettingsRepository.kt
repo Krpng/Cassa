@@ -12,8 +12,15 @@ interface SettingsRepository {
 
     suspend fun getNumberingMode(): NumberingModeLoadResult
 
+    suspend fun getBusinessDaySettings(): BusinessDaySettingsLoadResult
+
     suspend fun updateNumberingMode(mode: NumberingMode): UpdateNumberingModeResult
 }
+
+data class BusinessDaySettings(
+    val timezoneId: String,
+    val businessDayStartMinutes: Int,
+)
 
 sealed interface NumberingModeLoadResult {
     data class Loaded(val mode: NumberingMode) : NumberingModeLoadResult
@@ -22,6 +29,12 @@ sealed interface NumberingModeLoadResult {
     data object InvalidStoredMode : NumberingModeLoadResult
 
     data object PersistenceFailure : NumberingModeLoadResult
+}
+
+sealed interface BusinessDaySettingsLoadResult {
+    data class Loaded(val settings: BusinessDaySettings) : BusinessDaySettingsLoadResult
+
+    data object PersistenceFailure : BusinessDaySettingsLoadResult
 }
 
 sealed interface UpdateNumberingModeResult {

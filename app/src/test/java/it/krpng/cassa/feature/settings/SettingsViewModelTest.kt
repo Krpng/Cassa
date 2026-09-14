@@ -1,6 +1,8 @@
 package it.krpng.cassa.feature.settings
 
 import it.krpng.cassa.domain.model.NumberingMode
+import it.krpng.cassa.domain.repository.BusinessDaySettings
+import it.krpng.cassa.domain.repository.BusinessDaySettingsLoadResult
 import it.krpng.cassa.domain.repository.NumberingModeLoadResult
 import it.krpng.cassa.domain.repository.SettingsRepository
 import it.krpng.cassa.domain.repository.UpdateNumberingModeResult
@@ -183,6 +185,14 @@ class SettingsViewModelTest {
             }
             return result
         }
+
+        override suspend fun getBusinessDaySettings(): BusinessDaySettingsLoadResult =
+            BusinessDaySettingsLoadResult.Loaded(
+                BusinessDaySettings(
+                    timezoneId = "Europe/Rome",
+                    businessDayStartMinutes = 300,
+                ),
+            )
 
         fun releaseHang() {
             hangGate.value = true

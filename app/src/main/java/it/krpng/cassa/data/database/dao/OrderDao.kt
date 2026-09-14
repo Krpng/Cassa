@@ -154,6 +154,32 @@ interface OrderDao {
 
     @Query(
         """
+        UPDATE orders
+        SET status = 'ACCEPTED',
+            draftSlot = NULL,
+            displayNumber = :displayNumber,
+            numberingMode = :numberingMode,
+            numberingCycle = :numberingCycle,
+            businessDate = :businessDate,
+            acceptedAt = :acceptedAt,
+            totalCents = :totalCents,
+            updatedAt = :updatedAt
+        WHERE id = :orderId AND status = 'DRAFT' AND draftSlot = 1
+        """,
+    )
+    suspend fun acceptDraftOrder(
+        orderId: String,
+        displayNumber: String,
+        numberingMode: String,
+        numberingCycle: Int?,
+        businessDate: String,
+        acceptedAt: Long,
+        totalCents: Long,
+        updatedAt: Long,
+    ): Int
+
+    @Query(
+        """
         DELETE FROM orders
         WHERE id = :orderId AND status = 'DRAFT' AND draftSlot = 1
         """,

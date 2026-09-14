@@ -1,7 +1,10 @@
 package it.krpng.cassa.domain.repository
 
 import it.krpng.cassa.core.money.Money
+import it.krpng.cassa.domain.model.NumberingMode
 import it.krpng.cassa.domain.model.Order
+import java.time.Instant
+import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 
 interface OrderRepository {
@@ -57,6 +60,38 @@ interface OrderRepository {
         orderId: String,
         generalNote: String?,
     ): UpdateGeneralNoteResult
+
+    suspend fun acceptOrder(orderId: String): AcceptOrderResult
+}
+
+sealed interface AcceptOrderResult {
+    data class Accepted(
+        val orderId: String,
+        val displayNumber: String,
+        val total: Money,
+        val acceptedAt: Instant,
+        val businessDate: LocalDate,
+        val numberingMode: NumberingMode,
+        val numberingCycle: Int?,
+    ) : AcceptOrderResult
+
+    data object OrderNotFound : AcceptOrderResult
+
+    data object OrderNotDraft : AcceptOrderResult
+
+    data object EmptyDraft : AcceptOrderResult
+
+    data object AmountOverflow : AcceptOrderResult
+
+    data object InvalidStoredMode : AcceptOrderResult
+
+    data object InvalidNumberingState : AcceptOrderResult
+
+    data object CounterOverflow : AcceptOrderResult
+
+    data object CycleOverflow : AcceptOrderResult
+
+    data object PersistenceFailure : AcceptOrderResult
 }
 
 enum class CustomizationQuantityIntent {

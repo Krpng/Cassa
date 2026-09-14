@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import it.krpng.cassa.data.database.entity.NumberingStateEntity
+import it.krpng.cassa.data.database.entity.NumberingStateRow
 
 @Dao
 interface NumberingStateDao {
@@ -16,7 +17,7 @@ interface NumberingStateDao {
         LIMIT 1
         """,
     )
-    suspend fun get(businessDate: String): NumberingStateEntity?
+    suspend fun getRaw(businessDate: String): NumberingStateRow?
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(state: NumberingStateEntity): Long

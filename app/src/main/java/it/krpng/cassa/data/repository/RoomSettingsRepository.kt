@@ -5,13 +5,15 @@ import it.krpng.cassa.data.database.dao.AppSettingsDao
 import it.krpng.cassa.data.database.entity.AppSettingsEntity
 import it.krpng.cassa.domain.model.NumberingMode
 import it.krpng.cassa.domain.model.NumberingModeParser
+import it.krpng.cassa.domain.repository.BusinessDaySettings
+import it.krpng.cassa.domain.repository.BusinessDaySettingsLoadResult
 import it.krpng.cassa.domain.repository.NumberingModeLoadResult
 import it.krpng.cassa.domain.repository.SettingsRepository
 import it.krpng.cassa.domain.repository.UpdateNumberingModeResult
-import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapLatest
+import javax.inject.Inject
 
 /**
  * Room-backed settings. Mode updates do not mutate numbering_state or orders.
@@ -37,6 +39,23 @@ class RoomSettingsRepository @Inject constructor(
         } else {
             parseStored(raw)
         }
+    }
+
+    override suspend fun getBusinessDaySettings(): BusinessDaySettingsLoadResult {
+        if (appSettingsDao.get() == null) {
+            when (ensureDefaultLoaded()) {
+                is NumberingModeLoadResult.Loaded -> Unit
+                else -> return BusinessDaySettingsLoadResult.PersistenceFailure
+            }
+        }
+        val entity = appSettingsDao.get()
+            ?: return BusinessDaySettingsLoadResult.PersistenceFailure
+        return BusinessDaySettingsLoadResult.Loaded(
+            BusinessDaySettings(
+                timezoneId = entity.timezoneId,
+                businessDayStartMinutes = entity.businessDayStartMinutes,
+            ),
+        )
     }
 
     override suspend fun updateNumberingMode(mode: NumberingMode): UpdateNumberingModeResult {

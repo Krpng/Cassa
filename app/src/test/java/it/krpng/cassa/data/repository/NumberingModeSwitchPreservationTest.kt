@@ -5,6 +5,7 @@ import it.krpng.cassa.data.database.dao.AppSettingsDao
 import it.krpng.cassa.data.database.dao.NumberingStateDao
 import it.krpng.cassa.data.database.entity.AppSettingsEntity
 import it.krpng.cassa.data.database.entity.NumberingStateEntity
+import it.krpng.cassa.data.database.entity.NumberingStateRow
 import it.krpng.cassa.domain.model.NumberingMode
 import it.krpng.cassa.domain.numbering.NumberingSeedProvider
 import it.krpng.cassa.domain.repository.AllocateRandomResult
@@ -26,7 +27,7 @@ import org.junit.Test
  * NUM-T006 / NUM-T015 / NUM-T028 / NUM-T029 / NUM-T031 — mode switch preserves
  * independent numbering states and consumes no numbers.
  *
- * NUM-T032 / NUM-T033 — DEFERRED TO ACCEPT-003.
+ * NUM-T032 / NUM-T033 — covered by AcceptOrderRepositoryTest (ACCEPT-003).
  */
 class NumberingModeSwitchPreservationTest {
     private val clock = FakeClockProvider(Instant.parse("2026-09-14T16:00:00Z"))
@@ -224,8 +225,8 @@ class NumberingModeSwitchPreservationTest {
 
         fun getBlocking(businessDate: String): NumberingStateEntity? = states[businessDate]
 
-        override suspend fun get(businessDate: String): NumberingStateEntity? =
-            states[businessDate]
+        override suspend fun getRaw(businessDate: String): NumberingStateRow? =
+            states[businessDate]?.toRow()
 
         override suspend fun insert(state: NumberingStateEntity): Long {
             if (states.containsKey(state.businessDate)) return -1L
@@ -240,6 +241,16 @@ class NumberingModeSwitchPreservationTest {
             mutated = true
             return 1
         }
+
+        private fun NumberingStateEntity.toRow(): NumberingStateRow = NumberingStateRow(
+            businessDate = businessDate,
+            nextSequentialNumber = nextSequentialNumber,
+            randomCycle = randomCycle,
+            randomSeed = randomSeed,
+            randomSeedInitialized = randomSeedInitialized,
+            randomPosition = randomPosition,
+            updatedAt = updatedAt,
+        )
     }
 
     private companion object {

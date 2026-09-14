@@ -1015,6 +1015,10 @@ class OrderItemDetailViewModelTest {
             generalNote: String?,
         ): it.krpng.cassa.domain.repository.UpdateGeneralNoteResult = error("Not used")
 
+        override suspend fun acceptOrder(
+            orderId: String,
+        ): it.krpng.cassa.domain.repository.AcceptOrderResult = error("Not used")
+
         private fun Order?.orEmptyItems(): List<OrderItem> = this?.items.orEmpty()
     }
 

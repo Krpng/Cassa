@@ -9,6 +9,7 @@ import it.krpng.cassa.domain.model.OrderItemRemoval
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.pricing.OrderTotalResult
+import it.krpng.cassa.domain.repository.AcceptOrderResult
 import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
@@ -20,6 +21,7 @@ import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
+import it.krpng.cassa.domain.usecase.AcceptOrder
 import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -69,7 +71,10 @@ class AcceptancePreviewViewModelTest {
             .parameterTypes
             .map { it.simpleName }
 
-        assertEquals(listOf("SavedStateHandle", "OrderRepository"), parameterTypes)
+        assertEquals(
+            listOf("SavedStateHandle", "OrderRepository", "AcceptOrder"),
+            parameterTypes,
+        )
     }
 
     @Test
@@ -90,7 +95,7 @@ class AcceptancePreviewViewModelTest {
             ready.orderTotal,
         )
         assertEquals("senza cipolla", ready.generalNote)
-        assertFalse(ready.isAcceptEnabled)
+        assertTrue(ready.isAcceptEnabled)
     }
 
     @Test
@@ -189,12 +194,75 @@ class AcceptancePreviewViewModelTest {
         assertEquals(AcceptancePreviewUiState.EmptyDraft, viewModel.uiState.value)
     }
 
+    @Test
+    fun `ACCEPT-003 ACCETTA enabled on valid ready preview`() = runTest(mainDispatcher) {
+        val viewModel = viewModel(FakeOrderRepository(draft()))
+        advanceUntilIdle()
+        val ready = viewModel.uiState.value as AcceptancePreviewUiState.Ready
+        assertTrue(ready.isAcceptEnabled)
+        assertFalse(ready.isAccepting)
+    }
+
+    @Test
+    fun `ACCEPT-003 accept success maps to Accepted state`() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(draft()).apply {
+            acceptResult = AcceptOrderResult.Accepted(
+                orderId = DRAFT_ID,
+                displayNumber = "001",
+                total = Money.ofCents(700),
+                acceptedAt = NOW,
+                businessDate = java.time.LocalDate.parse("2026-09-14"),
+                numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
+                numberingCycle = null,
+            )
+        }
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+
+        val accepted = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+        assertEquals("001", accepted.displayNumber)
+        assertEquals(1, repository.acceptCalls)
+    }
+
+    @Test
+    fun `ACCEPT-003 duplicate accept while in progress is ignored`() = runTest(mainDispatcher) {
+        val gate = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val repository = FakeOrderRepository(draft()).apply {
+            acceptBlock = { gate.await() }
+            acceptResult = AcceptOrderResult.Accepted(
+                orderId = DRAFT_ID,
+                displayNumber = "002",
+                total = Money.ofCents(700),
+                acceptedAt = NOW,
+                businessDate = java.time.LocalDate.parse("2026-09-14"),
+                numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
+                numberingCycle = null,
+            )
+        }
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+        assertTrue((viewModel.uiState.value as AcceptancePreviewUiState.Ready).isAccepting)
+        viewModel.accept()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(1, repository.acceptCalls)
+        assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+    }
+
     private fun viewModel(repository: FakeOrderRepository): AcceptancePreviewViewModel =
         AcceptancePreviewViewModel(
             savedStateHandle = SavedStateHandle(
                 mapOf(AcceptancePreviewViewModel.DRAFT_ID_ARGUMENT to DRAFT_ID),
             ),
             orderRepository = repository,
+            acceptOrder = AcceptOrder(repository),
         )
 
     private class FakeOrderRepository(
@@ -204,6 +272,10 @@ class AcceptancePreviewViewModelTest {
         var writeCount: Int = 0
             private set
         val readOps = mutableListOf<String>()
+        var acceptCalls: Int = 0
+            private set
+        var acceptResult: AcceptOrderResult = AcceptOrderResult.PersistenceFailure
+        var acceptBlock: (suspend () -> Unit)? = null
 
         private fun write(): Nothing {
             writeCount += 1
@@ -270,6 +342,12 @@ class AcceptancePreviewViewModelTest {
             orderId: String,
             generalNote: String?,
         ): UpdateGeneralNoteResult = write()
+
+        override suspend fun acceptOrder(orderId: String): AcceptOrderResult {
+            acceptCalls += 1
+            acceptBlock?.invoke()
+            return acceptResult
+        }
     }
 
     private companion object {

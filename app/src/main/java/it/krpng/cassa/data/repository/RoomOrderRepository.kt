@@ -2,6 +2,7 @@ package it.krpng.cassa.data.repository
 
 import android.database.sqlite.SQLiteException
 import kotlinx.coroutines.CancellationException
+import it.krpng.cassa.core.datetime.BusinessDateCalculator
 import it.krpng.cassa.core.datetime.ClockProvider
 import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.data.database.DatabaseTransactionRunner
@@ -17,24 +18,36 @@ import it.krpng.cassa.data.database.entity.OrderItemEntity
 import it.krpng.cassa.data.database.entity.OrderItemRemovalEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.OrderItemWithModifiers
+import it.krpng.cassa.domain.model.NumberingMode
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.ProductCategory
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.order.GeneralNoteNormalizer
+import it.krpng.cassa.domain.pricing.CalculateOrderTotal
 import it.krpng.cassa.domain.pricing.OrderLineMergeCandidate
 import it.krpng.cassa.domain.pricing.OrderLineMergePolicy
+import it.krpng.cassa.domain.pricing.OrderTotalResult
 import it.krpng.cassa.domain.pricing.PricingCalculator
+import it.krpng.cassa.domain.repository.AcceptOrderResult
+import it.krpng.cassa.domain.repository.AllocateRandomResult
+import it.krpng.cassa.domain.repository.AllocateSequentialResult
+import it.krpng.cassa.domain.repository.BusinessDaySettingsLoadResult
 import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
+import it.krpng.cassa.domain.repository.NumberingModeLoadResult
+import it.krpng.cassa.domain.repository.NumberingRepository
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.SettingsRepository
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
+import java.time.DateTimeException
+import java.time.ZoneId
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -44,11 +57,29 @@ class RoomOrderRepository @Inject constructor(
     private val orderDao: OrderDao,
     private val clockProvider: ClockProvider,
     private val transactionRunner: DatabaseTransactionRunner,
+    private val numberingRepository: NumberingRepository,
+    private val settingsRepository: SettingsRepository,
 ) : OrderRepository {
     internal constructor(
         orderDao: OrderDao,
         clockProvider: ClockProvider,
-    ) : this(orderDao, clockProvider, ImmediateDatabaseTransactionRunner)
+    ) : this(
+        orderDao = orderDao,
+        clockProvider = clockProvider,
+        transactionRunner = ImmediateDatabaseTransactionRunner,
+    )
+
+    internal constructor(
+        orderDao: OrderDao,
+        clockProvider: ClockProvider,
+        transactionRunner: DatabaseTransactionRunner,
+    ) : this(
+        orderDao = orderDao,
+        clockProvider = clockProvider,
+        transactionRunner = transactionRunner,
+        numberingRepository = UnsupportedNumberingRepository,
+        settingsRepository = UnsupportedSettingsRepository,
+    )
 
     override suspend fun getById(orderId: String): Order? =
         orderDao.getFullOrder(orderId)?.toDomain()
@@ -505,6 +536,131 @@ class RoomOrderRepository @Inject constructor(
         UpdateGeneralNoteResult.PersistenceFailure
     }
 
+    override suspend fun acceptOrder(orderId: String): AcceptOrderResult = try {
+        transactionRunner.runInTransaction {
+            acceptOrderInsideTransaction(orderId)
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: AcceptOrderWriteConflictException) {
+        AcceptOrderResult.PersistenceFailure
+    } catch (_: SQLiteException) {
+        AcceptOrderResult.PersistenceFailure
+    }
+
+    private suspend fun acceptOrderInsideTransaction(orderId: String): AcceptOrderResult {
+        val fullOrder = orderDao.getFullOrder(orderId)
+            ?: return AcceptOrderResult.OrderNotFound
+        val order = fullOrder.toDomain()
+
+        if (order.status != OrderStatus.DRAFT || fullOrder.order.draftSlot != DRAFT_SLOT) {
+            return AcceptOrderResult.OrderNotDraft
+        }
+        if (order.items.isEmpty()) {
+            return AcceptOrderResult.EmptyDraft
+        }
+
+        val total = when (val orderTotal = CalculateOrderTotal.fromPersistedItems(order.items).orderTotal) {
+            is OrderTotalResult.Success -> orderTotal.total
+            OrderTotalResult.AmountOverflow -> return AcceptOrderResult.AmountOverflow
+        }
+
+        val now = clockProvider.now()
+        val nowEpochMillis = now.toEpochMilli()
+
+        val businessSettings = when (val loaded = settingsRepository.getBusinessDaySettings()) {
+            is BusinessDaySettingsLoadResult.Loaded -> loaded.settings
+            BusinessDaySettingsLoadResult.PersistenceFailure ->
+                return AcceptOrderResult.PersistenceFailure
+        }
+        val zoneId = try {
+            ZoneId.of(businessSettings.timezoneId)
+        } catch (_: DateTimeException) {
+            return AcceptOrderResult.PersistenceFailure
+        }
+        val businessDate = BusinessDateCalculator.calculate(
+            instant = now,
+            zoneId = zoneId,
+            businessDayStartMinutes = businessSettings.businessDayStartMinutes,
+        )
+        val businessDateIso = businessDate.toString()
+
+        val mode = when (val modeResult = settingsRepository.getNumberingMode()) {
+            is NumberingModeLoadResult.Loaded -> modeResult.mode
+            NumberingModeLoadResult.InvalidStoredMode ->
+                return AcceptOrderResult.InvalidStoredMode
+            NumberingModeLoadResult.PersistenceFailure ->
+                return AcceptOrderResult.PersistenceFailure
+        }
+
+        val displayNumber: String
+        val numberingCycle: Int?
+        when (mode) {
+            NumberingMode.SEQUENTIAL -> {
+                when (
+                    val allocated = numberingRepository.allocateNextSequential(
+                        businessDate = businessDateIso,
+                        updatedAt = nowEpochMillis,
+                    )
+                ) {
+                    is AllocateSequentialResult.Allocated -> {
+                        displayNumber = allocated.displayNumber
+                        numberingCycle = null
+                    }
+                    AllocateSequentialResult.InvalidState ->
+                        return AcceptOrderResult.InvalidNumberingState
+                    AllocateSequentialResult.CounterOverflow ->
+                        return AcceptOrderResult.CounterOverflow
+                    AllocateSequentialResult.PersistenceFailure ->
+                        return AcceptOrderResult.PersistenceFailure
+                }
+            }
+            NumberingMode.RANDOM -> {
+                when (
+                    val allocated = numberingRepository.allocateNextRandom(
+                        businessDate = businessDateIso,
+                        updatedAt = nowEpochMillis,
+                    )
+                ) {
+                    is AllocateRandomResult.Allocated -> {
+                        displayNumber = allocated.displayNumber
+                        numberingCycle = allocated.randomCycle
+                    }
+                    AllocateRandomResult.InvalidState ->
+                        return AcceptOrderResult.InvalidNumberingState
+                    AllocateRandomResult.CycleOverflow ->
+                        return AcceptOrderResult.CycleOverflow
+                    AllocateRandomResult.PersistenceFailure ->
+                        return AcceptOrderResult.PersistenceFailure
+                }
+            }
+        }
+
+        val updatedRows = orderDao.acceptDraftOrder(
+            orderId = orderId,
+            displayNumber = displayNumber,
+            numberingMode = mode.name,
+            numberingCycle = numberingCycle,
+            businessDate = businessDateIso,
+            acceptedAt = nowEpochMillis,
+            totalCents = total.cents,
+            updatedAt = nowEpochMillis,
+        )
+        if (updatedRows != 1) {
+            throw AcceptOrderWriteConflictException()
+        }
+
+        return AcceptOrderResult.Accepted(
+            orderId = orderId,
+            displayNumber = displayNumber,
+            total = total,
+            acceptedAt = now,
+            businessDate = businessDate,
+            numberingMode = mode,
+            numberingCycle = numberingCycle,
+        )
+    }
+
     private fun OrderItemWithModifiers.isCustomized(): Boolean =
         OrderLineMergePolicy.isCustomized(
             OrderLineMergeCandidate(
@@ -835,6 +991,33 @@ private class OrderItemQuantityConflictException : IllegalStateException()
 private class OrderItemRemoveConflictException : IllegalStateException()
 
 private class GeneralNoteUpdateConflictException : IllegalStateException()
+
+private class AcceptOrderWriteConflictException : IllegalStateException()
+
+private object UnsupportedNumberingRepository : NumberingRepository {
+    override suspend fun allocateNextSequential(
+        businessDate: String,
+        updatedAt: Long,
+    ): AllocateSequentialResult = error("NumberingRepository is required for acceptOrder")
+
+    override suspend fun allocateNextRandom(
+        businessDate: String,
+        updatedAt: Long,
+    ): AllocateRandomResult = error("NumberingRepository is required for acceptOrder")
+}
+
+private object UnsupportedSettingsRepository : SettingsRepository {
+    override fun observeNumberingMode() = error("SettingsRepository is required for acceptOrder")
+
+    override suspend fun getNumberingMode(): NumberingModeLoadResult =
+        error("SettingsRepository is required for acceptOrder")
+
+    override suspend fun getBusinessDaySettings(): BusinessDaySettingsLoadResult =
+        error("SettingsRepository is required for acceptOrder")
+
+    override suspend fun updateNumberingMode(mode: NumberingMode) =
+        error("SettingsRepository is required for acceptOrder")
+}
 
 private sealed interface AdditionUpdatePreparation {
     data class Ready(val update: AdditionUpdate) : AdditionUpdatePreparation

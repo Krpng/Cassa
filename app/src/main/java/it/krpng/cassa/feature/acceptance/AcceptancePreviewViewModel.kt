@@ -9,8 +9,13 @@ import it.krpng.cassa.domain.acceptance.AcceptancePreviewOrdering
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.pricing.CalculateOrderTotal
 import it.krpng.cassa.domain.pricing.OrderTotalResult
+import it.krpng.cassa.domain.repository.AcceptOrderResult
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.usecase.AcceptOrder
+import java.time.Instant
+import java.time.LocalDate
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,27 +54,34 @@ sealed interface AcceptancePreviewUiState {
         val sections: List<AcceptancePreviewSectionUi>,
         val generalNote: String?,
         val orderTotal: OrderTotalResult,
+        val isAccepting: Boolean = false,
+        val acceptError: String? = null,
     ) : AcceptancePreviewUiState {
-        /** ACCEPT-001: AcceptOrder not wired; always false. */
-        val isAcceptEnabled: Boolean
-            get() = false
-
         val hasTotalOverflow: Boolean
             get() = orderTotal is OrderTotalResult.AmountOverflow
+
+        val isAcceptEnabled: Boolean
+            get() = !hasTotalOverflow && !isAccepting
     }
+
+    data class Accepted(
+        val orderId: String,
+        val displayNumber: String,
+        val total: Money,
+        val acceptedAt: Instant,
+        val businessDate: LocalDate,
+    ) : AcceptancePreviewUiState
 
     data class Failure(
         val message: String,
     ) : AcceptancePreviewUiState
 }
 
-/**
- * Read-only acceptance preview. Observes Room draft; never mutates order or numbering.
- */
 @HiltViewModel
 class AcceptancePreviewViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val orderRepository: OrderRepository,
+    private val acceptOrder: AcceptOrder,
 ) : ViewModel() {
     private val draftId: String =
         checkNotNull(savedStateHandle.get<String>(DRAFT_ID_ARGUMENT)) {
@@ -81,6 +93,7 @@ class AcceptancePreviewViewModel @Inject constructor(
     val uiState: StateFlow<AcceptancePreviewUiState> = _uiState.asStateFlow()
 
     private var observationJob: Job? = null
+    private var acceptJob: Job? = null
 
     init {
         observeDraft()
@@ -90,8 +103,61 @@ class AcceptancePreviewViewModel @Inject constructor(
         observeDraft()
     }
 
+    fun accept() {
+        val current = _uiState.value
+        if (current !is AcceptancePreviewUiState.Ready) return
+        if (!current.isAcceptEnabled || acceptJob?.isActive == true) return
+
+        _uiState.value = current.copy(isAccepting = true, acceptError = null)
+        acceptJob = viewModelScope.launch {
+            try {
+                when (val result = acceptOrder(current.draftId)) {
+                    is AcceptOrderResult.Accepted -> {
+                        _uiState.value = AcceptancePreviewUiState.Accepted(
+                            orderId = result.orderId,
+                            displayNumber = result.displayNumber,
+                            total = result.total,
+                            acceptedAt = result.acceptedAt,
+                            businessDate = result.businessDate,
+                        )
+                    }
+                    AcceptOrderResult.OrderNotFound ->
+                        _uiState.value = AcceptancePreviewUiState.NotFound
+                    AcceptOrderResult.OrderNotDraft ->
+                        _uiState.value = AcceptancePreviewUiState.NotDraft
+                    AcceptOrderResult.EmptyDraft ->
+                        _uiState.value = AcceptancePreviewUiState.EmptyDraft
+                    AcceptOrderResult.AmountOverflow ->
+                        restoreReady(current, "Totale non calcolabile.")
+                    AcceptOrderResult.InvalidStoredMode ->
+                        restoreReady(current, "Modalità numerazione non valida.")
+                    AcceptOrderResult.InvalidNumberingState ->
+                        restoreReady(current, "Stato numerazione non valido.")
+                    AcceptOrderResult.CounterOverflow ->
+                        restoreReady(current, "Contatore sequenziale esaurito.")
+                    AcceptOrderResult.CycleOverflow ->
+                        restoreReady(current, "Ciclo casuale esaurito.")
+                    AcceptOrderResult.PersistenceFailure ->
+                        restoreReady(current, "Impossibile accettare l'ordine.")
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                restoreReady(current, "Impossibile accettare l'ordine.")
+            }
+        }
+    }
+
+    private fun restoreReady(
+        previous: AcceptancePreviewUiState.Ready,
+        message: String,
+    ) {
+        _uiState.value = previous.copy(isAccepting = false, acceptError = message)
+    }
+
     private fun observeDraft() {
         observationJob?.cancel()
+        if (_uiState.value is AcceptancePreviewUiState.Accepted) return
         _uiState.value = AcceptancePreviewUiState.Loading
         observationJob = viewModelScope.launch {
             orderRepository.observeById(draftId)
@@ -101,6 +167,9 @@ class AcceptancePreviewViewModel @Inject constructor(
                     )
                 }
                 .collect { order ->
+                    if (_uiState.value is AcceptancePreviewUiState.Accepted) return@collect
+                    val accepting = (_uiState.value as? AcceptancePreviewUiState.Ready)?.isAccepting == true
+                    if (accepting) return@collect
                     _uiState.value = when {
                         order == null -> AcceptancePreviewUiState.NotFound
                         order.status != OrderStatus.DRAFT -> AcceptancePreviewUiState.NotDraft
@@ -136,8 +205,9 @@ class AcceptancePreviewViewModel @Inject constructor(
                                     )
                                 },
                                 generalNote = order.generalNote,
-                                // Derived from persisted items — never orders.totalCents.
                                 orderTotal = totals.orderTotal,
+                                acceptError = (_uiState.value as? AcceptancePreviewUiState.Ready)
+                                    ?.acceptError,
                             )
                         }
                     }

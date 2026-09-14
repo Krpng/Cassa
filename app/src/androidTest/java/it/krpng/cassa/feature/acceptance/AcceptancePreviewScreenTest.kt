@@ -3,6 +3,7 @@ package it.krpng.cassa.feature.acceptance
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -19,7 +20,7 @@ class AcceptancePreviewScreenTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
-    fun readyPreviewShowsSectionsSnapshotsNoteTotalAndDisabledAccept() {
+    fun readyPreviewShowsSectionsSnapshotsNoteTotalAndEnabledAccept() {
         var backClicks = 0
         var acceptClicks = 0
         composeRule.setContent {
@@ -80,11 +81,12 @@ class AcceptancePreviewScreenTest {
         composeRule.onNodeWithText("Nota: ben cotta").assertIsDisplayed()
         composeRule.onNodeWithText("Tavolo 4").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Totale anteprima: 17,50 €").assertIsDisplayed()
-        composeRule.onNodeWithText("ACCETTA").assertIsNotEnabled()
+        composeRule.onNodeWithText("ACCETTA").assertIsEnabled()
+        composeRule.onNodeWithText("ACCETTA").performClick()
         composeRule.onNodeWithText("ANNULLA").performClick()
         composeRule.runOnIdle {
             assertEquals(1, backClicks)
-            assertEquals(0, acceptClicks)
+            assertEquals(1, acceptClicks)
         }
     }
 

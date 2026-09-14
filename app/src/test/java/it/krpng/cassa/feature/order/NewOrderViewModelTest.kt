@@ -17,6 +17,7 @@ import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
+import it.krpng.cassa.domain.repository.AcceptOrderResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import it.krpng.cassa.domain.usecase.AddProductToDraft
@@ -1493,6 +1494,8 @@ class NewOrderViewModelTest {
             }
             return result
         }
+
+        override suspend fun acceptOrder(orderId: String): AcceptOrderResult = error("Not used")
     }
 
     private class FakeProductRepository(

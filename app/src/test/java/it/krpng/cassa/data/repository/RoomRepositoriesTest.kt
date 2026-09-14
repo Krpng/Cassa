@@ -312,6 +312,17 @@ class RoomRepositoriesTest {
 
         override suspend fun updateDraftTimestamp(orderId: String, updatedAt: Long): Int = 0
 
+        override suspend fun acceptDraftOrder(
+            orderId: String,
+            displayNumber: String,
+            numberingMode: String,
+            numberingCycle: Int?,
+            businessDate: String,
+            acceptedAt: Long,
+            totalCents: Long,
+            updatedAt: Long,
+        ): Int = 0
+
         override suspend fun deleteDraft(orderId: String): Int = 0
     }
 

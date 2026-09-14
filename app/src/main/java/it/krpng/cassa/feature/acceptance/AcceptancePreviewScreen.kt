@@ -41,7 +41,7 @@ fun AcceptancePreviewRoute(
         state = viewModel.uiState.collectAsStateWithLifecycle().value,
         onBack = onBack,
         onRetry = viewModel::retry,
-        onAccept = {},
+        onAccept = viewModel::accept,
     )
 }
 
@@ -109,6 +109,45 @@ fun AcceptancePreviewScreen(
                     modifier = Modifier.weight(1f),
                 )
             }
+            is AcceptancePreviewUiState.Accepted -> {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = "Ordine accettato",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = state.displayNumber,
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.semantics {
+                            contentDescription = "Numero ordine ${state.displayNumber}"
+                        },
+                    )
+                    Text(
+                        text = "Totale: ${state.total.formatEur()}",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        text = "Schermata Accepted completa: ACCEPT-006.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                ) {
+                    Text("INDIETRO")
+                }
+            }
             is AcceptancePreviewUiState.Ready -> {
                 LazyColumn(
                     modifier = Modifier
@@ -150,10 +189,31 @@ fun AcceptancePreviewScreen(
                     item(key = "total") {
                         PreviewTotal(orderTotal = state.orderTotal)
                     }
+                    if (state.isAccepting) {
+                        item(key = "accepting") {
+                            Text(
+                                text = "Accettazione in corso…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.semantics {
+                                    contentDescription = "Accettazione in corso"
+                                },
+                            )
+                        }
+                    }
+                    state.acceptError?.let { error ->
+                        item(key = "accept-error") {
+                            Text(
+                                text = error,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyLarge,
+                            )
+                        }
+                    }
                 }
 
                 PreviewActions(
                     acceptEnabled = state.isAcceptEnabled,
+                    isAccepting = state.isAccepting,
                     hasOverflow = state.hasTotalOverflow,
                     onBack = onBack,
                     onAccept = onAccept,
@@ -268,6 +328,7 @@ private fun PreviewTotal(orderTotal: OrderTotalResult) {
 @Composable
 private fun PreviewActions(
     acceptEnabled: Boolean,
+    isAccepting: Boolean,
     hasOverflow: Boolean,
     onBack: () -> Unit,
     onAccept: () -> Unit,
@@ -279,12 +340,25 @@ private fun PreviewActions(
             .padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (isAccepting) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.semantics {
+                        contentDescription = "Accettazione in corso"
+                    },
+                )
+            }
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             TextButton(
                 onClick = onBack,
+                enabled = !isAccepting,
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
