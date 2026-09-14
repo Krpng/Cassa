@@ -42,6 +42,7 @@ import org.junit.runner.RunWith
  * ACCEPT-003 normative coverage: ACCEPT-T001, T002 (accept side), T004, T005,
  * T013..T016, T018 (atomicity), NUM-T032, NUM-T033.
  * ACCEPT-004: ACCEPT-T003, ACCEPT-T017, NUM-T005 (concurrent / double accept).
+ * ACCEPT-005 (ACCEPT-T007, SNAP-001..004): AcceptedOrderImmutabilityRepositoryTest.
  */
 @RunWith(AndroidJUnit4::class)
 class AcceptOrderRepositoryTest {
