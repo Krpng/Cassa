@@ -325,32 +325,34 @@ Demo M5:
 
 ## M6 — Preview, acceptance, numbering
 
-Status milestone: **STARTED — NUM-001 only** (contract FREEZE-A + FREEZE-B COMPLETE; RANDOM-seed initialization marker patched). Non marcare task IMPLEMENTED finché non implementati.
+Status milestone: **IN PROGRESS** — NUM-001..005 COMPLETE; ACCEPT-001 COMPLETE; ACCEPT-002 COMPLETE (satisfied by ACCEPT-001); **NEXT = ACCEPT-003**. Contract FREEZE-A + FREEZE-B COMPLETE.
 
-### NUM-001 [P0] Sequential service/state — IMPLEMENTATION IN PROGRESS / NOT COMPLETED
-Test NUM-T001..006 (+ NUM-T020/T021 contract alignment once `randomSeedInitialized` exists).
-**Prerequisite:** **DB-010** additive migration before NUM-001 can persist contract-correct uninitialized RANDOM state (no `0L`-as-sentinel semantics).
+### NUM-001 [P0] Sequential service/state — COMPLETE
+Test NUM-T001..006 (+ NUM-T020/T021). DB-010 applied with NUM-001.
 
-### NUM-002 [P0] Random code formatter — READY
+### NUM-002 [P0] Random code formatter — COMPLETE
 Mapping indice ↔ `[A-Z][0-9][0-9]`; test NUM-T010, NUM-T017.
 
-### NUM-003 [P0] Stable random permutation generator — BLOCKED BY DB-010; contract READY
+### NUM-003 [P0] Stable random permutation generator — COMPLETE
 Contratto FREEZE-A: XorShift32 + Fisher–Yates bit-stable; first-need seed via `randomSeedInitialized`; test NUM-T016, NUM-T014, NUM-T018, NUM-T022..024.
 
-### NUM-004 [P0] Random state/cycles — BLOCKED BY NUM-003; contract READY
+### NUM-004 [P0] Random state/cycles — COMPLETE
 2600 distinct, cycle 2, seed once; test NUM-T011..013, NUM-T018..019.
 
-### NUM-005 [P0] Mode switch + Settings numbering control — CONTRACT READY (D-040 RESOLVED); NOT IMPLEMENTED
-Domain: `AppSettingsDao` + `SettingsRepository` (o equivalenti) per get/update `app_settings.numberingMode`; get/create singleton default `SEQUENTIAL`; no migration. UI owner: **`SettingsScreen`** (Home → IMPOSTAZIONI); controllo “Modalità numerazione” SEQUENZIALE/CASUALE, save immediato, stati loading/loaded/saving/error/retry. Preservazione stati SEQUENTIAL/RANDOM indipendenti; future AcceptOrder only; DRAFT/ACCEPTED invariati. Test: NUM-T006, NUM-T015, NUM-T025..035 (casi AcceptOrder: contract-ready / deferred ACCEPT-003).
+### NUM-005 [P0] Mode switch + Settings numbering control — COMPLETE
+`SettingsScreen` owns NumberingMode UI; `app_settings.numberingMode`; tests NUM-T006, NUM-T015, NUM-T025..035 (T032/T033 deferred ACCEPT-003). Commit: `18b49b8`.
 
-### ACCEPT-001 [P0] Preview screen category ordering — READY
-`PIZZE`→`FRITTURA`→`BIBITE`; within `createdSequence ASC`; zero writes. Test ACCEPT-T008..012, ACCEPT-T020.
+### ACCEPT-001 [P0] Preview screen category ordering — COMPLETE
+`PIZZE`→`FRITTURA`→`BIBITE`; within `createdSequence ASC`; zero writes; derived total; ACCETTA visible+disabled. Test ACCEPT-T008..012, ACCEPT-T020. Commit: `d6e7ff9`.
 
-### ACCEPT-002 [P0] Draft / preview actions (scope M6) — READY
-`COMPLETA` (enabled solo con items) → preview read-only con `[INDIETRO/ANNULLA]` + `[ACCETTA]` only. **Non** in M6: `ACCETTA E STAMPA`, `STAMPA BOZZA`. Test ACCEPT-T008..009, ACCEPT-T020.
+### ACCEPT-002 [P0] Draft / preview actions (scope M6) — COMPLETE (satisfied by ACCEPT-001)
+Ownership: M6 preview action surface (`COMPLETA` → preview with `[INDIETRO/ANNULLA]` + `[ACCETTA]` only; **no** `ACCETTA E STAMPA` / `STAMPA BOZZA`).
+**No additional production or test work required** — delivered and verified under ACCEPT-001 (`d6e7ff9`). Coverage reused: ACCEPT-T008, ACCEPT-T009, ACCEPT-T020 (PASS).
+`ACCETTA` remains **visible + disabled** until ACCEPT-003; number allocation = ZERO in ACCEPT-002.
 
-### ACCEPT-003 [P0] AcceptOrder transaction — contract READY
-Dipende da NUM-001 (+ NUM-003 se mode RANDOM). Test ACCEPT-T001, ACCEPT-T004..005, ACCEPT-T013..016, ACCEPT-T018.
+### ACCEPT-003 [P0] AcceptOrder transaction — contract READY / NOT STARTED / NEXT
+Owns: AcceptOrder use case; precondition revalidation; `numberingMode` read at accept-time; number allocation; `businessDate`/`acceptedAt`; checked total snapshot; single Room `@Transaction`; DRAFT→ACCEPTED; **ACCETTA enabled + click wiring**.
+Dipende da NUM-001 (+ NUM-003 se mode RANDOM) — prerequisites SATISFIED. Test ACCEPT-T001, ACCEPT-T004..005, ACCEPT-T013..016, ACCEPT-T018.
 
 ### ACCEPT-004 [P0] Double-accept protection — contract READY
 Test ACCEPT-T003, ACCEPT-T017; NUM-T005.

@@ -61,11 +61,10 @@ M2 Room: COMPLETE
 M3 Menu/search/manual admin: COMPLETE
 M4 ODS import: COMPLETE
 M5 Draft order core: COMPLETE
-M6 Preview/acceptance/numbering: STARTED — NUM-001 only (not completed; DB-010 prerequisite)
+M6 Preview/acceptance/numbering: IN PROGRESS — NUM COMPLETE; ACCEPT-001/002 COMPLETE; NEXT ACCEPT-003
 ```
 
-M5 is **COMPLETE**: `ORD-001`..`ORD-022`, compact order workspace (`ORDER-059`..`ORDER-083`), and Demo M5 end-to-end validation are done. Pre-M6 audit and **M6 CONTRACT FREEZE** (FREEZE-A random numbering + FREEZE-B acceptance preview/UX) are **COMPLETE** in normative docs. Do **not** begin M6 production implementation until explicitly authorized. Do not invent `ORD-023`. NUM/ACCEPT tasks are contract READY (see backlog); archive, duplicate, and printing remain later milestones.
-
+M5 is **COMPLETE**: `ORD-001`..`ORD-022`, compact order workspace (`ORDER-059`..`ORDER-083`), and Demo M5 end-to-end validation are done. Pre-M6 audit and **M6 CONTRACT FREEZE** (FREEZE-A random numbering + FREEZE-B acceptance preview/UX) are **COMPLETE**. NUM-001..005 and ACCEPT-001/002 are **COMPLETE** (ACCEPT-002 satisfied by ACCEPT-001). Next authorized production task: **ACCEPT-003** only when explicitly authorized. Do not invent `ORD-023`. Archive, duplicate, and printing remain later milestones.
 ## 4. Completed tasks
 
 - `APP-001..005`: Android/Compose bootstrap, dependencies, package structure, Hilt, and navigation shell.
@@ -83,21 +82,20 @@ Relevant additional regression checkpoint:
 
 - `8d4810173847d47afe587f9d189d7b0b8a12b3b7`: safe handling of trailing LibreOffice repeated padding in ODS files.
 
-M6 is **STARTED — NUM-001 only** (implementation in progress / not completed). Do not treat AcceptOrder, RANDOM numbering, archive, duplication, fake printing, or physical NETUM printing as implemented.
+M6 is **IN PROGRESS**: NUM-001..005 COMPLETE; ACCEPT-001 COMPLETE; ACCEPT-002 COMPLETE (satisfied by ACCEPT-001 / D-043). AcceptOrder / ACCETTA enable remain **ACCEPT-003** (NOT STARTED). Do not treat archive, duplication, fake printing, or physical NETUM printing as implemented.
 
 ## 5. Current next task
 
 ```yaml
-task: DB-010 then finish NUM-001 alignment — ONLY when explicitly authorized
-title: Additive randomSeedInitialized migration; then contract-correct sequential state
+task: ACCEPT-003 — ONLY when explicitly authorized
+title: AcceptOrder transaction (atomic DRAFT → ACCEPTED + numbering)
 priority: P0
-status: NOT STARTED (migration) / NUM-001 code uncommitted & not completed
-depends_on: D-042 contract patch
+status: NOT STARTED / NEXT
+depends_on: NUM-001..005 COMPLETE; ACCEPT-001 COMPLETE; ACCEPT-002 COMPLETE (satisfied by ACCEPT-001)
 milestone: M6
 ```
 
-Do **not** start NUM-002/003 or AcceptOrder without authorization. NUM-001 must not invent `0L` as seed-uninitialized sentinel; use `randomSeedInitialized` after DB-010. Do not invent unfinished M5 features. Do not begin ARCH/PRINT/BT/HW from this handoff.
-
+Do **not** enable/wire `ACCETTA` or implement AcceptOrder without authorization for ACCEPT-003. Do not invent unfinished M5 features. Do not begin ARCH/PRINT/BT/HW from this handoff.
 ## 6. Frozen architecture decisions
 
 - Native Android application written in Kotlin.
@@ -862,3 +860,27 @@ Frozen for NUM-005:
 - Tests: NUM-T006/T015 aligned; NUM-T025..035 added (T032/T033 deferred to ACCEPT-003 integration).
 
 Do **not** start NUM-005 production/UI code until authorized. Connected Compose tests on Samsung require screen ON + keyguard UNLOCKED.
+
+## 25. ACCEPT-001 COMPLETE + ACCEPT-002 formal closure (D-043)
+
+Verified production + documentary checkpoint:
+
+```yaml
+branch: main
+HEAD: d6e7ff9befbcdaacca2eee4e584aeee4cd3b404c
+HEAD commit: "feat: add acceptance preview"
+NUM-001..NUM-005: COMPLETE
+ACCEPT-001: COMPLETE
+ACCEPT-002: COMPLETE — satisfied by ACCEPT-001 (D-043); no extra production/test work
+ACCEPT-003: NOT STARTED / NEXT
+ACCETTA: visible + disabled (enable/wiring owned by ACCEPT-003 only)
+number allocation on preview/ACCEPT-002: ZERO
+```
+
+Ownership freeze:
+
+- ACCEPT-001: preview content, category/`createdSequence` order, derived total, zero-write read-only.
+- ACCEPT-002: M6 action surface (`COMPLETA`, `INDIETRO/ANNULLA`, `ACCETTA` only, no print CTAs) — already delivered by ACCEPT-001.
+- ACCEPT-003: AcceptOrder, precondition revalidation, `numberingMode` at accept-time, number allocation, `businessDate`/`acceptedAt`, checked total snapshot, Room transaction, DRAFT→ACCEPTED, ACCETTA enabled + click wiring.
+
+Tests: ACCEPT-T008/T009/T020 PASS cover ACCEPT-002; ACCEPT-T010..012 remain preview/ACCEPT-001; AcceptOrder tests deferred to ACCEPT-003+.
