@@ -129,4 +129,63 @@ class AcceptancePreviewScreenTest {
         composeRule.onNodeWithText("L'accettazione non è disponibile.").assertIsDisplayed()
         composeRule.onNodeWithText("ACCETTA").assertIsNotEnabled()
     }
+
+    @Test
+    fun acceptT019AcceptedShowsNumberTotalDisabledPrintHomeAndNewOrder() {
+        var homeClicks = 0
+        var newOrderClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = AcceptancePreviewUiState.Accepted(
+                        orderId = "order-1",
+                        displayNumber = "001",
+                        total = Money.ofCents(1_400),
+                        acceptedAt = java.time.Instant.parse("2026-09-14T18:00:00Z"),
+                        businessDate = java.time.LocalDate.parse("2026-09-14"),
+                        sections = listOf(
+                            AcceptancePreviewSectionUi(
+                                title = "PIZZE",
+                                lines = listOf(
+                                    AcceptancePreviewLineUi(
+                                        itemId = "p1",
+                                        quantity = 2,
+                                        productName = "Margherita",
+                                        productPrintedName = "MARGHERITA",
+                                        additionNames = emptyList(),
+                                        removalNames = emptyList(),
+                                        note = null,
+                                        finalUnitPrice = Money.ofCents(700),
+                                        lineTotal = Money.ofCents(1_400),
+                                    ),
+                                ),
+                            ),
+                        ),
+                        generalNote = null,
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                    onHome = { homeClicks += 1 },
+                    onNewOrder = { newOrderClicks += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Numero ordine 001").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Totale ordine: 14,00 €").assertIsDisplayed()
+        composeRule.onNodeWithText("2 × Margherita").assertIsDisplayed()
+        composeRule.onNodeWithText("ACCETTA").assertDoesNotExist()
+        composeRule.onNodeWithText("ANNULLA").assertDoesNotExist()
+        composeRule.onNodeWithText("STAMPA").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertIsNotEnabled()
+        composeRule.onNodeWithText("HOME").assertIsEnabled()
+        composeRule.onNodeWithText("NUOVO ORDINE").assertIsEnabled()
+        composeRule.onNodeWithText("HOME").performClick()
+        composeRule.onNodeWithText("NUOVO ORDINE").performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, homeClicks)
+            assertEquals(1, newOrderClicks)
+        }
+    }
 }

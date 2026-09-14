@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -38,6 +39,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class AcceptancePreviewViewModelTest {
@@ -204,6 +206,71 @@ class AcceptancePreviewViewModelTest {
     }
 
     @Test
+    fun `ACCEPT-T006 accept success stays on Accepted from Room`() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(draft()).apply {
+            acceptResult = AcceptOrderResult.Accepted(
+                orderId = DRAFT_ID,
+                displayNumber = "001",
+                total = Money.ofCents(700),
+                acceptedAt = NOW,
+                businessDate = java.time.LocalDate.parse("2026-09-14"),
+                numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
+                numberingCycle = null,
+            )
+            emitAcceptedOnAccept = true
+        }
+        val viewModel = viewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+
+        val accepted = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+        assertEquals("001", accepted.displayNumber)
+        assertEquals(Money.ofCents(700), accepted.total)
+        assertEquals(DRAFT_ID, accepted.orderId)
+        assertEquals(1, repository.acceptCalls)
+        assertTrue(accepted.sections.isNotEmpty())
+    }
+
+    @Test
+    fun `ACCEPT-T019 home and new order navigation leave accepted unchanged`() =
+        runTest(mainDispatcher) {
+            val repository = FakeOrderRepository(
+                acceptedOrder(displayNumber = "042", totalCents = 1_400),
+            )
+            val viewModel = viewModel(repository)
+            advanceUntilIdle()
+
+            val before = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+            assertEquals("042", before.displayNumber)
+
+            val events = mutableListOf<AcceptanceNavigationEvent>()
+            val collectJob = launch {
+                viewModel.navigationEvents.collect { events += it }
+            }
+
+            viewModel.goHome()
+            advanceUntilIdle()
+            assertEquals(listOf(AcceptanceNavigationEvent.GoHome), events)
+
+            viewModel.startNewOrder()
+            advanceUntilIdle()
+            assertEquals(1, repository.createDraftCalls)
+            assertTrue(events.last() is AcceptanceNavigationEvent.OpenNewOrder)
+            val open = events.last() as AcceptanceNavigationEvent.OpenNewOrder
+            assertEquals("new-draft", open.draftId)
+            assertTrue(open.draftId != DRAFT_ID)
+
+            val after = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+            assertEquals(before.displayNumber, after.displayNumber)
+            assertEquals(before.total, after.total)
+            assertEquals(before.orderId, after.orderId)
+            assertEquals(0, repository.acceptCalls)
+            collectJob.cancel()
+        }
+
+    @Test
     fun `ACCEPT-003 accept success maps to Accepted state`() = runTest(mainDispatcher) {
         val repository = FakeOrderRepository(draft()).apply {
             acceptResult = AcceptOrderResult.Accepted(
@@ -215,6 +282,7 @@ class AcceptancePreviewViewModelTest {
                 numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
                 numberingCycle = null,
             )
+            emitAcceptedOnAccept = true
         }
         val viewModel = viewModel(repository)
         advanceUntilIdle()
@@ -241,6 +309,7 @@ class AcceptancePreviewViewModelTest {
                 numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
                 numberingCycle = null,
             )
+            emitAcceptedOnAccept = true
         }
         val viewModel = viewModel(repository)
         advanceUntilIdle()
@@ -269,13 +338,18 @@ class AcceptancePreviewViewModelTest {
         initial: Order?,
     ) : OrderRepository {
         private val order = MutableStateFlow(initial)
+        private var activeDraftId: String? =
+            initial?.takeIf { it.status == OrderStatus.DRAFT }?.id
         var writeCount: Int = 0
             private set
         val readOps = mutableListOf<String>()
         var acceptCalls: Int = 0
             private set
+        var createDraftCalls: Int = 0
+            private set
         var acceptResult: AcceptOrderResult = AcceptOrderResult.PersistenceFailure
         var acceptBlock: (suspend () -> Unit)? = null
+        var emitAcceptedOnAccept: Boolean = false
 
         private fun write(): Nothing {
             writeCount += 1
@@ -294,9 +368,18 @@ class AcceptancePreviewViewModelTest {
 
         override fun observeActiveDraft(): Flow<Order?> = write()
 
-        override suspend fun getActiveDraft(): Order? = write()
+        override suspend fun getActiveDraft(): Order? {
+            val id = activeDraftId ?: return null
+            return order.value?.takeIf { it.id == id && it.status == OrderStatus.DRAFT }
+        }
 
-        override suspend fun createDraft(): CreateDraftResult = write()
+        override suspend fun createDraft(): CreateDraftResult {
+            createDraftCalls += 1
+            if (activeDraftId != null) return CreateDraftResult.AlreadyExists
+            val created = draft(id = "new-draft", items = emptyList())
+            activeDraftId = created.id
+            return CreateDraftResult.Created(created)
+        }
 
         override suspend fun deleteDraft(orderId: String): DeleteDraftResult = write()
 
@@ -346,7 +429,21 @@ class AcceptancePreviewViewModelTest {
         override suspend fun acceptOrder(orderId: String): AcceptOrderResult {
             acceptCalls += 1
             acceptBlock?.invoke()
-            return acceptResult
+            val result = acceptResult
+            if (emitAcceptedOnAccept && result is AcceptOrderResult.Accepted) {
+                val current = order.value ?: return result
+                activeDraftId = null
+                order.value = current.copy(
+                    status = OrderStatus.ACCEPTED,
+                    displayNumber = result.displayNumber,
+                    numberingMode = result.numberingMode,
+                    numberingCycle = result.numberingCycle,
+                    businessDate = result.businessDate,
+                    acceptedAt = result.acceptedAt,
+                    total = result.total,
+                )
+            }
+            return result
         }
     }
 
@@ -355,13 +452,14 @@ class AcceptancePreviewViewModelTest {
         val NOW: Instant = Instant.parse("2026-09-14T18:00:00Z")
 
         fun draft(
+            id: String = DRAFT_ID,
             items: List<OrderItem> = listOf(
                 item(id = "1", category = ProductCategory.PIZZA, sequence = 1),
             ),
             staleTotalCents: Long = 999_999L,
             generalNote: String? = null,
         ): Order = Order(
-            id = DRAFT_ID,
+            id = id,
             status = OrderStatus.DRAFT,
             displayNumber = null,
             numberingMode = null,
@@ -374,6 +472,27 @@ class AcceptancePreviewViewModelTest {
             generalNote = generalNote,
             sourceOrderId = null,
             items = items,
+        )
+
+        fun acceptedOrder(
+            displayNumber: String,
+            totalCents: Long,
+        ): Order = Order(
+            id = DRAFT_ID,
+            status = OrderStatus.ACCEPTED,
+            displayNumber = displayNumber,
+            numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
+            numberingCycle = null,
+            businessDate = LocalDate.parse("2026-09-14"),
+            createdAt = NOW,
+            updatedAt = NOW,
+            acceptedAt = NOW,
+            total = Money.ofCents(totalCents),
+            generalNote = null,
+            sourceOrderId = null,
+            items = listOf(
+                item(id = "1", category = ProductCategory.PIZZA, sequence = 1, unitCents = 700, qty = 2),
+            ),
         )
 
         fun item(

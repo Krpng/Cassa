@@ -5,11 +5,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import it.krpng.cassa.core.money.Money
+import it.krpng.cassa.domain.acceptance.AcceptancePreviewCategorySection
 import it.krpng.cassa.domain.acceptance.AcceptancePreviewOrdering
+import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.pricing.CalculateOrderTotal
 import it.krpng.cassa.domain.pricing.OrderTotalResult
 import it.krpng.cassa.domain.repository.AcceptOrderResult
+import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.usecase.AcceptOrder
 import java.time.Instant
@@ -17,10 +20,12 @@ import java.time.LocalDate
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 data class AcceptancePreviewLineUi(
@@ -70,11 +75,21 @@ sealed interface AcceptancePreviewUiState {
         val total: Money,
         val acceptedAt: Instant,
         val businessDate: LocalDate,
+        val sections: List<AcceptancePreviewSectionUi>,
+        val generalNote: String?,
+        val isCreatingNewOrder: Boolean = false,
+        val actionError: String? = null,
     ) : AcceptancePreviewUiState
 
     data class Failure(
         val message: String,
     ) : AcceptancePreviewUiState
+}
+
+sealed interface AcceptanceNavigationEvent {
+    data object GoHome : AcceptanceNavigationEvent
+
+    data class OpenNewOrder(val draftId: String) : AcceptanceNavigationEvent
 }
 
 @HiltViewModel
@@ -92,15 +107,19 @@ class AcceptancePreviewViewModel @Inject constructor(
         MutableStateFlow<AcceptancePreviewUiState>(AcceptancePreviewUiState.Loading)
     val uiState: StateFlow<AcceptancePreviewUiState> = _uiState.asStateFlow()
 
+    private val _navigationEvents = Channel<AcceptanceNavigationEvent>(Channel.BUFFERED)
+    val navigationEvents = _navigationEvents.receiveAsFlow()
+
     private var observationJob: Job? = null
     private var acceptJob: Job? = null
+    private var newOrderJob: Job? = null
 
     init {
-        observeDraft()
+        observeOrder()
     }
 
     fun retry() {
-        observeDraft()
+        observeOrder()
     }
 
     fun accept() {
@@ -113,13 +132,8 @@ class AcceptancePreviewViewModel @Inject constructor(
             try {
                 when (val result = acceptOrder(current.draftId)) {
                     is AcceptOrderResult.Accepted -> {
-                        _uiState.value = AcceptancePreviewUiState.Accepted(
-                            orderId = result.orderId,
-                            displayNumber = result.displayNumber,
-                            total = result.total,
-                            acceptedAt = result.acceptedAt,
-                            businessDate = result.businessDate,
-                        )
+                        // Room is source of truth; observation maps ACCEPTED → Accepted UI.
+                        observeOrder(forceReload = true)
                     }
                     AcceptOrderResult.OrderNotFound ->
                         _uiState.value = AcceptancePreviewUiState.NotFound
@@ -148,6 +162,53 @@ class AcceptancePreviewViewModel @Inject constructor(
         }
     }
 
+    fun goHome() {
+        if (_uiState.value !is AcceptancePreviewUiState.Accepted) return
+        _navigationEvents.trySend(AcceptanceNavigationEvent.GoHome)
+    }
+
+    fun startNewOrder() {
+        val current = _uiState.value
+        if (current !is AcceptancePreviewUiState.Accepted) return
+        if (current.isCreatingNewOrder || newOrderJob?.isActive == true) return
+
+        _uiState.value = current.copy(isCreatingNewOrder = true, actionError = null)
+        newOrderJob = viewModelScope.launch {
+            try {
+                when (val result = orderRepository.createDraft()) {
+                    is CreateDraftResult.Created -> {
+                        _uiState.value = current.copy(isCreatingNewOrder = false, actionError = null)
+                        _navigationEvents.send(
+                            AcceptanceNavigationEvent.OpenNewOrder(result.draft.id),
+                        )
+                    }
+                    CreateDraftResult.AlreadyExists -> {
+                        val existing = orderRepository.getActiveDraft()
+                        if (existing != null) {
+                            _uiState.value =
+                                current.copy(isCreatingNewOrder = false, actionError = null)
+                            _navigationEvents.send(
+                                AcceptanceNavigationEvent.OpenNewOrder(existing.id),
+                            )
+                        } else {
+                            _uiState.value = current.copy(
+                                isCreatingNewOrder = false,
+                                actionError = "Impossibile creare un nuovo ordine.",
+                            )
+                        }
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                _uiState.value = current.copy(
+                    isCreatingNewOrder = false,
+                    actionError = "Impossibile creare un nuovo ordine.",
+                )
+            }
+        }
+    }
+
     private fun restoreReady(
         previous: AcceptancePreviewUiState.Ready,
         message: String,
@@ -155,10 +216,14 @@ class AcceptancePreviewViewModel @Inject constructor(
         _uiState.value = previous.copy(isAccepting = false, acceptError = message)
     }
 
-    private fun observeDraft() {
+    private fun observeOrder(forceReload: Boolean = false) {
         observationJob?.cancel()
-        if (_uiState.value is AcceptancePreviewUiState.Accepted) return
-        _uiState.value = AcceptancePreviewUiState.Loading
+        if (!forceReload && _uiState.value is AcceptancePreviewUiState.Accepted) return
+        val keepAcceptingUi =
+            (_uiState.value as? AcceptancePreviewUiState.Ready)?.isAccepting == true
+        if (!keepAcceptingUi && _uiState.value !is AcceptancePreviewUiState.Accepted) {
+            _uiState.value = AcceptancePreviewUiState.Loading
+        }
         observationJob = viewModelScope.launch {
             orderRepository.observeById(draftId)
                 .catch {
@@ -167,52 +232,84 @@ class AcceptancePreviewViewModel @Inject constructor(
                     )
                 }
                 .collect { order ->
-                    if (_uiState.value is AcceptancePreviewUiState.Accepted) return@collect
-                    val accepting = (_uiState.value as? AcceptancePreviewUiState.Ready)?.isAccepting == true
-                    if (accepting) return@collect
+                    val accepting =
+                        (_uiState.value as? AcceptancePreviewUiState.Ready)?.isAccepting == true
+                    if (accepting && order?.status == OrderStatus.DRAFT) return@collect
+
                     _uiState.value = when {
                         order == null -> AcceptancePreviewUiState.NotFound
+                        order.status == OrderStatus.ACCEPTED -> order.toAcceptedUiOrFailure()
                         order.status != OrderStatus.DRAFT -> AcceptancePreviewUiState.NotDraft
                         order.items.isEmpty() -> AcceptancePreviewUiState.EmptyDraft
-                        else -> {
-                            val sections = AcceptancePreviewOrdering.groupByCategory(order.items)
-                            val totals = CalculateOrderTotal.fromPersistedItems(
-                                sections.flatMap { it.items },
-                            )
-                            val lineTotalById = totals.lineTotals.associate { it.itemId to it.lineTotal }
-                            AcceptancePreviewUiState.Ready(
-                                draftId = order.id,
-                                sections = sections.map { section ->
-                                    AcceptancePreviewSectionUi(
-                                        title = section.title,
-                                        lines = section.items.map { item ->
-                                            AcceptancePreviewLineUi(
-                                                itemId = item.id,
-                                                quantity = item.quantity,
-                                                productName = item.productNameSnapshot,
-                                                productPrintedName = item.productPrintedNameSnapshot,
-                                                additionNames = item.additions
-                                                    .sortedBy { it.displayOrder }
-                                                    .map { it.nameSnapshot },
-                                                removalNames = item.removals
-                                                    .sortedBy { it.displayOrder }
-                                                    .map { it.nameSnapshot },
-                                                note = item.note,
-                                                finalUnitPrice = item.finalUnitPrice,
-                                                lineTotal = lineTotalById[item.id],
-                                            )
-                                        },
-                                    )
-                                },
-                                generalNote = order.generalNote,
-                                orderTotal = totals.orderTotal,
-                                acceptError = (_uiState.value as? AcceptancePreviewUiState.Ready)
-                                    ?.acceptError,
-                            )
-                        }
+                        else -> order.toReadyUi()
                     }
                 }
         }
+    }
+
+    private fun Order.toReadyUi(): AcceptancePreviewUiState.Ready {
+        val sections = AcceptancePreviewOrdering.groupByCategory(items)
+        val totals = CalculateOrderTotal.fromPersistedItems(sections.flatMap { it.items })
+        val lineTotalById = totals.lineTotals.associate { it.itemId to it.lineTotal }
+        return AcceptancePreviewUiState.Ready(
+            draftId = id,
+            sections = sections.toUiSections(lineTotalById),
+            generalNote = generalNote,
+            orderTotal = totals.orderTotal,
+            acceptError = (_uiState.value as? AcceptancePreviewUiState.Ready)?.acceptError,
+        )
+    }
+
+    private fun Order.toAcceptedUiOrFailure(): AcceptancePreviewUiState {
+        val number = displayNumber
+        val at = acceptedAt
+        val date = businessDate
+        if (number == null || at == null || date == null) {
+            return AcceptancePreviewUiState.Failure(
+                message = "Ordine accettato incompleto.",
+            )
+        }
+        val previous = _uiState.value as? AcceptancePreviewUiState.Accepted
+        val sections = AcceptancePreviewOrdering.groupByCategory(items)
+        val lineTotals = CalculateOrderTotal.fromPersistedItems(sections.flatMap { it.items })
+            .lineTotals
+            .associate { it.itemId to it.lineTotal }
+        return AcceptancePreviewUiState.Accepted(
+            orderId = id,
+            displayNumber = number,
+            total = total,
+            acceptedAt = at,
+            businessDate = date,
+            sections = sections.toUiSections(lineTotals),
+            generalNote = generalNote,
+            isCreatingNewOrder = previous?.isCreatingNewOrder == true,
+            actionError = previous?.actionError,
+        )
+    }
+
+    private fun List<AcceptancePreviewCategorySection>.toUiSections(
+        lineTotalById: Map<String, Money?>,
+    ): List<AcceptancePreviewSectionUi> = map { section ->
+        AcceptancePreviewSectionUi(
+            title = section.title,
+            lines = section.items.map { item ->
+                AcceptancePreviewLineUi(
+                    itemId = item.id,
+                    quantity = item.quantity,
+                    productName = item.productNameSnapshot,
+                    productPrintedName = item.productPrintedNameSnapshot,
+                    additionNames = item.additions
+                        .sortedBy { it.displayOrder }
+                        .map { it.nameSnapshot },
+                    removalNames = item.removals
+                        .sortedBy { it.displayOrder }
+                        .map { it.nameSnapshot },
+                    note = item.note,
+                    finalUnitPrice = item.finalUnitPrice,
+                    lineTotal = lineTotalById[item.id],
+                )
+            },
+        )
     }
 
     companion object {

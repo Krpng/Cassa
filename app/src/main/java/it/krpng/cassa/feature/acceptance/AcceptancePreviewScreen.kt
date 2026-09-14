@@ -1,5 +1,6 @@
 package it.krpng.cassa.feature.acceptance
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,9 +19,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -35,13 +38,32 @@ import it.krpng.cassa.feature.common.CassaBackButton
 @Composable
 fun AcceptancePreviewRoute(
     onBack: () -> Unit,
+    onHome: () -> Unit,
+    onOpenNewOrder: (draftId: String) -> Unit,
     viewModel: AcceptancePreviewViewModel = hiltViewModel(),
 ) {
+    val state = viewModel.uiState.collectAsStateWithLifecycle().value
+
+    LaunchedEffect(viewModel, onHome, onOpenNewOrder) {
+        viewModel.navigationEvents.collect { event ->
+            when (event) {
+                AcceptanceNavigationEvent.GoHome -> onHome()
+                is AcceptanceNavigationEvent.OpenNewOrder -> onOpenNewOrder(event.draftId)
+            }
+        }
+    }
+
+    BackHandler(enabled = state is AcceptancePreviewUiState.Accepted) {
+        viewModel.goHome()
+    }
+
     AcceptancePreviewScreen(
-        state = viewModel.uiState.collectAsStateWithLifecycle().value,
+        state = state,
         onBack = onBack,
         onRetry = viewModel::retry,
         onAccept = viewModel::accept,
+        onHome = viewModel::goHome,
+        onNewOrder = viewModel::startNewOrder,
     )
 }
 
@@ -51,6 +73,8 @@ fun AcceptancePreviewScreen(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onAccept: () -> Unit,
+    onHome: () -> Unit = {},
+    onNewOrder: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -58,9 +82,17 @@ fun AcceptancePreviewScreen(
             .safeDrawingPadding()
             .padding(horizontal = 24.dp, vertical = 12.dp),
     ) {
-        CassaBackButton(onClick = onBack)
+        when (state) {
+            is AcceptancePreviewUiState.Accepted -> {
+                // No preview back affordance: HOME / system Back leave Accepted safely.
+            }
+            else -> CassaBackButton(onClick = onBack)
+        }
         Text(
-            text = "Anteprima accettazione",
+            text = when (state) {
+                is AcceptancePreviewUiState.Accepted -> "Ordine accettato"
+                else -> "Anteprima accettazione"
+            },
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
         )
@@ -110,43 +142,16 @@ fun AcceptancePreviewScreen(
                 )
             }
             is AcceptancePreviewUiState.Accepted -> {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        text = "Ordine accettato",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Text(
-                        text = state.displayNumber,
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.semantics {
-                            contentDescription = "Numero ordine ${state.displayNumber}"
-                        },
-                    )
-                    Text(
-                        text = "Totale: ${state.total.formatEur()}",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = "Schermata Accepted completa: ACCEPT-006.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp),
-                ) {
-                    Text("INDIETRO")
-                }
+                AcceptedBody(
+                    state = state,
+                    modifier = Modifier.weight(1f),
+                )
+                AcceptedActions(
+                    isCreatingNewOrder = state.isCreatingNewOrder,
+                    onPrint = {},
+                    onHome = onHome,
+                    onNewOrder = onNewOrder,
+                )
             }
             is AcceptancePreviewUiState.Ready -> {
                 LazyColumn(
@@ -219,6 +224,138 @@ fun AcceptancePreviewScreen(
                     onAccept = onAccept,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AcceptedBody(
+    state: AcceptancePreviewUiState.Accepted,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        item(key = "display-number") {
+            Text(
+                text = state.displayNumber,
+                style = MaterialTheme.typography.displaySmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics {
+                    contentDescription = "Numero ordine ${state.displayNumber}"
+                },
+            )
+        }
+        state.sections.forEach { section ->
+            item(key = "accepted-header-${section.title}") {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            items(section.lines, key = { "accepted-${it.itemId}" }) { line ->
+                PreviewLine(line = line)
+            }
+        }
+        val note = state.generalNote
+        if (!note.isNullOrBlank()) {
+            item(key = "accepted-general-note") {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Nota ordine",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = note,
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.semantics {
+                            contentDescription = "Nota ordine: $note"
+                        },
+                    )
+                }
+            }
+        }
+        item(key = "accepted-total") {
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "TOTALE",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = state.total.formatEur(),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.semantics {
+                    contentDescription = "Totale ordine: ${state.total.formatEur()}"
+                },
+            )
+        }
+        state.actionError?.let { error ->
+            item(key = "accepted-action-error") {
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AcceptedActions(
+    isCreatingNewOrder: Boolean,
+    onPrint: () -> Unit,
+    onHome: () -> Unit,
+    onNewOrder: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(top = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Button(
+            onClick = onPrint,
+            enabled = false,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = "Stampa non disponibile" },
+        ) {
+            Text("STAMPA")
+        }
+        OutlinedButton(
+            onClick = onHome,
+            enabled = !isCreatingNewOrder,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = "Torna alla home" },
+        ) {
+            Text("HOME")
+        }
+        Button(
+            onClick = onNewOrder,
+            enabled = !isCreatingNewOrder,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics {
+                    contentDescription = if (isCreatingNewOrder) {
+                        "Creazione nuovo ordine"
+                    } else {
+                        "Nuovo ordine"
+                    }
+                },
+        ) {
+            Text(if (isCreatingNewOrder) "CREAZIONE…" else "NUOVO ORDINE")
         }
     }
 }

@@ -93,7 +93,25 @@ fun CassaNavHost() {
                 },
             ),
         ) {
-            AcceptancePreviewRoute(onBack = navController::navigateUp)
+            AcceptancePreviewRoute(
+                onBack = navController::navigateUp,
+                onHome = {
+                    navController.navigate(CassaDestination.HOME.route) {
+                        popUpTo(CassaDestination.HOME.route) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
+                },
+                onOpenNewOrder = { draftId ->
+                    navController.navigate(NewOrderDestination.createRoute(draftId)) {
+                        popUpTo(CassaDestination.HOME.route) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
+                },
+            )
         }
         composable(
             route = OrderItemDetailDestination.routePattern,
