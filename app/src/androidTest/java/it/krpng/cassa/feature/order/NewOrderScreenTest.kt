@@ -46,8 +46,66 @@ class NewOrderScreenTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText("TOTALE").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Totale ordine: 0,00 €").assertIsDisplayed()
+        composeRule.onNodeWithText("COMPLETA").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("Completa ordine non disponibile").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Indietro").performClick()
         composeRule.runOnIdle { assertEquals(1, backClicks) }
+    }
+
+    @Test
+    fun acceptT020EmptyDraftCompletaDoesNotOpenPreview() {
+        var completaClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onCompleta = { completaClicks += 1 },
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("COMPLETA").assertIsNotEnabled()
+        composeRule.runOnIdle { assertEquals(0, completaClicks) }
+    }
+
+    @Test
+    fun nonEmptyDraftEnablesCompletaAndOpensPreviewCallback() {
+        var completaClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = readyState(
+                        orderLines = listOf(
+                            DraftOrderLine(
+                                itemId = "line-1",
+                                quantity = 1,
+                                productName = "Margherita",
+                                lineTotal = it.krpng.cassa.core.money.Money.ofCents(700),
+                            ),
+                        ),
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onCompleta = { completaClicks += 1 },
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("COMPLETA").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Completa ordine").performClick()
+        composeRule.runOnIdle { assertEquals(1, completaClicks) }
     }
 
     @Test

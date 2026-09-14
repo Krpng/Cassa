@@ -58,6 +58,7 @@ fun NewOrderRoute(
     onBack: () -> Unit,
     onProductSelected: (Long) -> Unit = {},
     onOrderItemSelected: (String, String) -> Unit = { _, _ -> },
+    onCompleta: (String) -> Unit = {},
     viewModel: NewOrderViewModel = hiltViewModel(),
 ) {
     NewOrderScreen(
@@ -74,6 +75,12 @@ fun NewOrderRoute(
         onOrderItemSelected = { orderItemId ->
             val state = viewModel.uiState.value as? NewOrderUiState.Ready
             if (state != null) onOrderItemSelected(state.draftId, orderItemId)
+        },
+        onCompleta = {
+            val state = viewModel.uiState.value as? NewOrderUiState.Ready
+            if (state != null && !state.isDraftEmpty) {
+                onCompleta(state.draftId)
+            }
         },
         onIncreaseLineQuantity = viewModel::increaseLineQuantity,
         onDecreaseLineQuantity = viewModel::decreaseLineQuantity,
@@ -100,6 +107,7 @@ fun NewOrderScreen(
     onFilterSelected: (OrderCatalogFilter) -> Unit,
     onProductSelected: (Long) -> Unit,
     onOrderItemSelected: (String) -> Unit = {},
+    onCompleta: () -> Unit = {},
     onIncreaseLineQuantity: (String) -> Unit = {},
     onDecreaseLineQuantity: (String) -> Unit = {},
     onRemoveLine: (String) -> Unit = {},
@@ -188,7 +196,11 @@ fun NewOrderScreen(
                         .fillMaxWidth(),
                 )
                 HorizontalDivider()
-                DraftOrderTotalFooter(orderTotal = ready.orderTotal)
+                DraftOrderTotalFooter(
+                    orderTotal = ready.orderTotal,
+                    completaEnabled = !ready.isDraftEmpty,
+                    onCompleta = onCompleta,
+                )
             } else {
                 Box(
                     modifier = Modifier
@@ -746,13 +758,17 @@ private fun ErrorBanner(
 }
 
 @Composable
-private fun DraftOrderTotalFooter(orderTotal: OrderTotalResult) {
+private fun DraftOrderTotalFooter(
+    orderTotal: OrderTotalResult,
+    completaEnabled: Boolean,
+    onCompleta: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .padding(top = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(
             text = "TOTALE",
@@ -781,6 +797,22 @@ private fun DraftOrderTotalFooter(orderTotal: OrderTotalResult) {
                     },
                 )
             }
+        }
+        Button(
+            onClick = onCompleta,
+            enabled = completaEnabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics {
+                    contentDescription = if (completaEnabled) {
+                        "Completa ordine"
+                    } else {
+                        "Completa ordine non disponibile"
+                    }
+                },
+        ) {
+            Text("COMPLETA")
         }
     }
 }

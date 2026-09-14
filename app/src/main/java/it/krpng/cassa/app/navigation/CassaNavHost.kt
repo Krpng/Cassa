@@ -6,6 +6,8 @@ import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import it.krpng.cassa.feature.acceptance.AcceptancePreviewRoute
+import it.krpng.cassa.feature.acceptance.AcceptancePreviewViewModel
 import it.krpng.cassa.feature.archive.ArchiveScreen
 import it.krpng.cassa.feature.home.DraftRecoveryRoute
 import it.krpng.cassa.feature.home.HomeRoute
@@ -78,7 +80,20 @@ fun CassaNavHost() {
                         OrderItemDetailDestination.createRoute(orderId, orderItemId),
                     )
                 },
+                onCompleta = { draftId ->
+                    navController.navigate(AcceptancePreviewDestination.createRoute(draftId))
+                },
             )
+        }
+        composable(
+            route = AcceptancePreviewDestination.routePattern,
+            arguments = listOf(
+                navArgument(AcceptancePreviewViewModel.DRAFT_ID_ARGUMENT) {
+                    type = NavType.StringType
+                },
+            ),
+        ) {
+            AcceptancePreviewRoute(onBack = navController::navigateUp)
         }
         composable(
             route = OrderItemDetailDestination.routePattern,
