@@ -3,6 +3,7 @@ package it.krpng.cassa.data.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import it.krpng.cassa.data.database.dao.AdditionDao
+import it.krpng.cassa.data.database.dao.AppSettingsDao
 import it.krpng.cassa.data.database.dao.IngredientDao
 import it.krpng.cassa.data.database.dao.NumberingStateDao
 import it.krpng.cassa.data.database.dao.OrderDao
@@ -44,4 +45,6 @@ abstract class CassaDatabase : RoomDatabase() {
     abstract fun orderDao(): OrderDao
 
     abstract fun numberingStateDao(): NumberingStateDao
+
+    abstract fun appSettingsDao(): AppSettingsDao
 }

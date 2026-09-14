@@ -12,6 +12,7 @@ import it.krpng.cassa.data.database.CassaMigrations
 import it.krpng.cassa.data.database.DatabaseTransactionRunner
 import it.krpng.cassa.data.database.RoomDatabaseTransactionRunner
 import it.krpng.cassa.data.database.dao.AdditionDao
+import it.krpng.cassa.data.database.dao.AppSettingsDao
 import it.krpng.cassa.data.database.dao.IngredientDao
 import it.krpng.cassa.data.database.dao.NumberingStateDao
 import it.krpng.cassa.data.database.dao.OrderDao
@@ -48,6 +49,10 @@ object DatabaseModule {
     @Provides
     fun provideNumberingStateDao(database: CassaDatabase): NumberingStateDao =
         database.numberingStateDao()
+
+    @Provides
+    fun provideAppSettingsDao(database: CassaDatabase): AppSettingsDao =
+        database.appSettingsDao()
 
     @Provides
     fun provideDatabaseTransactionRunner(

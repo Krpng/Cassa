@@ -20,7 +20,7 @@ import it.krpng.cassa.feature.order.NewOrderRoute
 import it.krpng.cassa.feature.order.NewOrderViewModel
 import it.krpng.cassa.feature.order.OrderItemDetailRoute
 import it.krpng.cassa.feature.order.OrderItemDetailViewModel
-import it.krpng.cassa.feature.settings.SettingsScreen
+import it.krpng.cassa.feature.settings.SettingsRoute
 import it.krpng.cassa.feature.todayorders.TodayOrdersScreen
 
 @Composable
@@ -168,7 +168,7 @@ fun CassaNavHost() {
             )
         }
         composable(CassaDestination.SETTINGS.route) {
-            SettingsScreen(onBack = navController::navigateUp)
+            SettingsRoute(onBack = navController::navigateUp)
         }
     }
 }

@@ -9,11 +9,13 @@ import it.krpng.cassa.data.repository.RoomIngredientRepository
 import it.krpng.cassa.data.repository.RoomNumberingRepository
 import it.krpng.cassa.data.repository.RoomOrderRepository
 import it.krpng.cassa.data.repository.RoomProductRepository
+import it.krpng.cassa.data.repository.RoomSettingsRepository
 import it.krpng.cassa.domain.repository.AdditionRepository
 import it.krpng.cassa.domain.repository.IngredientRepository
 import it.krpng.cassa.domain.repository.NumberingRepository
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.ProductRepository
+import it.krpng.cassa.domain.repository.SettingsRepository
 import javax.inject.Singleton
 
 @Module
@@ -48,4 +50,10 @@ abstract class RepositoryModule {
     abstract fun bindNumberingRepository(
         repository: RoomNumberingRepository,
     ): NumberingRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSettingsRepository(
+        repository: RoomSettingsRepository,
+    ): SettingsRepository
 }

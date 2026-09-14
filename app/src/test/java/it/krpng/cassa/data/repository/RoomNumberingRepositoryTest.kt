@@ -17,7 +17,7 @@ import org.junit.Test
 
 /**
  * NUM-T005 (concurrent AcceptOrder → one number) deferred to ACCEPT-003/004.
- * NUM-T015 (mode-switch UI) deferred to NUM-005.
+ * NUM-T015 covered by NumberingModeSwitchPreservationTest (NUM-005).
  * NUM-T019 (preview non-consume) deferred to ACCEPT preview.
  */
 class RoomNumberingRepositoryTest {
