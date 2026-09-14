@@ -24,6 +24,10 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -37,7 +41,7 @@ import org.junit.runner.RunWith
 /**
  * ACCEPT-003 normative coverage: ACCEPT-T001, T002 (accept side), T004, T005,
  * T013..T016, T018 (atomicity), NUM-T032, NUM-T033.
- * ACCEPT-T003 / T017 concurrency hardening deferred to ACCEPT-004.
+ * ACCEPT-004: ACCEPT-T003, ACCEPT-T017, NUM-T005 (concurrent / double accept).
  */
 @RunWith(AndroidJUnit4::class)
 class AcceptOrderRepositoryTest {
@@ -336,13 +340,101 @@ class AcceptOrderRepositoryTest {
     }
 
     @Test
-    fun secondAcceptOnSameOrderRejectsWithoutConsumingAnotherNumber() = runBlocking {
+    fun acceptT003SecondAcceptAfterSuccessIsRejected() = runBlocking {
         val draftId = createDraftWithItem(unitCents = 100, qty = 1)
         assertTrue(repository.acceptOrder(draftId) is AcceptOrderResult.Accepted)
         assertEquals(2L, numberingState("2026-09-14")!!.nextSequentialNumber)
 
         assertSame(AcceptOrderResult.OrderNotDraft, repository.acceptOrder(draftId))
         assertEquals(2L, numberingState("2026-09-14")!!.nextSequentialNumber)
+
+        val order = requireNotNull(repository.getById(draftId))
+        assertEquals(OrderStatus.ACCEPTED, order.status)
+        assertEquals("001", order.displayNumber)
+        assertNull(database.orderDao().getFullOrder(draftId)!!.order.draftSlot)
+    }
+
+    @Test
+    fun acceptT017AndNumT005ConcurrentSequentialAcceptsOneSuccessOneNumber() = runBlocking {
+        val draftId = createDraftWithItem(unitCents = 100, qty = 1)
+
+        val results = coroutineScope {
+            listOf(
+                async(Dispatchers.IO) { repository.acceptOrder(draftId) },
+                async(Dispatchers.IO) { repository.acceptOrder(draftId) },
+            ).awaitAll()
+        }
+
+        assertEquals(1, results.count { it is AcceptOrderResult.Accepted })
+        assertEquals(
+            1,
+            results.count {
+                it is AcceptOrderResult.OrderNotDraft ||
+                    it is AcceptOrderResult.PersistenceFailure
+            },
+        )
+        assertTrue(
+            results.none {
+                it !is AcceptOrderResult.Accepted &&
+                    it !is AcceptOrderResult.OrderNotDraft &&
+                    it !is AcceptOrderResult.PersistenceFailure
+            },
+        )
+
+        val accepted = results.filterIsInstance<AcceptOrderResult.Accepted>().single()
+        val order = requireNotNull(repository.getById(draftId))
+        assertEquals(OrderStatus.ACCEPTED, order.status)
+        assertEquals(accepted.displayNumber, order.displayNumber)
+        assertEquals("001", order.displayNumber)
+        assertNull(database.orderDao().getFullOrder(draftId)!!.order.draftSlot)
+        assertEquals(DEFAULT_NOW.toEpochMilli(), order.acceptedAt?.toEpochMilli())
+        assertEquals(LocalDate.parse("2026-09-14"), order.businessDate)
+        assertEquals(2L, numberingState("2026-09-14")!!.nextSequentialNumber)
+        assertEquals(0, numberingState("2026-09-14")!!.randomPosition)
+        assertEquals(false, numberingState("2026-09-14")!!.randomSeedInitialized)
+    }
+
+    @Test
+    fun acceptT017ConcurrentRandomAcceptsOneSuccessOneCode() = runBlocking {
+        assertSame(
+            UpdateNumberingModeResult.Updated,
+            settingsRepository.updateNumberingMode(NumberingMode.RANDOM),
+        )
+        val draftId = createDraftWithItem(unitCents = 100, qty = 1)
+
+        val results = coroutineScope {
+            listOf(
+                async(Dispatchers.IO) { repository.acceptOrder(draftId) },
+                async(Dispatchers.IO) { repository.acceptOrder(draftId) },
+            ).awaitAll()
+        }
+
+        assertEquals(1, results.count { it is AcceptOrderResult.Accepted })
+        assertEquals(
+            1,
+            results.count {
+                it is AcceptOrderResult.OrderNotDraft ||
+                    it is AcceptOrderResult.PersistenceFailure
+            },
+        )
+
+        val accepted = results.filterIsInstance<AcceptOrderResult.Accepted>().single()
+        val expectedCode = RandomCodeFormatter.format(
+            StableRandomPermutation.generate(FIXED_SEED, 1)[0],
+        )
+        assertEquals(expectedCode, accepted.displayNumber)
+
+        val order = requireNotNull(repository.getById(draftId))
+        assertEquals(OrderStatus.ACCEPTED, order.status)
+        assertEquals(expectedCode, order.displayNumber)
+        assertNull(database.orderDao().getFullOrder(draftId)!!.order.draftSlot)
+
+        val state = numberingState("2026-09-14")!!
+        assertEquals(1L, state.nextSequentialNumber)
+        assertTrue(state.randomSeedInitialized)
+        assertEquals(FIXED_SEED, state.randomSeed)
+        assertEquals(1, state.randomPosition)
+        assertEquals(1, state.randomCycle)
     }
 
     @Test
