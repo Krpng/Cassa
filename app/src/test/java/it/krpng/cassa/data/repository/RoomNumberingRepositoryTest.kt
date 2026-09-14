@@ -2,6 +2,10 @@ package it.krpng.cassa.data.repository
 
 import it.krpng.cassa.data.database.dao.NumberingStateDao
 import it.krpng.cassa.data.database.entity.NumberingStateEntity
+import it.krpng.cassa.domain.numbering.NumberingSeedProvider
+import it.krpng.cassa.domain.numbering.RandomCodeFormatter
+import it.krpng.cassa.domain.numbering.StableRandomPermutation
+import it.krpng.cassa.domain.repository.AllocateRandomResult
 import it.krpng.cassa.domain.repository.AllocateSequentialResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -12,9 +16,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * NUM-T005 (concurrent AcceptOrder → one number) is deferred to ACCEPT-003/004.
- * NUM-T018 / NUM-T024 (first RANDOM init + restart seed) deferred to NUM-003.
- * Covered here: sequential allocate has no autonomous transaction; D-042 flag semantics for SEQUENTIAL.
+ * NUM-T005 (concurrent AcceptOrder → one number) deferred to ACCEPT-003/004.
+ * NUM-T015 (mode-switch UI) deferred to NUM-005.
+ * NUM-T019 (preview non-consume) deferred to ACCEPT preview.
  */
 class RoomNumberingRepositoryTest {
     @Test
@@ -116,7 +120,8 @@ class RoomNumberingRepositoryTest {
             parameterTypes.none { it.contains("DatabaseTransactionRunner") },
         )
         assertTrue(parameterTypes.any { it.contains("NumberingStateDao") })
-        assertEquals(1, parameterTypes.size)
+        assertTrue(parameterTypes.any { it.contains("NumberingSeedProvider") })
+        assertEquals(2, parameterTypes.size)
     }
 
     @Test
@@ -168,6 +173,161 @@ class RoomNumberingRepositoryTest {
     }
 
     @Test
+    fun `NUM-T011 first 2600 random allocations are distinct in cycle 1`() = runTest {
+        val dao = FakeNumberingStateDao()
+        val seedProvider = CountingSeedProvider(FIXED_SEED)
+        val repository = repository(dao, seedProvider)
+
+        val codes = mutableListOf<String>()
+        repeat(StableRandomPermutation.SIZE) { index ->
+            val result = repository.allocateNextRandom(BUSINESS_DATE_A, updatedAt = index.toLong())
+            val allocated = result as AllocateRandomResult.Allocated
+            assertEquals(1, allocated.randomCycle)
+            codes += allocated.displayNumber
+        }
+
+        assertEquals(StableRandomPermutation.SIZE, codes.size)
+        assertEquals(StableRandomPermutation.SIZE, codes.toSet().size)
+        codes.forEach { code ->
+            assertTrue(Regex("^[A-Z][0-9]{2}$").matches(code))
+        }
+
+        val state = dao.get(BUSINESS_DATE_A)!!
+        assertEquals(2, state.randomCycle)
+        assertEquals(0, state.randomPosition)
+        assertEquals(1, seedProvider.callCount)
+    }
+
+    @Test
+    fun `NUM-T012 allocation 2601 uses cycle 2 and advances position`() = runTest {
+        val dao = FakeNumberingStateDao()
+        val repository = repository(dao, CountingSeedProvider(FIXED_SEED))
+
+        repeat(StableRandomPermutation.SIZE) { index ->
+            repository.allocateNextRandom(BUSINESS_DATE_A, updatedAt = index.toLong())
+        }
+
+        val after2600 = dao.get(BUSINESS_DATE_A)!!
+        assertEquals(2, after2600.randomCycle)
+        assertEquals(0, after2600.randomPosition)
+
+        val expectedIndex = StableRandomPermutation.generate(FIXED_SEED, 2)[0]
+        val expectedCode = RandomCodeFormatter.format(expectedIndex)
+
+        val result = repository.allocateNextRandom(BUSINESS_DATE_A, updatedAt = 9_000L)
+        val allocated = result as AllocateRandomResult.Allocated
+
+        assertEquals(2, allocated.randomCycle)
+        assertEquals(0, allocated.consumedPosition)
+        assertEquals(expectedCode, allocated.displayNumber)
+
+        val after2601 = dao.get(BUSINESS_DATE_A)!!
+        assertEquals(2, after2601.randomCycle)
+        assertEquals(1, after2601.randomPosition)
+        assertEquals(FIXED_SEED, after2601.randomSeed)
+    }
+
+    @Test
+    fun `NUM-T013 new businessDate has independent RANDOM state`() = runTest {
+        val dao = FakeNumberingStateDao()
+        val seedProvider = CountingSeedProvider(sequence = longArrayOf(111L, 222L))
+        val repository = repository(dao, seedProvider)
+
+        repository.allocateNextRandom(BUSINESS_DATE_A, 1L)
+        repository.allocateNextRandom(BUSINESS_DATE_A, 2L)
+
+        val firstOnB = repository.allocateNextRandom(BUSINESS_DATE_B, 3L)
+        val continueA = repository.allocateNextRandom(BUSINESS_DATE_A, 4L)
+
+        val stateA = dao.get(BUSINESS_DATE_A)!!
+        val stateB = dao.get(BUSINESS_DATE_B)!!
+
+        assertEquals(111L, stateA.randomSeed)
+        assertEquals(222L, stateB.randomSeed)
+        assertEquals(3, stateA.randomPosition)
+        assertEquals(1, stateB.randomPosition)
+        assertEquals(1, stateA.randomCycle)
+        assertEquals(1, stateB.randomCycle)
+        assertEquals(2, seedProvider.callCount)
+
+        assertEquals(
+            RandomCodeFormatter.format(StableRandomPermutation.generate(111L, 1)[2]),
+            (continueA as AllocateRandomResult.Allocated).displayNumber,
+        )
+        assertEquals(
+            RandomCodeFormatter.format(StableRandomPermutation.generate(222L, 1)[0]),
+            (firstOnB as AllocateRandomResult.Allocated).displayNumber,
+        )
+    }
+
+    @Test
+    fun `NUM-T014 restart with new repository instance continues same sequence`() = runTest {
+        val dao = FakeNumberingStateDao()
+        val seedProvider = CountingSeedProvider(FIXED_SEED)
+
+        val firstRepository = repository(dao, seedProvider)
+        firstRepository.allocateNextRandom(BUSINESS_DATE_A, 1L)
+        firstRepository.allocateNextRandom(BUSINESS_DATE_A, 2L)
+
+        val expectedNext = RandomCodeFormatter.format(
+            StableRandomPermutation.generate(FIXED_SEED, 1)[2],
+        )
+
+        val reloadedProvider = CountingSeedProvider(999_999L)
+        val reloaded = repository(dao, reloadedProvider)
+        val next = reloaded.allocateNextRandom(BUSINESS_DATE_A, 3L) as AllocateRandomResult.Allocated
+
+        assertEquals(expectedNext, next.displayNumber)
+        assertEquals(FIXED_SEED, dao.get(BUSINESS_DATE_A)!!.randomSeed)
+        assertEquals(1, seedProvider.callCount)
+        assertEquals(0, reloadedProvider.callCount)
+        assertEquals(3, dao.get(BUSINESS_DATE_A)!!.randomPosition)
+    }
+
+    @Test
+    fun `NUM-T018 first RANDOM need creates seed once and keeps it across cycle advance`() = runTest {
+        val dao = FakeNumberingStateDao()
+        val seedProvider = CountingSeedProvider(FIXED_SEED)
+        val repository = repository(dao, seedProvider)
+
+        repository.allocateNextRandom(BUSINESS_DATE_A, 1L)
+        assertEquals(1, seedProvider.callCount)
+        assertTrue(dao.get(BUSINESS_DATE_A)!!.randomSeedInitialized)
+        assertEquals(FIXED_SEED, dao.get(BUSINESS_DATE_A)!!.randomSeed)
+
+        // Finish remaining 2599 positions of cycle 1 → cycle advances to 2.
+        repeat(StableRandomPermutation.SIZE - 1) { index ->
+            repository.allocateNextRandom(BUSINESS_DATE_A, updatedAt = (index + 2).toLong())
+        }
+
+        val state = dao.get(BUSINESS_DATE_A)!!
+        assertEquals(1, seedProvider.callCount)
+        assertEquals(FIXED_SEED, state.randomSeed)
+        assertTrue(state.randomSeedInitialized)
+        assertEquals(2, state.randomCycle)
+        assertEquals(0, state.randomPosition)
+    }
+
+    @Test
+    fun `NUM-T018 seed provider returning 0L is persisted as valid initialized seed`() = runTest {
+        val dao = FakeNumberingStateDao()
+        val seedProvider = CountingSeedProvider(0L)
+        val repository = repository(dao, seedProvider)
+
+        val first = repository.allocateNextRandom(BUSINESS_DATE_A, 1L) as AllocateRandomResult.Allocated
+        val expected = RandomCodeFormatter.format(StableRandomPermutation.generate(0L, 1)[0])
+
+        assertEquals(expected, first.displayNumber)
+        assertEquals(0L, dao.get(BUSINESS_DATE_A)!!.randomSeed)
+        assertTrue(dao.get(BUSINESS_DATE_A)!!.randomSeedInitialized)
+        assertEquals(1, seedProvider.callCount)
+
+        repository.allocateNextRandom(BUSINESS_DATE_A, 2L)
+        assertEquals(1, seedProvider.callCount)
+        assertEquals(0L, dao.get(BUSINESS_DATE_A)!!.randomSeed)
+    }
+
+    @Test
     fun `NUM-T020 sequential-created state has randomSeedInitialized false`() = runTest {
         val dao = FakeNumberingStateDao()
         repository(dao).allocateNextSequential(BUSINESS_DATE_A, 1L)
@@ -183,7 +343,8 @@ class RoomNumberingRepositoryTest {
     @Test
     fun `NUM-T021 sequential allocations never initialize RANDOM seed`() = runTest {
         val dao = FakeNumberingStateDao()
-        val repository = repository(dao)
+        val seedProvider = CountingSeedProvider(FIXED_SEED)
+        val repository = repository(dao, seedProvider)
 
         repository.allocateNextSequential(BUSINESS_DATE_A, 1L)
         repository.allocateNextSequential(BUSINESS_DATE_A, 2L)
@@ -193,19 +354,95 @@ class RoomNumberingRepositoryTest {
         assertFalse(state.randomSeedInitialized)
         assertEquals(0L, state.randomSeed)
         assertEquals(4L, state.nextSequentialNumber)
+        assertEquals(0, seedProvider.callCount)
     }
 
     @Test
-    fun `NUM-T022 initialized false leaves physical randomSeed non-authoritative for SEQUENTIAL path`() =
+    fun `NUM-T022 initialized false ignores physical randomSeed on first RANDOM need`() = runTest {
+        val dao = FakeNumberingStateDao(
+            initial = NumberingStateEntity(
+                businessDate = BUSINESS_DATE_A,
+                nextSequentialNumber = 5L,
+                randomCycle = 1,
+                randomSeed = 7_777L,
+                randomSeedInitialized = false,
+                randomPosition = 0,
+                updatedAt = 1L,
+            ),
+        )
+        val seedProvider = CountingSeedProvider(FIXED_SEED)
+        val repository = repository(dao, seedProvider)
+
+        val allocated = repository.allocateNextRandom(BUSINESS_DATE_A, 2L)
+            as AllocateRandomResult.Allocated
+        val expected = RandomCodeFormatter.format(StableRandomPermutation.generate(FIXED_SEED, 1)[0])
+
+        assertEquals(expected, allocated.displayNumber)
+        assertEquals(FIXED_SEED, dao.get(BUSINESS_DATE_A)!!.randomSeed)
+        assertNotEquals(7_777L, dao.get(BUSINESS_DATE_A)!!.randomSeed)
+        assertTrue(dao.get(BUSINESS_DATE_A)!!.randomSeedInitialized)
+        assertEquals(5L, dao.get(BUSINESS_DATE_A)!!.nextSequentialNumber)
+        assertEquals(1, seedProvider.callCount)
+    }
+
+    @Test
+    fun `NUM-T023 seed 0 with initialized true remains authoritative for RANDOM`() = runTest {
+        val dao = FakeNumberingStateDao(
+            initial = NumberingStateEntity(
+                businessDate = BUSINESS_DATE_A,
+                nextSequentialNumber = 10L,
+                randomCycle = 1,
+                randomSeed = 0L,
+                randomSeedInitialized = true,
+                randomPosition = 0,
+                updatedAt = 1L,
+            ),
+        )
+        val seedProvider = CountingSeedProvider(42L)
+        val repository = repository(dao, seedProvider)
+
+        val allocated = repository.allocateNextRandom(BUSINESS_DATE_A, 2L)
+            as AllocateRandomResult.Allocated
+        val expected = RandomCodeFormatter.format(StableRandomPermutation.generate(0L, 1)[0])
+
+        assertEquals(expected, allocated.displayNumber)
+        assertEquals(0L, dao.get(BUSINESS_DATE_A)!!.randomSeed)
+        assertTrue(dao.get(BUSINESS_DATE_A)!!.randomSeedInitialized)
+        assertEquals(0, seedProvider.callCount)
+        assertEquals(10L, dao.get(BUSINESS_DATE_A)!!.nextSequentialNumber)
+    }
+
+    @Test
+    fun `NUM-T024 restart after RANDOM initialization keeps seed and does not call provider`() =
+        runTest {
+            val dao = FakeNumberingStateDao()
+            val firstProvider = CountingSeedProvider(FIXED_SEED)
+            repository(dao, firstProvider).allocateNextRandom(BUSINESS_DATE_A, 1L)
+
+            val secondProvider = CountingSeedProvider(777L)
+            val reloaded = repository(dao, secondProvider)
+            reloaded.allocateNextRandom(BUSINESS_DATE_A, 2L)
+            reloaded.allocateNextRandom(BUSINESS_DATE_A, 3L)
+
+            val state = dao.get(BUSINESS_DATE_A)!!
+            assertTrue(state.randomSeedInitialized)
+            assertEquals(FIXED_SEED, state.randomSeed)
+            assertEquals(1, firstProvider.callCount)
+            assertEquals(0, secondProvider.callCount)
+            assertEquals(3, state.randomPosition)
+        }
+
+    @Test
+    fun `NUM-T023 seed 0 with initialized true remains distinguishable and preserved by sequential`() =
         runTest {
             val dao = FakeNumberingStateDao(
                 initial = NumberingStateEntity(
                     businessDate = BUSINESS_DATE_A,
-                    nextSequentialNumber = 1L,
-                    randomCycle = 1,
-                    randomSeed = 7_777L,
-                    randomSeedInitialized = false,
-                    randomPosition = 0,
+                    nextSequentialNumber = 10L,
+                    randomCycle = 2,
+                    randomSeed = 0L,
+                    randomSeedInitialized = true,
+                    randomPosition = 55,
                     updatedAt = 1L,
                 ),
             )
@@ -213,35 +450,12 @@ class RoomNumberingRepositoryTest {
             repository(dao).allocateNextSequential(BUSINESS_DATE_A, 2L)
             val state = dao.get(BUSINESS_DATE_A)!!
 
-            // SEQUENTIAL path does not interpret or rewrite filler/non-initialized seed.
-            assertFalse(state.randomSeedInitialized)
-            assertEquals(7_777L, state.randomSeed)
-            assertEquals(2L, state.nextSequentialNumber)
+            assertTrue(state.randomSeedInitialized)
+            assertEquals(0L, state.randomSeed)
+            assertEquals(2, state.randomCycle)
+            assertEquals(55, state.randomPosition)
+            assertEquals(11L, state.nextSequentialNumber)
         }
-
-    @Test
-    fun `NUM-T023 seed 0 with initialized true remains distinguishable and preserved`() = runTest {
-        val dao = FakeNumberingStateDao(
-            initial = NumberingStateEntity(
-                businessDate = BUSINESS_DATE_A,
-                nextSequentialNumber = 10L,
-                randomCycle = 2,
-                randomSeed = 0L,
-                randomSeedInitialized = true,
-                randomPosition = 55,
-                updatedAt = 1L,
-            ),
-        )
-
-        repository(dao).allocateNextSequential(BUSINESS_DATE_A, 2L)
-        val state = dao.get(BUSINESS_DATE_A)!!
-
-        assertTrue(state.randomSeedInitialized)
-        assertEquals(0L, state.randomSeed)
-        assertEquals(2, state.randomCycle)
-        assertEquals(55, state.randomPosition)
-        assertEquals(11L, state.nextSequentialNumber)
-    }
 
     @Test
     fun `sequential preserves fully initialized RANDOM state fields`() = runTest {
@@ -265,6 +479,72 @@ class RoomNumberingRepositoryTest {
         assertEquals(99_001L, state.randomSeed)
         assertTrue(state.randomSeedInitialized)
         assertEquals(42, state.randomPosition)
+    }
+
+    @Test
+    fun `RANDOM allocation preserves sequential counter`() = runTest {
+        val dao = FakeNumberingStateDao(
+            initial = NumberingStateEntity(
+                businessDate = BUSINESS_DATE_A,
+                nextSequentialNumber = 17L,
+                randomCycle = 1,
+                randomSeed = FIXED_SEED,
+                randomSeedInitialized = true,
+                randomPosition = 0,
+                updatedAt = 1L,
+            ),
+        )
+
+        repository(dao).allocateNextRandom(BUSINESS_DATE_A, 2L)
+        assertEquals(17L, dao.get(BUSINESS_DATE_A)!!.nextSequentialNumber)
+        assertEquals(1, dao.get(BUSINESS_DATE_A)!!.randomPosition)
+    }
+
+    @Test
+    fun `invalid randomPosition is rejected without mutation`() = runTest {
+        val dao = FakeNumberingStateDao(
+            initial = NumberingStateEntity(
+                businessDate = BUSINESS_DATE_A,
+                nextSequentialNumber = 1L,
+                randomCycle = 1,
+                randomSeed = FIXED_SEED,
+                randomSeedInitialized = true,
+                randomPosition = 2600,
+                updatedAt = 1L,
+            ),
+        )
+
+        val result = repository(dao).allocateNextRandom(BUSINESS_DATE_A, 2L)
+        assertSame(AllocateRandomResult.InvalidState, result)
+        assertEquals(2600, dao.get(BUSINESS_DATE_A)!!.randomPosition)
+        assertEquals(1L, dao.get(BUSINESS_DATE_A)!!.updatedAt)
+    }
+
+    @Test
+    fun `randomCycle overflow is typed and does not mutate state`() = runTest {
+        val dao = FakeNumberingStateDao(
+            initial = NumberingStateEntity(
+                businessDate = BUSINESS_DATE_A,
+                nextSequentialNumber = 1L,
+                randomCycle = Int.MAX_VALUE,
+                randomSeed = FIXED_SEED,
+                randomSeedInitialized = true,
+                randomPosition = 2599,
+                updatedAt = 1L,
+            ),
+        )
+
+        val result = repository(dao).allocateNextRandom(BUSINESS_DATE_A, 2L)
+        assertSame(AllocateRandomResult.CycleOverflow, result)
+        assertEquals(Int.MAX_VALUE, dao.get(BUSINESS_DATE_A)!!.randomCycle)
+        assertEquals(2599, dao.get(BUSINESS_DATE_A)!!.randomPosition)
+        assertEquals(1L, dao.get(BUSINESS_DATE_A)!!.updatedAt)
+    }
+
+    @Test
+    fun `blank businessDate is typed invalid state for RANDOM`() = runTest {
+        val result = repository().allocateNextRandom(businessDate = "  ", updatedAt = 1L)
+        assertSame(AllocateRandomResult.InvalidState, result)
     }
 
     @Test
@@ -314,9 +594,26 @@ class RoomNumberingRepositoryTest {
 
     private fun repository(
         dao: FakeNumberingStateDao = FakeNumberingStateDao(),
+        seedProvider: NumberingSeedProvider = CountingSeedProvider(FIXED_SEED),
     ): RoomNumberingRepository = RoomNumberingRepository(
         numberingStateDao = dao,
+        numberingSeedProvider = seedProvider,
     )
+
+    private class CountingSeedProvider(
+        private val sequence: LongArray,
+    ) : NumberingSeedProvider {
+        constructor(fixed: Long) : this(longArrayOf(fixed))
+
+        var callCount: Int = 0
+            private set
+
+        override fun nextSeed(): Long {
+            val index = callCount.coerceAtMost(sequence.lastIndex)
+            callCount += 1
+            return sequence[index]
+        }
+    }
 
     private class FakeNumberingStateDao(
         initial: NumberingStateEntity? = null,
