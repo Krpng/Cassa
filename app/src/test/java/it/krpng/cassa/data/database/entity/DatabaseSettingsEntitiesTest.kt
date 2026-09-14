@@ -2,7 +2,9 @@ package it.krpng.cassa.data.database.entity
 
 import it.krpng.cassa.domain.model.NumberingMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DatabaseSettingsEntitiesTest {
@@ -48,6 +50,7 @@ class DatabaseSettingsEntitiesTest {
         assertEquals(1, state.nextSequentialNumber)
         assertEquals(1, state.randomCycle)
         assertEquals(42, state.randomSeed)
+        assertFalse(state.randomSeedInitialized)
         assertEquals(0, state.randomPosition)
     }
 
@@ -58,6 +61,7 @@ class DatabaseSettingsEntitiesTest {
             nextSequentialNumber = 17,
             randomCycle = 2,
             randomSeed = 98_765,
+            randomSeedInitialized = true,
             randomPosition = 321,
             updatedAt = 1_000,
         )
@@ -65,7 +69,21 @@ class DatabaseSettingsEntitiesTest {
         assertEquals(17, state.nextSequentialNumber)
         assertEquals(2, state.randomCycle)
         assertEquals(98_765, state.randomSeed)
+        assertTrue(state.randomSeedInitialized)
         assertEquals(321, state.randomPosition)
+    }
+
+    @Test
+    fun `randomSeed 0 with initialized true is a valid entity state`() {
+        val state = NumberingStateEntity(
+            businessDate = "2026-09-04",
+            randomSeed = 0L,
+            randomSeedInitialized = true,
+            updatedAt = 1_000,
+        )
+
+        assertEquals(0L, state.randomSeed)
+        assertTrue(state.randomSeedInitialized)
     }
 
     @Test

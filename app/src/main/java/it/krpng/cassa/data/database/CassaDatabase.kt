@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import it.krpng.cassa.data.database.dao.AdditionDao
 import it.krpng.cassa.data.database.dao.IngredientDao
+import it.krpng.cassa.data.database.dao.NumberingStateDao
 import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import it.krpng.cassa.data.database.entity.AdditionEntity
@@ -30,7 +31,7 @@ import it.krpng.cassa.data.database.entity.ProductIngredientEntity
         AppSettingsEntity::class,
         NumberingStateEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 abstract class CassaDatabase : RoomDatabase() {
@@ -41,4 +42,6 @@ abstract class CassaDatabase : RoomDatabase() {
     abstract fun productDao(): ProductDao
 
     abstract fun orderDao(): OrderDao
+
+    abstract fun numberingStateDao(): NumberingStateDao
 }

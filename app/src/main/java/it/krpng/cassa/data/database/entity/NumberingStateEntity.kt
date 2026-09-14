@@ -13,6 +13,13 @@ data class NumberingStateEntity(
     @ColumnInfo(defaultValue = "1")
     val randomCycle: Int = 1,
     val randomSeed: Long,
+    /**
+     * Authoritative marker for RANDOM seed initialization (D-042).
+     * false → physical [randomSeed] is non-semantic storage filler only.
+     * true → [randomSeed] is authoritative (including 0L as a valid seed).
+     */
+    @ColumnInfo(defaultValue = "0")
+    val randomSeedInitialized: Boolean = false,
     @ColumnInfo(defaultValue = "0")
     val randomPosition: Int = 0,
     val updatedAt: Long,

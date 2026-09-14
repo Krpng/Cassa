@@ -8,10 +8,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import it.krpng.cassa.data.database.CassaDatabase
+import it.krpng.cassa.data.database.CassaMigrations
 import it.krpng.cassa.data.database.DatabaseTransactionRunner
 import it.krpng.cassa.data.database.RoomDatabaseTransactionRunner
 import it.krpng.cassa.data.database.dao.AdditionDao
 import it.krpng.cassa.data.database.dao.IngredientDao
+import it.krpng.cassa.data.database.dao.NumberingStateDao
 import it.krpng.cassa.data.database.dao.OrderDao
 import it.krpng.cassa.data.database.dao.ProductDao
 import javax.inject.Singleton
@@ -27,7 +29,9 @@ object DatabaseModule {
         context,
         CassaDatabase::class.java,
         DATABASE_NAME,
-    ).build()
+    )
+        .addMigrations(CassaMigrations.MIGRATION_1_2)
+        .build()
 
     @Provides
     fun provideProductDao(database: CassaDatabase): ProductDao = database.productDao()
@@ -40,6 +44,10 @@ object DatabaseModule {
 
     @Provides
     fun provideOrderDao(database: CassaDatabase): OrderDao = database.orderDao()
+
+    @Provides
+    fun provideNumberingStateDao(database: CassaDatabase): NumberingStateDao =
+        database.numberingStateDao()
 
     @Provides
     fun provideDatabaseTransactionRunner(

@@ -7,12 +7,12 @@ import org.junit.Test
 
 class SequentialNumberFormatterTest {
     @Test
-    fun `NUM-T001 first sequential number is 001`() {
+    fun `first sequential number formats as 001`() {
         assertEquals("001", SequentialNumberFormatter.format(1))
     }
 
     @Test
-    fun `NUM-T002 sequential values use at least three digits`() {
+    fun `sequential values use at least three digits`() {
         val formatted = listOf(1L, 2L, 3L, 9L, 10L, 99L, 100L)
             .map(SequentialNumberFormatter::format)
 
@@ -23,7 +23,7 @@ class SequentialNumberFormatterTest {
     }
 
     @Test
-    fun `NUM-T004 values continue beyond 999 without wrapping`() {
+    fun `values continue beyond 999 without wrapping`() {
         val formatted = listOf(998L, 999L, 1_000L, 1_001L)
             .map(SequentialNumberFormatter::format)
 

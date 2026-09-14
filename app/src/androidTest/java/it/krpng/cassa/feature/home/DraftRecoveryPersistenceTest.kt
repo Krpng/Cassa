@@ -57,7 +57,10 @@ class DraftRecoveryPersistenceTest {
         context,
         CassaDatabase::class.java,
         DATABASE_NAME,
-    ).allowMainThreadQueries().build()
+    )
+        .addMigrations(it.krpng.cassa.data.database.CassaMigrations.MIGRATION_1_2)
+        .allowMainThreadQueries()
+        .build()
 
     private fun repository(database: CassaDatabase): RoomOrderRepository =
         RoomOrderRepository(

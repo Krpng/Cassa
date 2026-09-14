@@ -33,6 +33,30 @@ room {
     schemaDirectory("$projectDir/schemas")
 }
 
+// Room MigrationTestHelper (room-migration 2.8.4) deserializes schema JSON with
+// kotlinx-serialization serializers compiled against 1.8.x APIs.
+// lifecycle-viewmodel-savedstate 2.10.0 transitively requests 1.7.3.
+// Instrumented tests share one process between the debug app APK and the
+// androidTest APK; forcing only androidTest left debug on 1.7.3 and broke
+// Compose UI tests (no compose hierarchy / classloader clash).
+// Scope: debug + androidTest classpaths only — not release.
+configurations
+    .matching { configuration ->
+        val name = configuration.name
+        name.contains("AndroidTest", ignoreCase = true) ||
+            (name.contains("debug", ignoreCase = true) && name.contains("Classpath", ignoreCase = true))
+    }
+    .configureEach {
+        resolutionStrategy {
+            force(
+                "org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1",
+                "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm:1.8.1",
+                "org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1",
+                "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm:1.8.1",
+            )
+        }
+    }
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.activity.compose)
@@ -59,6 +83,10 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.room.testing)
+    // Room 2.8 schema JSON deserialization requires serialization >= 1.8.x;
+    // without this, MigrationTestHelper hits AbstractMethodError vs forced 1.7.3.
+    androidTestImplementation(libs.kotlinx.serialization.json)
+    androidTestImplementation(libs.kotlinx.serialization.core)
     add("kspAndroidTest", libs.room.compiler)
     debugImplementation(libs.compose.ui.test.manifest)
 }
