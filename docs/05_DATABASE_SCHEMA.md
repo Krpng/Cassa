@@ -157,7 +157,7 @@ Singleton row `id=1`.
 | timezoneId | String | Europe/Rome |
 | updatedAt | Long | |
 
-Questi dati sono in Room perché business critical.
+Questi dati sono in Room perché business critical. `numberingMode` è la source of truth della modalità corrente (D-040 / NUM-005). Valore stringa non riconosciuto come `SEQUENTIAL|RANDOM`: errore esplicito di storage/config; **non** rewrite silenzioso della row.
 
 ## 11. `numbering_state`
 

@@ -340,8 +340,8 @@ Contratto FREEZE-A: XorShift32 + Fisher–Yates bit-stable; first-need seed via 
 ### NUM-004 [P0] Random state/cycles — BLOCKED BY NUM-003; contract READY
 2600 distinct, cycle 2, seed once; test NUM-T011..013, NUM-T018..019.
 
-### NUM-005 [P0] Mode switch preservation — contract READY; UI ownership TBD (D-040)
-Stati SEQUENTIAL/RANDOM indipendenti; default SEQUENTIAL. Se Settings UI assente: non inventarla in M6 freeze; ownership UI esplicita in D-040 prima dell'integrazione Settings. Test NUM-T006, NUM-T015.
+### NUM-005 [P0] Mode switch + Settings numbering control — CONTRACT READY (D-040 RESOLVED); NOT IMPLEMENTED
+Domain: `AppSettingsDao` + `SettingsRepository` (o equivalenti) per get/update `app_settings.numberingMode`; get/create singleton default `SEQUENTIAL`; no migration. UI owner: **`SettingsScreen`** (Home → IMPOSTAZIONI); controllo “Modalità numerazione” SEQUENZIALE/CASUALE, save immediato, stati loading/loaded/saving/error/retry. Preservazione stati SEQUENTIAL/RANDOM indipendenti; future AcceptOrder only; DRAFT/ACCEPTED invariati. Test: NUM-T006, NUM-T015, NUM-T025..035 (casi AcceptOrder: contract-ready / deferred ACCEPT-003).
 
 ### ACCEPT-001 [P0] Preview screen category ordering — READY
 `PIZZE`→`FRITTURA`→`BIBITE`; within `createdSequence ASC`; zero writes. Test ACCEPT-T008..012, ACCEPT-T020.

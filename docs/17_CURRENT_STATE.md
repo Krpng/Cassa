@@ -837,3 +837,28 @@ next step: DB-010 additive migration when authorized
 ```
 
 A documentation-only contract patch does not complete NUM-001. No production/test code was changed by this patch.
+
+## 24. NUM-005 contract freeze (D-040 closed) — docs only
+
+Verified documentary checkpoint relative to production HEAD:
+
+```yaml
+branch: main
+HEAD: 4a9cbf876e7adb0c6f778be67218ec57b455a856
+HEAD commit: "feat: add persisted random numbering state"
+NUM-001..NUM-004: COMPLETE (production)
+D-040: RESOLVED — SettingsScreen owns NumberingMode UI
+NUM-005: CONTRACT READY / NOT IMPLEMENTED
+Migration for numberingMode: NOT REQUIRED
+next authorized step: NUM-005 implementation only when explicitly authorized
+```
+
+Frozen for NUM-005:
+
+- UI owner: existing `SettingsScreen` (Home → IMPOSTAZIONI); no new screen/destination.
+- Control: “Modalità numerazione” SEQUENZIALE/CASUALE; immediate save to `app_settings.numberingMode`.
+- Domain: add `AppSettingsDao` / `SettingsRepository` (or equivalents); get/create singleton default SEQUENTIAL.
+- Mode switch preserves full SEQUENTIAL and RANDOM state; future AcceptOrder only; DRAFT/ACCEPTED unchanged; no number consume on settings change.
+- Tests: NUM-T006/T015 aligned; NUM-T025..035 added (T032/T033 deferred to ACCEPT-003 integration).
+
+Do **not** start NUM-005 production/UI code until authorized. Connected Compose tests on Samsung require screen ON + keyguard UNLOCKED.

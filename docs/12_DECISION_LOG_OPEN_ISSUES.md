@@ -21,7 +21,7 @@ unique draft slot.
 05:00 Europe/Rome.
 
 ### D-007 Numbering
-`NumberingMode`: `SEQUENTIAL | RANDOM`. Default `SEQUENTIAL`. Daily state per `businessDate`. Mode switch preserves both independent states; affects only future accepts.
+`NumberingMode`: `SEQUENTIAL | RANDOM`. Default `SEQUENTIAL`. Persisted in `app_settings.numberingMode` (singleton). Daily numbering state per `businessDate`. Mode switch preserves both independent states; affects only future accepts. UI owner: `SettingsScreen` (D-040 RESOLVED).
 
 ### D-008 Random code
 `[A-Z][0-9][0-9]`, 2600/ciclo, no repeat within cycle. FREEZE-A: XorShift32 + Fisher–Yates bit-stable; seed once via `randomSeedInitialized`; cycle advance keeps same seed.
@@ -92,8 +92,8 @@ Commit first, print after.
 ### D-030 Non-fiscal
 No RT.
 
-### D-040 Numbering mode Settings UI ownership (TBD before NUM-005)
-Contract: mode switch semantics READY (FREEZE-A). Production Settings UI for choosing `SEQUENTIAL|RANDOM` is **not** invented by the M6 contract freeze. Ownership TBD before NUM-005 integration (Settings screen task vs NUM-005 itself). Until then, tests may inject mode via repository/settings fake.
+### D-040 Numbering mode Settings UI ownership — RESOLVED (2026-09-14)
+Owner UI: **`SettingsScreen` esistente** (Home → `IMPOSTAZIONI`). Nessun nuovo screen, nessuna nuova navigation destination, nessun task Settings separato. Controllo in Settings: “Modalità numerazione” (`SEQUENZIALE` / `CASUALE`), segmented/radio, save immediato su `app_settings.numberingMode` (singleton `id=1`, default `SEQUENTIAL`). Semantica mode switch già congelata in FREEZE-A / §16 business rules (future accept only; stati SEQUENTIAL/RANDOM indipendenti e preservati; DRAFT/ACCEPTED invariati). NUM-005 implementa domain (`AppSettingsDao` / `SettingsRepository` o equivalenti) + UI su `SettingsScreen`; **NOT IMPLEMENTED** finché non autorizzato.
 
 ### D-041 M6 FREEZE-A / FREEZE-B (2026-09-12)
 Congelati: algoritmo random XorShift32+Fisher–Yates; acceptance preview zero-write/zero-consume; AcceptOrder singola Room transaction; post-accept `STAMPA` visible disabled in M6; no `ACCETTA E STAMPA` / `STAMPA BOZZA` in preview M6. M6 production remains NOT STARTED.

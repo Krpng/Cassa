@@ -628,6 +628,8 @@ Stesso `randomSeed` + stesso `randomCycle` + stessa `randomPosition` → stesso 
 
 `NumberingMode`: `SEQUENTIAL | RANDOM`. Default: **`SEQUENTIAL`**.
 
+Source of truth persistita: **`app_settings.numberingMode`** (singleton `id=1` in Room). Nessuna DataStore parallela e nessuna seconda source of truth UI. Se la row `app_settings` non esiste: get/create del singleton con default `SEQUENTIAL` (pattern DB già usato). Valore persistito invalido/non riconosciuto: **errore esplicito di storage/config** (typed secondo pattern progetto); **non** fallback silenzioso a `RANDOM` e **non** mutazione automatica della row.
+
 Esempio valido sullo stesso giorno:
 
 ```text
@@ -638,9 +640,23 @@ M81
 003
 ```
 
-Lo stato sequenziale e casuale della stessa `businessDate` devono essere preservati separatamente. Il cambio vale solo per le acceptance **future**.
+### Preservazione stati
 
-Ownership UI di selezione modalità: vedi backlog **NUM-005** / decisione D-040 (TBD before NUM-005 integration). Questo freeze **non** introduce una Settings UI di produzione.
+- `SEQUENTIAL → RANDOM` **non** resetta: `nextSequentialNumber`, `randomSeed`, `randomSeedInitialized`, `randomCycle`, `randomPosition`.
+- `RANDOM → SEQUENTIAL` preserva integralmente lo stato RANDOM.
+- Al ritorno a una modalità si riprende lo stato precedente di quella modalità.
+
+### Future accept only
+
+`numberingMode` viene letto al momento della futura `AcceptOrder`. Il cambio modalità influenza **solo** le acceptance future. Non modifica: contenuto DRAFT, ordini `ACCEPTED`, `displayNumber` già assegnati, ordini storici. Nessuna rinumerazione retroattiva. Nessun numero prenotato o consumato al cambio settings.
+
+### DRAFT / ACCEPTED
+
+Se esiste un DRAFT aperto e l’utente cambia modalità: il DRAFT resta invariato; conta la modalità persistita quando verrà eseguita `AcceptOrder`. Cambio `NumberingMode` **non** può modificare nessun `ACCEPTED` (`displayNumber`, `acceptedAt`, `businessDate`, `totalCents`, snapshots).
+
+### UI ownership (D-040 RESOLVED)
+
+Owner UI: **`SettingsScreen` esistente** (Home → `IMPOSTAZIONI`). Nessun nuovo screen, nessuna nuova navigation destination, nessun task Settings separato. Controllo: “Modalità numerazione” con scelte mutuamente esclusive `SEQUENZIALE` / `CASUALE` (segmented/radio), salvataggio immediato su tap (no SALVA generale). Fallimento save: resta source of truth la selezione persistita precedente + errore/retry.
 
 ## 17. Assegnazione numero
 

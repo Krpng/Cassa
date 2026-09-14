@@ -53,8 +53,8 @@ Nuova businessDate -> 001.
 ### NUM-T005
 Due Accept concorrenti sullo stesso Draft -> una sola transizione, un solo numero.
 
-### NUM-T006
-Cambio a Random e ritorno -> sequenziale riprende.
+### NUM-T006 [P0] Mode switch preserves sequential resume
+Default mode = `SEQUENTIAL`. Sequential state progresses. Switch `S → R`: random state progresses. Switch `R → S`: sequential resumes previous counter (no reset). Switch `S → R` again: random resumes previous `randomSeed` + `randomSeedInitialized` + `randomCycle` + `randomPosition` (no reset of either mode state).
 
 ## 4. Random
 
@@ -73,8 +73,8 @@ BusinessDate nuova -> state indipendente.
 ### NUM-T014
 Restart simulato: stesso seed/position produce sequenza coerente senza duplicate.
 
-### NUM-T015
-Switch Sequential/Random non resetta randomPosition.
+### NUM-T015 [P0] Mode switch preserves full RANDOM state
+Switch `RANDOM → SEQUENTIAL → RANDOM` non resetta lo stato RANDOM completo: `randomSeed`, `randomSeedInitialized`, `randomCycle`, `randomPosition` restano identici / proseguono correttamente (non solo `randomPosition`).
 
 ### NUM-T016 [P0] FREEZE-A algorithm
 XorShift32 + Fisher–Yates: stessa `(randomSeed, randomCycle)` → stessa permutazione bit-identica; vietato usare Random/shuffle non specificati come contratto.
@@ -102,6 +102,39 @@ Con `randomSeedInitialized == false`, il valore fisico in `randomSeed` (incluso 
 
 ### NUM-T024 [P0] Restart keeps initialized seed
 Dopo inizializzazione RANDOM: stesso `randomSeed` + `randomSeedInitialized == true` dopo restart/process death.
+
+### NUM-T025 [P0] Default numbering mode is SEQUENTIAL
+`app_settings` get/create singleton → `numberingMode = SEQUENTIAL`.
+
+### NUM-T026 [P0] Persisted numbering mode survives restart
+Dopo set `RANDOM` (o `SEQUENTIAL`), nuova istanza repository/process legge lo stesso `app_settings.numberingMode`.
+
+### NUM-T027 [P0] Mode persistence S→R and R→S
+Update mode `SEQUENTIAL → RANDOM` e `RANDOM → SEQUENTIAL` persiste correttamente su `app_settings.numberingMode`.
+
+### NUM-T028 [P0] Full sequential state preserved across mode switches
+Dopo uso SEQUENTIAL, switch a RANDOM e ritorno: `nextSequentialNumber` (e campi sequential) invariati / riprendono correttamente.
+
+### NUM-T029 [P0] Full RANDOM state preserved across mode switches
+Dopo uso RANDOM, switch a SEQUENTIAL e ritorno: `randomSeed`, `randomSeedInitialized`, `randomCycle`, `randomPosition` invariati.
+
+### NUM-T030 [P0] DRAFT unaffected by numbering mode change
+Cambio settings mode non modifica contenuto/status del DRAFT aperto.
+
+### NUM-T031 [P0] Settings mode change consumes no number
+Cambio `numberingMode` non avanza `nextSequentialNumber` né `randomPosition` / cycle e non chiama seed provider.
+
+### NUM-T032 [P0] ACCEPTED orders unaffected by mode change
+Contract-ready; integration deferred to ACCEPT-003/005: cambio mode non muta ordini `ACCEPTED` (`displayNumber`, `acceptedAt`, `businessDate`, `totalCents`, snapshots).
+
+### NUM-T033 [P0] Future AcceptOrder reads current persisted mode
+Contract-ready; integration deferred to ACCEPT-003: `AcceptOrder` alloca secondo `app_settings.numberingMode` corrente al momento dell’accept.
+
+### NUM-T034 [P0] Settings UI reflects persisted mode
+`SettingsScreen` mostra selected = valore persistito; dopo save riuscito riflette il nuovo mode.
+
+### NUM-T035 [P0] UI save failure does not invent persisted state
+Se update mode fallisce: UI resta allineata alla selezione persistita precedente; nessun “optimistic permanent” locale.
 
 ## 5. Pricing
 

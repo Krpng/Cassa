@@ -679,16 +679,48 @@ Se errori bloccanti:
 - disabilitare conferma;
 - elencare foglio/riga/campo/messaggio.
 
-## 19. Impostazioni numerazione
+## 19. Impostazioni numerazione (D-040 RESOLVED — NUM-005)
 
-Radio/segmented (quando la UI Settings sarà proprietaria di **NUM-005** / D-040):
+**Owner UI:** `SettingsScreen` esistente. Entry: Home → `IMPOSTAZIONI` → `SettingsScreen`. Nessun nuovo screen / destination.
 
-- `Numerazione ordinata` (`SEQUENTIAL`);
-- `Numerazione casuale progressiva` (`RANDOM`).
+### Controllo
 
-Default: `SEQUENTIAL`. Cambio immediato per le prossime accettazioni. Non riscrive ordini esistenti. Non resetta `nextSequentialNumber` né `randomSeed`/`randomCycle`/`randomPosition`.
+Titolo: **Modalità numerazione**.
 
-**M6 CONTRACT FREEZE:** se manca ancora una Settings UI, **non** inventarla in produzione in questo freeze; ownership TBD documentata in D-040 / backlog NUM-005.
+Scelte mutuamente esclusive (segmented / radio):
+
+- `SEQUENZIALE` (`SEQUENTIAL`);
+- `CASUALE` (`RANDOM`).
+
+Default persistito: `SEQUENTIAL`. Source of truth: `app_settings.numberingMode` (singleton). La UI **deriva** sempre dalla selezione persistita; non mantenere una seconda source of truth locale.
+
+### Salvataggio
+
+Salvataggio **immediato** al tap (no pulsante SALVA generale).
+
+- Successo → UI mostra la nuova selezione.
+- Fallimento → resta la selezione persistita precedente; errore/retry coerente con pattern app; non inventare stato locale “salvato”.
+- Durante `saving`: evitare doppio tap concorrente.
+
+### Stati UI congelati
+
+- `loading settings`
+- `loaded SEQUENTIAL`
+- `loaded RANDOM`
+- `saving`
+- `save error` (+ retry)
+
+System Back: torna alla schermata precedente **senza** mutation extra.
+
+### Accessibilità
+
+- label testuale completa per entrambe le opzioni;
+- stato selected leggibile (non solo colore);
+- touch target ≥ 48dp.
+
+### Semantica prodotto
+
+Cambio immediato per le **prossime** accettazioni. Non riscrive DRAFT / ordini esistenti. Non resetta `nextSequentialNumber` né `randomSeed` / `randomSeedInitialized` / `randomCycle` / `randomPosition`. Nessun consumo numerazione al cambio settings.
 
 ## 20. Impostazioni stampante
 
