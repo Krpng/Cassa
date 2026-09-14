@@ -25,10 +25,12 @@ Draft conflict delete popup loop regression: FIXED
 Demo M5: COMPLETE
 M5: COMPLETE
 PRE-M6 CONTRACT / READINESS AUDIT: COMPLETE
-M6 CONTRACT FREEZE (FREEZE-A + FREEZE-B): COMPLETE (docs only; uncommitted until user requests commit)
-M6: NOT STARTED
-next step: M6 implementation starting at NUM-001 (only when explicitly authorized)
-origin/main: synchronized at fcafbba (freeze docs may be local uncommitted)
+M6 CONTRACT FREEZE (FREEZE-A + FREEZE-B): COMPLETE
+M6 CONTRACT PATCH (randomSeedInitialized / D-042 / DB-010): COMPLETE (docs only; uncommitted)
+M6: STARTED — NUM-001 only
+NUM-001: IMPLEMENTATION IN PROGRESS / NOT COMPLETED (blocked for contract-complete close by DB-010)
+next step: DB-010 additive migration, then align/finish NUM-001 against D-042 (only when authorized)
+origin/main: synchronized at 82f6e10 (local uncommitted: NUM-001 code + this contract patch docs)
 ```
 
 Contract docs for the compact UX shell:
@@ -59,7 +61,7 @@ M2 Room: COMPLETE
 M3 Menu/search/manual admin: COMPLETE
 M4 ODS import: COMPLETE
 M5 Draft order core: COMPLETE
-M6 Preview/acceptance/numbering: NOT STARTED
+M6 Preview/acceptance/numbering: STARTED — NUM-001 only (not completed; DB-010 prerequisite)
 ```
 
 M5 is **COMPLETE**: `ORD-001`..`ORD-022`, compact order workspace (`ORDER-059`..`ORDER-083`), and Demo M5 end-to-end validation are done. Pre-M6 audit and **M6 CONTRACT FREEZE** (FREEZE-A random numbering + FREEZE-B acceptance preview/UX) are **COMPLETE** in normative docs. Do **not** begin M6 production implementation until explicitly authorized. Do not invent `ORD-023`. NUM/ACCEPT tasks are contract READY (see backlog); archive, duplicate, and printing remain later milestones.
@@ -81,20 +83,20 @@ Relevant additional regression checkpoint:
 
 - `8d4810173847d47afe587f9d189d7b0b8a12b3b7`: safe handling of trailing LibreOffice repeated padding in ODS files.
 
-M6 and later milestones are **NOT STARTED**. Do not treat acceptance, numbering, archive, duplication of accepted orders, fake printing, or physical NETUM printing as implemented.
+M6 is **STARTED — NUM-001 only** (implementation in progress / not completed). Do not treat AcceptOrder, RANDOM numbering, archive, duplication, fake printing, or physical NETUM printing as implemented.
 
 ## 5. Current next task
 
 ```yaml
-task: M6 implementation (NUM-001 first) — ONLY when explicitly authorized
-title: Implement sequential numbering service per FREEZE-A/B contracts
+task: DB-010 then finish NUM-001 alignment — ONLY when explicitly authorized
+title: Additive randomSeedInitialized migration; then contract-correct sequential state
 priority: P0
-status: NOT STARTED
-depends_on: M6 CONTRACT FREEZE COMPLETE
+status: NOT STARTED (migration) / NUM-001 code uncommitted & not completed
+depends_on: D-042 contract patch
 milestone: M6
 ```
 
-Do **not** start M6 production coding without an explicit user authorize. Contracts for NUM-001..005 and ACCEPT-001..007 are READY (NUM-004 blocked by NUM-003 implementation; NUM-005 UI ownership D-040 TBD). Do not invent unfinished M5 features. Do not begin ARCH/PRINT/BT/HW from this handoff.
+Do **not** start NUM-002/003 or AcceptOrder without authorization. NUM-001 must not invent `0L` as seed-uninitialized sentinel; use `randomSeedInitialized` after DB-010. Do not invent unfinished M5 features. Do not begin ARCH/PRINT/BT/HW from this handoff.
 
 ## 6. Frozen architecture decisions
 
@@ -377,7 +379,7 @@ Some edge cases are covered by automated tests but were not necessarily repeated
 - Acceptance, numbering, archive, duplicate, and final printing flows belong to future milestones (M6+) and have **not** been validated as completed features and are **not** implemented by M5.
 - Physical NETUM printer calibration remains open: pairing, width, code page, euro/accent rendering, feed, reconnect, interrupted-print semantics, and repeated-print stability.
 - Hardware items in the checklist of `docs/09_TEST_PLAN.md` and `docs/07_PRINTING_SPEC.md` must not be marked complete without real printer validation.
-- Pre-M6 audit + M6 CONTRACT FREEZE (FREEZE-A/B) are COMPLETE in docs; M6 production remains NOT STARTED until authorized.
+- Pre-M6 audit + M6 CONTRACT FREEZE (FREEZE-A/B) + D-042/`randomSeedInitialized` patch are COMPLETE in docs; M6 production is STARTED — NUM-001 only (not completed; DB-010 required).
 
 ## 15. ORD-018 final behavior
 
@@ -779,7 +781,7 @@ M5 does **not** implement or validate:
 - fake printing
 - physical NETUM printing
 
-Those belong to later milestones after M6; M6 contracts are frozen (FREEZE-A/B) but production is NOT STARTED.
+Those belong to later milestones after M6; M6 is STARTED — NUM-001 only (contracts frozen; NUM-001 not completed).
 
 ## 22. Rules for the next coding agent
 
@@ -797,7 +799,7 @@ Those belong to later milestones after M6; M6 contracts are frozen (FREEZE-A/B) 
 12. Report the exact files changed, test results, assumptions, deferred behavior, and open issues.
 13. Do not change documentation to justify behavior that contradicts higher-precedence requirements.
 14. Stop and report if the task contract is contradictory, requires a destructive migration, or would violate an architectural boundary.
-15. Next implementable M6 task is **NUM-001** only when explicitly authorized. Do not begin M6 / NUM / ACCEPT / archive / duplicate / printing production implementation without authorization. FREEZE-A/B contracts are COMPLETE.
+15. Next authorized work: **DB-010** then finish NUM-001 against D-042. Do not begin NUM-002/003 / ACCEPT / archive / duplicate / printing without authorization. FREEZE-A/B + D-042 are COMPLETE.
 
 ## 23. Verification baseline
 
@@ -823,20 +825,15 @@ Historical note — compact-workspace UX verification immediately after `67d5992
 ./gradlew.bat connectedDebugAndroidTest: PASS — 81 tests on Samsung SM-S931B
 ```
 
-Documented repository state after M6 CONTRACT FREEZE (docs only; may be uncommitted):
+Documented repository state after M6 RANDOM-seed contract patch (docs only; may be uncommitted):
 
 ```yaml
-Source HEAD before freeze: fcafbba8c327602c6e44d421bc81d7862068923d
-HEAD commit: "docs: finalize m5 milestone"
-last bugfix commit: 3830754dede13ea80b270f02cb68d5fb61377f69
-ORD-001..ORD-022: COMPLETE
-ORDER-059..ORDER-083: COMPLETE
-Demo M5: COMPLETE
-M5: COMPLETE
-PRE-M6 AUDIT: COMPLETE
-M6 CONTRACT FREEZE: COMPLETE
-M6: NOT STARTED
-next step: NUM-001 when explicitly authorized
+Source HEAD: 82f6e105592af4a5d29a7108581de1aecffef45c
+HEAD commit: "docs: freeze m6 numbering and acceptance contract"
+D-042 / DB-010 contract: COMPLETE (docs)
+M6: STARTED — NUM-001 only
+NUM-001: IMPLEMENTATION IN PROGRESS / NOT COMPLETED
+next step: DB-010 additive migration when authorized
 ```
 
-A documentation-only freeze does not mean M6 has begun. No production code or test code was changed by FREEZE-A/B.
+A documentation-only contract patch does not complete NUM-001. No production/test code was changed by this patch.

@@ -83,10 +83,25 @@ XorShift32 + Fisher–Yates: stessa `(randomSeed, randomCycle)` → stessa permu
 `0→A00`, `99→A99`, `100→B00`, `2599→Z99`.
 
 ### NUM-T018 [P0] Seed once
-Prima necessità RANDOM crea e persiste seed una sola volta; restart non rigenera; avanzamento ciclo **non** cambia seed.
+Prima necessità RANDOM con `randomSeedInitialized == false` → genera e persiste `randomSeed`, set `randomSeedInitialized = true` **una sola volta**; restart non rigenera; avanzamento ciclo **non** cambia seed.
 
 ### NUM-T019 [P0] Preview/display non consuma
 Calcolare/mostrare prossimo codice senza Accept riuscito lascia `randomPosition` invariato.
+
+### NUM-T020 [P0] Sequential-created state leaves RANDOM uninitialized
+Creazione/`getOrCreate` da allocazione SEQUENTIAL → `randomSeedInitialized == false` (filler `randomSeed` ignorabile).
+
+### NUM-T021 [P0] Sequential never initializes RANDOM seed
+Allocazioni SEQUENTIAL successive **non** impostano `randomSeedInitialized = true` e **non** generano/sostituiscono un seed RANDOM autorevole.
+
+### NUM-T022 [P0] Initialized=false ignores physical randomSeed
+Con `randomSeedInitialized == false`, il valore fisico in `randomSeed` (incluso `0L` filler) **non** è usato come seed business.
+
+### NUM-T023 [P0] Seed 0 valid when initialized
+`randomSeedInitialized == true` e `randomSeed == 0L` → seed persistito **valido**; non reinterpretare come uninitialized.
+
+### NUM-T024 [P0] Restart keeps initialized seed
+Dopo inizializzazione RANDOM: stesso `randomSeed` + `randomSeedInitialized == true` dopo restart/process death.
 
 ## 5. Pricing
 

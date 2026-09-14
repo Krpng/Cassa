@@ -24,7 +24,7 @@ unique draft slot.
 `NumberingMode`: `SEQUENTIAL | RANDOM`. Default `SEQUENTIAL`. Daily state per `businessDate`. Mode switch preserves both independent states; affects only future accepts.
 
 ### D-008 Random code
-`[A-Z][0-9][0-9]`, 2600/ciclo, no repeat within cycle. FREEZE-A: XorShift32 + Fisher–Yates bit-stable; seed once; cycle advance keeps same seed.
+`[A-Z][0-9][0-9]`, 2600/ciclo, no repeat within cycle. FREEZE-A: XorShift32 + Fisher–Yates bit-stable; seed once via `randomSeedInitialized`; cycle advance keeps same seed.
 
 ### D-009 Categories
 Pizze/Frittura/Bibite.
@@ -97,6 +97,9 @@ Contract: mode switch semantics READY (FREEZE-A). Production Settings UI for cho
 
 ### D-041 M6 FREEZE-A / FREEZE-B (2026-09-12)
 Congelati: algoritmo random XorShift32+Fisher–Yates; acceptance preview zero-write/zero-consume; AcceptOrder singola Room transaction; post-accept `STAMPA` visible disabled in M6; no `ACCETTA E STAMPA` / `STAMPA BOZZA` in preview M6. M6 production remains NOT STARTED.
+
+### D-042 RANDOM seed initialization marker (2026-09-14)
+Congelato: `numbering_state.randomSeedInitialized` (`INTEGER NOT NULL DEFAULT 0`). Marker autorevole di seed non inizializzato vs inizializzato. Filler `randomSeed=0L` consentito solo quando `initialized=false` e **non** è sentinel. `0L` è seed valido quando `initialized=true`. Migration additiva obbligatoria (**DB-010**); no destructive migration. Existing rows → `false` (RANDOM not yet consumed).
 
 ## Reconciliation decisions made in final pack
 

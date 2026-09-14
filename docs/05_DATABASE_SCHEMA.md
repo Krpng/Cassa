@@ -168,19 +168,50 @@ PK: `businessDate`.
 | businessDate | String | |
 | nextSequentialNumber | Long | 1 |
 | randomCycle | Int | 1 |
-| randomSeed | Long | generated |
+| randomSeed | Long | filler `0` finché non inizializzato |
+| randomSeedInitialized | Boolean (`INTEGER`) | `0` / false |
 | randomPosition | Int | 0 |
 | updatedAt | Long | |
 
+### Semantica `randomSeedInitialized` (FREEZE-A patch)
+
+- `randomSeedInitialized = false`: RANDOM seed **non** inizializzato. Il valore fisico in `randomSeed` **non** è business-meaningful (filler tecnico consentito: `0L` perché la colonna resta NOT NULL). **Non** interpretare `randomSeed == 0` come “uninitialized”.
+- `randomSeedInitialized = true`: `randomSeed` è autorevole. `0L` è un seed **valido** quando initialized=true. Nessun Long è riservato come sentinel.
+
+Creazione riga da primo uso **SEQUENTIAL**:
+
+- `randomSeedInitialized = false`;
+- `randomSeed = 0L` (filler only);
+- sequential allocation **non** inizializza il seed RANDOM.
+
+Prima necessità **RANDOM**:
+
+- se `randomSeedInitialized == false` → generate seed once, persist `randomSeed`, set `randomSeedInitialized = true` (stessa transaction di inizializzazione RANDOM).
+
 Quando cambia ciclo random (dopo consume della posizione 2599):
+
 - `randomCycle += 1`;
 - **stesso** `randomSeed` (non rigenerare);
+- `randomSeedInitialized` resta `true`;
 - `randomPosition = 0`;
 - nuova permutazione deterministica da `(randomSeed, randomCycle)` per FREEZE-A (XorShift32 + Fisher–Yates).
 
-Alla prima necessità RANDOM, se `randomSeed` assente: generare una sola volta via provider iniettabile e persistere. MVP: nessun reset manuale del seed.
-
 `SEQUENTIAL` e `RANDOM` condividono la riga `numbering_state` per `businessDate` ma i campi di stato **non** si azzerano al cambio modalità.
+
+### Migration additiva richiesta (non ancora implementata)
+
+Aggiungere colonna:
+
+```sql
+ALTER TABLE numbering_state
+ADD COLUMN randomSeedInitialized INTEGER NOT NULL DEFAULT 0
+```
+
+- incrementare DB version;
+- **no** destructive migration;
+- **no** recreate DB;
+- righe esistenti: `randomSeedInitialized = false` (RANDOM non ancora implementato/consumato in v1).
+Vedere backlog **DB-010**.
 
 ## 12. Printer settings
 
@@ -264,20 +295,24 @@ acceptOrder(orderId):
     mode = settings.numberingMode                        // SEQUENTIAL | RANDOM
 
     state = getOrCreateNumberingState(businessDate)
-    // RANDOM first-need: if randomSeed missing, generate once via injectable SeedProvider, persist
+    // SEQUENTIAL create: randomSeedInitialized=false, randomSeed=0L filler only
+    // RANDOM first-need: if !randomSeedInitialized → generate seed once,
+    // persist randomSeed, set randomSeedInitialized=true (same transaction)
 
     if mode == SEQUENTIAL:
         display = formatSequential(state.nextSequentialNumber)
         state.nextSequentialNumber += 1
         cycle = null
+        // must NOT set randomSeedInitialized=true; must NOT regenerate randomSeed
     else:
+        // require randomSeedInitialized==true after first-need init above
         perm = xorShift32FisherYates(state.randomSeed, state.randomCycle)  // FREEZE-A
         display = indexToCode(perm[state.randomPosition])
         cycle = state.randomCycle
         if state.randomPosition == 2599:
             state.randomCycle += 1
             state.randomPosition = 0
-            // seed UNCHANGED
+            // seed UNCHANGED; randomSeedInitialized stays true
         else:
             state.randomPosition += 1
 

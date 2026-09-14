@@ -536,21 +536,37 @@ Spazio: **2600** codici per ciclo. Nessuna ripetizione **dentro** lo stesso cicl
 
 Per ogni `businessDate`, in `numbering_state`:
 
-- `randomSeed` (Long, creato una sola volta alla prima necessità RANDOM);
+- `randomSeedInitialized` (Boolean; Room/SQLite `INTEGER NOT NULL DEFAULT 0`);
+- `randomSeed` (Long; valore autorevole **solo** quando `randomSeedInitialized == true`);
 - `randomCycle` (Int, parte da `1`);
 - `randomPosition` (Int, parte da `0`).
 
 Lo stato SEQUENTIAL (`nextSequentialNumber`) è **separato**. Cambio modalità `SEQUENTIAL ↔ RANDOM` **non** resetta nessuno dei due stati. Gli ordini `ACCEPTED` esistenti non vengono mai riscritti.
 
+Una creazione di riga da allocazione **SEQUENTIAL** può persistere:
+
+- `randomSeedInitialized = false`;
+- `randomSeed = 0L` **solo** come filler tecnico della colonna NOT NULL.
+
+In quello stato il valore fisico di `randomSeed` **non** ha significato business e **non** deve essere interpretato come seed. L'allocazione SEQUENTIAL **non** genera seed RANDOM e **non** porta `randomSeedInitialized` a `true`.
+
 ### Seed
 
-Alla prima necessità RANDOM, se `randomSeed` non esiste ancora per quella `businessDate`:
+Marker autorevole di inizializzazione: **`randomSeedInitialized`**.
+
+- `false` → RANDOM seed non ancora inizializzato; ignorare il filler in `randomSeed`.
+- `true` → `randomSeed` è autorevole e stabile (incluso il valore `0L`, che è un seed **valido** e **non** riservato come sentinel).
+
+Alla prima necessità RANDOM, se `randomSeedInitialized == false`:
 
 1. generare un seed **una sola volta** tramite provider iniettabile/testabile (domain **non** dipende da API Android);
 2. persistere `randomSeed`;
-3. inizializzare `randomCycle = 1`, `randomPosition = 0`.
+3. impostare `randomSeedInitialized = true`;
+4. assicurare `randomCycle = 1`, `randomPosition = 0` se non già coerenti per il primo ciclo.
 
-Dopo la creazione: `randomSeed` resta stabile. Nell'MVP **non** esiste reset manuale del seed. Avanzamento di ciclo: **non** si genera un nuovo seed (si riusa lo stesso `randomSeed` + nuovo `randomCycle`).
+Le mutation di inizializzazione seed appartengono alla stessa unità transazionale che inizializza lo stato RANDOM (tipicamente dentro `AcceptOrder` / NUM-003–004).
+
+Dopo `randomSeedInitialized == true`: `randomSeed` resta stabile. Nell'MVP **non** esiste reset manuale del seed. Avanzamento di ciclo: **non** si genera un nuovo seed (si riusa lo stesso `randomSeed` + nuovo `randomCycle`). Restart/process death: stesso seed persistito.
 
 ### Algoritmo obbligatorio — XorShift32 + Fisher–Yates (bit-stable)
 

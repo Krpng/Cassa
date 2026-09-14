@@ -109,6 +109,16 @@ Test DRAFT-004.
 ### DB-009 [P1] Schema export/migration foundation
 No destructive release.
 
+### DB-010 [P0] Additive migration: `numbering_state.randomSeedInitialized`
+Contract patch (M6 RANDOM-seed initialization state).
+
+- ADD COLUMN `randomSeedInitialized INTEGER NOT NULL DEFAULT 0`;
+- bump Room DB version;
+- **no** destructive migration / no DB recreate;
+- existing rows → `false` (RANDOM not yet consumed in v1).
+
+Status: **NOT IMPLEMENTED**. Prerequisite before closing NUM-001 against the patched contract and before NUM-003 seed init.
+
 Demo M2:
 - creare/leggere draft persistito.
 
@@ -315,16 +325,17 @@ Demo M5:
 
 ## M6 — Preview, acceptance, numbering
 
-Status milestone: **NOT STARTED** (contract FREEZE-A + FREEZE-B COMPLETE). Non marcare task IMPLEMENTED finché non implementati.
+Status milestone: **STARTED — NUM-001 only** (contract FREEZE-A + FREEZE-B COMPLETE; RANDOM-seed initialization marker patched). Non marcare task IMPLEMENTED finché non implementati.
 
-### NUM-001 [P0] Sequential service/state — READY
-Test NUM-T001..006.
+### NUM-001 [P0] Sequential service/state — IMPLEMENTATION IN PROGRESS / NOT COMPLETED
+Test NUM-T001..006 (+ NUM-T020/T021 contract alignment once `randomSeedInitialized` exists).
+**Prerequisite:** **DB-010** additive migration before NUM-001 can persist contract-correct uninitialized RANDOM state (no `0L`-as-sentinel semantics).
 
 ### NUM-002 [P0] Random code formatter — READY
 Mapping indice ↔ `[A-Z][0-9][0-9]`; test NUM-T010, NUM-T017.
 
-### NUM-003 [P0] Stable random permutation generator — READY
-Contratto FREEZE-A: XorShift32 + Fisher–Yates bit-stable; test NUM-T016, NUM-T014.
+### NUM-003 [P0] Stable random permutation generator — BLOCKED BY DB-010; contract READY
+Contratto FREEZE-A: XorShift32 + Fisher–Yates bit-stable; first-need seed via `randomSeedInitialized`; test NUM-T016, NUM-T014, NUM-T018, NUM-T022..024.
 
 ### NUM-004 [P0] Random state/cycles — BLOCKED BY NUM-003; contract READY
 2600 distinct, cycle 2, seed once; test NUM-T011..013, NUM-T018..019.
@@ -353,7 +364,7 @@ Test ACCEPT-T006, ACCEPT-T019.
 ### ACCEPT-007 [P0] Hide accept CTAs + M6 STAMPA disabled — contract READY
 Test ACCEPT-T019.
 
-Test: ACCEPT-T001..020 + NUM-T001..019.
+Test: ACCEPT-T001..020 + NUM-T001..024.
 
 Demo M6:
 - ordine Accepted numerato e immutabile;

@@ -25,8 +25,9 @@ Questa matrice collega requisiti, backlog e test.
 | Acceptance preview (zero write / zero number) | ACCEPT-001/002 | ACCEPT-T008..012, ACCEPT-T020 |
 | Accept total snapshot from persisted items | ACCEPT-003 | ACCEPT-T012/013/016 |
 | Post-accept M6 UI (STAMPA disabled) | ACCEPT-006/007 | ACCEPT-T006/019 |
-| Sequential numbering | NUM-001 | NUM-T001..006 |
-| Random numbering (FREEZE-A) | NUM-002..004 | NUM-T010..019 |
+| Sequential numbering | NUM-001 | NUM-T001..006, NUM-T020/T021 |
+| Random numbering (FREEZE-A) | NUM-002..004, DB-010 | NUM-T010..024 |
+| RANDOM seed init marker | DB-010, D-042 | NUM-T018, NUM-T020..024 |
 | Mode switch (states independent; UI TBD D-040) | NUM-005 | NUM-T006/T015 |
 | Today/archive | ARCH-001..005 | ARCH-T001..005 |
 | Historical snapshots | DB-004, ARCH-005 | SNAP-001..004 |
