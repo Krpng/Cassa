@@ -31,10 +31,10 @@ Questa matrice collega requisiti, backlog e test.
 | Mode switch + Settings numbering UI (D-040 RESOLVED) | NUM-005 | NUM-T006, NUM-T015, NUM-T025..035 |
 | Today (current business day) | ARCH-001 COMPLETE | ARCH-T001..003 |
 | Daily Accepted purge / retention | RET-001 | RET-T001..008 |
-| Current-day Accepted detail | ARCH-004 (D-045 CTA/nav freeze) | ARCH-T010..026; SNAP-001..004 (immutability retained) |
+| Current-day Accepted detail | ARCH-004 COMPLETE (D-045) | ARCH-T010..026; SNAP-001..004 (immutability retained) |
 | Archive date filters / cross-day search / historical archive | ARCH-002/003/005 **OBSOLETE** | ARCH-T004/T005 **OBSOLETE** |
 | Historical snapshots as archive feature | ARCH-005 **OBSOLETE** | SNAP-* for multi-day archive **OBSOLETE**; snapshots remain for current-day immutability/reprint |
-| Duplicate | ARCH-006/007 **PENDING PRODUCT DECISION** | DUP-001..005 deferred until product decision |
+| Duplicate current-day Accepted → DRAFT | ARCH-006 **READY** (D-046); ARCH-007 ACTIVE/NOT IMPLEMENTED | DUP-001..005; ARCH-T027..033 |
 | ODS parse | ODS-001..006 | ODS-001..007/011/012/021 |
 | ODS validate | ODS-007 | ODS-004..007/013/014 |
 | ODS reimport | ODS-008/010/011 | ODS-008..010/017..020 |

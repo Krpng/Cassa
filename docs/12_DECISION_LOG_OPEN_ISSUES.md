@@ -55,10 +55,10 @@ Absolute precedence.
 
 ### D-018 Accepted immutable
 Read/reprint only while the order is retained (current business day).
-> Duplicate: **PENDING PRODUCT DECISION** (M7).
+> Duplicate from current-day Accepted: **ACTIVE** under D-046 (ARCH-006/007). Source ACCEPTED remains immutable.
 
-### D-019 Duplicate — PENDING PRODUCT DECISION
-> **SUPERSEDED as active M7 requirement.** Exact snapshots/prices to new Draft was the historical contract; do not implement ARCH-006/007 until explicitly re-authorized for current-day orders.
+### D-019 Duplicate — SUPERSEDED by D-046 (2026-09-15)
+> **CLOSED / SUPERSEDED.** Historical M7 note marked duplication PENDING. Product has now required current-day `NUOVO ORDINE DA QUESTO`. Active contract = **D-046**. Do not use D-019 as blocking status.
 
 ### D-020 ODS
 Prezzo Asporto only; Sala ignored.
@@ -112,7 +112,7 @@ Congelato:
 - hard delete `ACCEPTED` dove `businessDate < currentBusinessDate` (RET-001);
 - DRAFT preservato al cambio giornata; accept dopo 05:00 → nuova businessDate;
 - `numbering_state` storico non cancellato dal purge; numerazione nuova giornata = stato della nuova data;
-- ARCH-001 PRESERVED; ARCH-002/003/005 OBSOLETE; ARCH-004 = dettaglio giornata corrente; ARCH-006/007 PENDING PRODUCT DECISION;
+- ARCH-001 PRESERVED; ARCH-002/003/005 OBSOLETE; ARCH-004 = dettaglio giornata corrente; ARCH-006/007 product scope later resolved by **D-046** (was PENDING at D-044 freeze);
 - Home: `ORDINI DI OGGI` preserved; concetto `ARCHIVIO` removed from product scope;
 - schema DB v2 unchanged / migration NONE for RET-001 MVP (explicit removals delete, then orders);
 - correttezza purge su app enter-in-use; esecuzione esatta 05:00 Android non richiesta.
@@ -123,8 +123,44 @@ Congelato per dettaglio Accepted current-day (ARCH-004):
 - ordering = stesso preview Acceptance (`AcceptancePreviewOrdering`: PIZZE → FRITTURA → BIBITE; `createdSequence ASC`);
 - label stampa UI = **`STAMPA`** (mai `RISTAMPA`); in ARCH-004 `STAMPA` = VISIBLE + DISABLED fino a PRINT (M8/M9);
 - navigation: Today tap → detail; `INDIETRO`/System Back → Today; `HOME` → Home (no reopen preview/edit);
-- `NUOVO ORDINE DA QUESTO` = NOT VISIBLE (owner ARCH-006; conflitto DRAFT = ARCH-007);
+- `NUOVO ORDINE DA QUESTO` = NOT VISIBLE **in ARCH-004 alone** (activated by ARCH-006 / D-046; conflitto DRAFT = ARCH-007);
 - test dedicati ARCH-T010..ARCH-T026 (non riusare ARCH-T001..003).
+
+### D-046 ARCH-006/007 current-day duplication contract freeze (2026-09-15)
+Product decision: `NUOVO ORDINE DA QUESTO` = **REQUIRED** for current-business-day ACCEPTED from Accepted Order Detail.
+
+**Principle:** DUPLICAZIONE FEDELE MA INDIPENDENTE — nuovo DRAFT, nuovi UUID, contenuto/personalizzazioni/prezzi = snapshot origine; no catalog reread; no reprice; source ACCEPTED unchanged.
+
+**ARCH-006 = READY FOR IMPLEMENTATION** (transaction + CTA + success nav; conflict = typed reject only).
+**ARCH-007 = ACTIVE / NOT IMPLEMENTED** (RIPRENDI / ELIMINA E DUPLICA / ANNULLA UX).
+
+Frozen field map:
+- `productId` / `additionId` / `ingredientId` = **COPY** exact source (null stays null; no name lookup / catalog resolve);
+- product/item snapshots, qty, base/auto extras/manual/final unit prices, item note, additions/removals snapshots + `displayOrder` = **COPY**;
+- `manualUnitPriceCents = 0` is valid manual and **must remain 0** (not null);
+- `generalNote` = **COPY** (null stays null; no extra trim on duplicate);
+- `createdSequence` = **COPY exact** (no renumber; gaps allowed; later DRAFT adds use next available);
+- DRAFT `orders.totalCents` = **normal DRAFT / ORD-022** live derived from persisted items — **do not** copy ACCEPTED `totalCents` as authoritative;
+- Accept later: AcceptOrder checked total as usual (no catalog reprice).
+
+Identity:
+- new `order.id` / item / child UUIDs; `status=DRAFT`; `draftSlot=1`; `displayNumber`/`acceptedAt`/`businessDate` = null;
+- `sourceOrderId` = immediate source ACCEPTED id;
+- timestamps via `ClockProvider`.
+
+Source guard: `ACCEPTED` AND `businessDate == currentBusinessDate` (`ClockProvider` + `SettingsRepository` + `BusinessDateCalculator`). Else reject + zero writes.
+
+Atomicity: one Room transaction (validate source/date → no active DRAFT → create DRAFT → insert items/additions/removals). Failure → full rollback.
+
+Existing active DRAFT (ARCH-006 without ARCH-007): typed conflict + zero writes; no delete/replace/merge.
+
+CTA (valid current-day detail): `NUOVO ORDINE DA QUESTO` VISIBLE+ENABLED; `STAMPA` remains VISIBLE+DISABLED.
+
+Success: open new DRAFT in standard NewOrder UI (not stay on detail; not Home).
+
+Schema: DB v2 unchanged; `sourceOrderId` already present; migration NONE.
+
+Tests: DUP-001..005 ACTIVE (mapped ARCH-006/007); ARCH-T027..ARCH-T033 for guard/note/sequence/refs/rollback/nav/CTA.
 
 ## Reconciliation decisions made in final pack
 

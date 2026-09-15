@@ -539,22 +539,45 @@ Addition price changes -> historical reprint old price.
 ### SNAP-004
 Deactivate product -> historical order readable.
 
-## 12. Duplicate
+## 12. Duplicate (ARCH-006 / D-046 — ACTIVE)
 
-### DUP-001
-Exact lines/qty/modifiers/notes/prices copied.
+> Riattivati formalmente. Scope: current-day ACCEPTED → new DRAFT. Conflict resolution UX = ARCH-007 (DUP-005 reject path is ARCH-006).
 
-### DUP-002
-No number/date/acceptedAt copied.
+### DUP-001 [ARCH-006]
+Exact lines / product snapshots / qty / additions / removals / item notes / `createdSequence` exact copy; new item+child UUIDs.
 
-### DUP-003
-sourceOrderId set.
+### DUP-002 [ARCH-006]
+Prices/customizations copied including `manualUnitPriceCents = 0`; no catalog reread; no reprice; auto-extras snapshot + finalUnitPrice COPY.
 
-### DUP-004
-Source unchanged.
+### DUP-003 [ARCH-006]
+New order identity (DRAFT, null display/acceptedAt/businessDate) + `sourceOrderId` = source ACCEPTED id; `productId`/`additionId`/`ingredientId` COPY exact.
 
-### DUP-005
-Draft conflict prevents second draft until resolved.
+### DUP-004 [ARCH-006]
+Source ACCEPTED unchanged (snapshots/children/`updatedAt`).
+
+### DUP-005 [ARCH-006; resolution UX = ARCH-007]
+Existing active DRAFT → typed conflict + zero writes (no partial DRAFT; no delete/replace in ARCH-006).
+
+### ARCH-T027 [ARCH-006]
+Source guard: only current-day ACCEPTED; DRAFT / missing / old ACCEPTED → reject + zero writes.
+
+### ARCH-T028 [ARCH-006]
+`generalNote` COPY (null stays null; no extra trim on duplicate).
+
+### ARCH-T029 [ARCH-006]
+`createdSequence` exact COPY (no renumber; relative order preserved).
+
+### ARCH-T030 [ARCH-006]
+`productId` / `additionId` / `ingredientId` COPY exact; no catalog name resolve.
+
+### ARCH-T031 [ARCH-006]
+Transaction failure → full rollback; no partial DRAFT/items.
+
+### ARCH-T032 [ARCH-006]
+Success → open new DRAFT in standard NewOrder UI (not detail, not Home).
+
+### ARCH-T033 [ARCH-006]
+On valid detail: `NUOVO ORDINE DA QUESTO` VISIBLE+ENABLED; `STAMPA` remains VISIBLE+DISABLED.
 
 ## 13. Today / Accepted list (current business day only)
 
@@ -646,7 +669,7 @@ CTA `STAMPA` VISIBLE + DISABLED (pre-PRINT).
 label `RISTAMPA` assente.
 
 ### ARCH-T024
-`NUOVO ORDINE DA QUESTO` assente (ARCH-006).
+`NUOVO ORDINE DA QUESTO` assente **finché solo ARCH-004** (attivata da ARCH-006 / ARCH-T033).
 
 ### ARCH-T025
 `INDIETRO` e System Back → `ORDINI DI OGGI`.
@@ -810,7 +833,7 @@ Restart -> recover draft.
 
 ### UI-006
 Ordini di oggi → dettaglio Accepted giornata corrente (ARCH-004 / ARCH-T010..026).
-> Ex “Archive → detail → duplicate”: **OBSOLETE**. Duplicazione = ARCH-006 (CTA assente in ARCH-004).
+Duplicazione da detail: ARCH-006 / D-046 (DUP-001..005, ARCH-T027..033). Ex “Archive → detail → duplicate”: **OBSOLETE**.
 
 ### UI-007
 Import -> preview -> confirm.

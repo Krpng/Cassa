@@ -776,7 +776,7 @@ M5 does **not** implement or validate:
 - acceptance
 - order numbering
 - accepted-order archive (**CANCELLED** by M7 D-044; superseded by current-day only + RET-001)
-- duplication of accepted order (**PENDING PRODUCT DECISION**)
+- duplication of accepted order (**ACTIVE** D-046 / ARCH-006 READY; ARCH-007 NOT IMPLEMENTED)
 - fake printing
 - physical NETUM printing
 
@@ -894,9 +894,10 @@ HEAD_at_freeze_docs: c9f8446a12d4c18317fa99354fa3a4ca88022631
 ARCH-001: COMPLETE / PRESERVED (Today = currentBusinessDate ACCEPTED only)
 ARCH-002: OBSOLETE (IERI / date picker)
 ARCH-003: OBSOLETE (cross-day number search)
-ARCH-004: REDEFINED + D-045 CTA/nav freeze — READY FOR IMPLEMENTATION when authorized
+ARCH-004: COMPLETE (D-045 + edc3e9a)
 ARCH-005: OBSOLETE as historical archive
-ARCH-006/007: PENDING PRODUCT DECISION
+ARCH-006: READY FOR IMPLEMENTATION (D-046 docs freeze; code NOT STARTED)
+ARCH-007: ACTIVE / NOT IMPLEMENTED (draft-conflict UX on duplicate)
 RET-001: COMPLETE
 Home ARCHIVIO: REMOVED (M7 UX cleanup)
 ORDINI DI OGGI: PRESERVED
@@ -906,19 +907,20 @@ Draft accepted after 05:00: NEW businessDate at AcceptOrder
 numbering_state historical rows: NOT purged by RET-001
 Exact Android 05:00 job: NOT REQUIRED
 Schema: DB v2 UNCHANGED / migration NONE for RET-001 MVP
-Normative decision: D-044; ARCH-004 CTA freeze: D-045
+Normative decision: D-044; ARCH-004 CTA freeze: D-045; duplication freeze: D-046
 ```
 
-Do **not** implement ARCH-004 until explicitly authorized after D-045.
 Do **not** resurrect ARCH-002/003/005.
-Do **not** implement ARCH-006/007 / PRINT real until authorized.
+Do **not** implement PRINT real until authorized.
+Do **not** implement ARCH-006 until explicitly authorized after D-046 (docs READY).
+Do **not** implement ARCH-007 until authorized after ARCH-006.
 
 ## 27. ARCH-004 CTA / NAVIGATION CONTRACT FREEZE (2026-09-15)
 
 ```yaml
 decision: D-045
 HEAD_at_freeze_docs: 02c8a5c
-ARCH-004: READY FOR IMPLEMENTATION (docs freeze complete; code NOT STARTED)
+ARCH-004: COMPLETE (implementation edc3e9a)
 detail: CURRENT_DAY_ACCEPTED_READ_ONLY
 print_label: STAMPA
 print_state_ARCH_004: VISIBLE_DISABLED
@@ -927,10 +929,41 @@ print_owner: M8/M9
 INDIETRO: -> TODAY
 system_back: -> TODAY
 HOME: -> HOME
-NUOVO_ORDINE_DA_QUESTO: NOT_VISIBLE
+NUOVO_ORDINE_DA_QUESTO: NOT_VISIBLE_IN_ARCH_004_ALONE
 duplicate_owner: ARCH-006
 ordering: AcceptancePreviewOrdering
 tests: ARCH-T010..ARCH-T026
 RET-001: COMPLETE
 M7_UX_CLEANUP: COMPLETE
 ```
+
+## 28. ARCH-006/007 DUPLICATION CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-046
+HEAD_at_freeze_docs: edc3e9a
+closes: D-019 (SUPERSEDED)
+product: NUOVO_ORDINE_DA_QUESTO = REQUIRED
+principle: FAITHFUL_BUT_INDEPENDENT
+source_guard: CURRENT_DAY_ACCEPTED_ONLY
+ARCH-006: READY FOR IMPLEMENTATION (code NOT STARTED)
+ARCH-007: ACTIVE / NOT IMPLEMENTED
+sourceOrderId: source ACCEPTED id
+references_COPY: productId / additionId / ingredientId
+snapshots_COPY: product / prices / notes / additions / removals
+generalNote: COPY
+createdSequence: COPY_EXACT
+manual_zero: PRESERVE_AS_ZERO
+draft_total: ORD-022_LIVE_FROM_ITEMS (do not copy ACCEPTED totalCents)
+atomic: ONE_ROOM_TRANSACTION
+existing_draft_ARCH_006: TYPED_CONFLICT_ZERO_WRITES
+success_nav: OPEN_NEW_DRAFT_IN_NewOrder
+CTA: NUOVO_ORDINE_DA_QUESTO VISIBLE_ENABLED on valid detail
+STAMPA: remains VISIBLE_DISABLED
+schema: DB_v2 UNCHANGED
+migration: NONE
+tests: DUP-001..005 + ARCH-T027..033
+```
+
+Do **not** implement ARCH-006/007 until explicitly authorized after this freeze.
+Do **not** implement ARCH-007 conflict UX inside ARCH-006.

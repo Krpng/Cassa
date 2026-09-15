@@ -258,7 +258,7 @@ Responsabilità:
 - today query (current businessDate);
 - daily purge (RET-001);
 - current-day Accepted detail;
-- duplicate — PENDING PRODUCT DECISION.
+- duplicate current-day Accepted → new DRAFT (ARCH-006 / D-046; conflict reject until ARCH-007).
 
 Non esporre Entity Room alla UI.
 

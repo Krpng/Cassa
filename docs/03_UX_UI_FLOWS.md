@@ -651,10 +651,10 @@ Mostrare anche `generalNote` se presente.
 - `[ INDIETRO ]` — vedi navigation.
 - `[ HOME ]` — vedi navigation.
 
-**Non** mostrare:
+**Non** mostrare in **ARCH-004 alone**:
 
 - label `RISTAMPA` (vietata; label normativa unica = `STAMPA`);
-- `NUOVO ORDINE DA QUESTO` (ownership ARCH-006; ARCH-007 = conflitto DRAFT).
+- `NUOVO ORDINE DA QUESTO` (**attivata da ARCH-006 / D-046**; conflitto DRAFT = ARCH-007).
 
 ### Read-only
 
@@ -664,12 +664,27 @@ Nessun controllo di modifica:
 - edit note / additions / removals / manual price;
 - `ACCETTA`, `COMPLETA`.
 
-## 16. Duplicazione — PENDING PRODUCT DECISION
+## 16. Duplicazione — READY (D-046 / ARCH-006)
 
-> **CANCELLED BY PRODUCT SCOPE CHANGE / PENDING DECISION (M7).** Non implementare finché il prodotto non richiede duplicazione degli ordini **della giornata corrente**.
-> In ARCH-004 la CTA `NUOVO ORDINE DA QUESTO` **non** è visibile (ownership ARCH-006).
+> **ACTIVE.** `NUOVO ORDINE DA QUESTO` = REQUIRED da Accepted Order Detail (solo current-day ACCEPTED). Contratto campo/transazione: `docs/02_BUSINESS_RULES.md` §23 + D-046.
 
-Contratto storico (non attivo): se nessun draft → crea draft; se draft esistente → conflitto RIPRENDI / ELIMINA E DUPLICA / ANNULLA.
+### CTA (ARCH-006)
+
+Sul detail valido (`ACCEPTED` + currentBusinessDate):
+
+- `[ NUOVO ORDINE DA QUESTO ]` — **VISIBLE + ENABLED**;
+- `[ STAMPA ]` — resta **VISIBLE + DISABLED** (fino a PRINT);
+- `[ INDIETRO ]` / `[ HOME ]` — invariati.
+
+### Success navigation (congelata)
+
+Duplicate success → apri **direttamente** il nuovo DRAFT nella **NewOrder** UI standard.
+Non restare sul detail. Non andare Home. Non creare un secondo editor.
+
+### Conflitto DRAFT (ARCH-006 vs ARCH-007)
+
+Se esiste active DRAFT: ARCH-006 → typed conflict + zero writes (nessuna UX RIPRENDI/ELIMINA E DUPLICA).
+**ARCH-007** (ACTIVE / NOT IMPLEMENTED) owns: RIPRENDI / ELIMINA E DUPLICA / ANNULLA.
 
 ## 17. Gestione menu
 

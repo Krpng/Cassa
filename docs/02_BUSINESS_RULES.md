@@ -25,7 +25,7 @@ Dopo `ACCEPTED`:
 - non ricalcolare da menu corrente;
 - consentire lettura;
 - stampa / ristampa funzionale con label UI **`STAMPA`** (mai `RISTAMPA`) quando PRINT in scope;
-- duplicazione = PENDING (ARCH-006/007), non parte di ARCH-004.
+- duplicazione current-day = **ACTIVE** (ARCH-006/007, D-046), non parte del solo ARCH-004 (che non mostrava ancora la CTA).
 
 La regola deve essere enforced nel dominio/repository, non solo nascondendo pulsanti.
 
@@ -814,32 +814,74 @@ Dettaglio Accepted (**ARCH-004 FREEZE** — D-045):
 - **non** mostrare `RISTAMPA`, `NUOVO ORDINE DA QUESTO`, controlli edit / `ACCETTA` / `COMPLETA`;
 - missing / DRAFT / old-or-purged → Unavailable (observe; no crash).
 
-Duplicazione (ex ARCH-006/007): **PENDING PRODUCT DECISION** — non implementare finché non richiesta esplicitamente per gli ordini di oggi. `NUOVO ORDINE DA QUESTO` non appartiene ad ARCH-004.
+Duplicazione (ARCH-006/007, **D-046**): ACTIVE — `NUOVO ORDINE DA QUESTO` required da Accepted detail giornata corrente. ARCH-004 da solo non la mostrava; ARCH-006 attiva CTA + transaction. ARCH-007 = conflict UX (NOT IMPLEMENTED).
 
-## 23. Duplicazione — PENDING PRODUCT DECISION
+## 23. Duplicazione — READY (D-046)
 
-> **SUPERSEDED as open product requirement for M7.** Storico: la duplicazione creava un nuovo `DRAFT` da snapshot Accepted. Non implementare ARCH-006/007 finché non c'è decisione prodotto esplicita sulla duplicazione degli ordini **della giornata corrente**.
+> **ACTIVE PRODUCT REQUIREMENT.** Congelato in D-046. Scope: solo `ACCEPTED` con `businessDate = currentBusinessDate` da Accepted Order Detail. Principio: **DUPLICAZIONE FEDELE MA INDIPENDENTE**.
 
-Contratto storico (non attivo):
+### Guard sorgente
+Ammesso solo se `status == ACCEPTED` AND `businessDate == currentBusinessDate`.
+`currentBusinessDate` solo via `ClockProvider` + `SettingsRepository` + `BusinessDateCalculator`.
+DRAFT / missing / old ACCEPTED → reject tipizzato + **zero writes**.
 
-Crea nuovo `DRAFT` copiando:
-- righe;
-- quantità;
-- addition;
-- removal;
-- note;
-- prezzi;
-- snapshot.
+### Nuova identity ordine
+- `order.id` = nuovo UUID;
+- `status` = `DRAFT`;
+- `draftSlot` = 1;
+- `displayNumber` / `acceptedAt` / `businessDate` = null;
+- `sourceOrderId` = id dell’ACCEPTED sorgente immediato;
+- `createdAt` / `updatedAt` = `ClockProvider.now()` della stessa operazione.
 
-Non copia:
-- status Accepted;
-- displayNumber;
-- acceptedAt;
-- businessDate.
+Non ereditare status Accepted, displayNumber, acceptedAt, businessDate.
 
-Salvare `sourceOrderId`.
+### Item / child identity
+Ogni `order_item` / addition / removal del DRAFT → **nuovi UUID**. Nessuna identity mutabile condivisa con la source.
 
-Il nuovo draft non ricalcola prezzi dal menu corrente.
+### Reference tecniche (COPY exact)
+- `productId`, `additionId`, `ingredientId` = valore sorgente (null resta null);
+- **non** lookup catalogo, **non** resolve by name, **non** sostituire con id catalogo corrente.
+Rendering/contenuto = snapshot.
+
+### Snapshot / prezzi / note (COPY exact)
+- `productNameSnapshot`, `productPrintedNameSnapshot`, `categorySnapshot`;
+- `quantity`;
+- `baseUnitPriceCents`, `automaticExtrasPricingSnapshot`, `automaticExtrasTotalCents`;
+- `manualUnitPriceCents` (**incluso 0** — non convertire 0 → null), `finalUnitPriceCents`;
+- item `note`;
+- additions: name/printed/listed/charged/`displayOrder` + `additionId`;
+- removals: name/`displayOrder` + `ingredientId`;
+- `generalNote` ordine = **COPY** (null resta null; nessun trim aggiuntivo in duplicate);
+- `createdSequence` = **COPY exact** (no renumber; gap ammessi). Successive righe aggiunte al DRAFT usano next available.
+
+### Catalog / reprice
+Nessuna rilettura catalogo. Nessun reprice dal menu corrente.
+
+### Totale DRAFT
+**Non** copiare `orders.totalCents` Accepted come autoritativo.
+Il DRAFT segue **ORD-022**: live total derivato dalle `order_items` persistite (`finalUnitPriceCents * quantity`).
+`orders.totalCents` in DRAFT = comportamento normale createDraft / mutazioni DRAFT.
+Alla futura Acceptance: AcceptOrder calcola checked total e lo persiste sull’ACCEPTED (no catalog reprice).
+
+### Atomicità
+Una sola Room transaction:
+1. validate source + currentBusinessDate;
+2. verify no active DRAFT;
+3. create DRAFT;
+4. insert copied items;
+5. insert copied additions;
+6. insert copied removals.
+Failure → rollback completo (nessun DRAFT parziale).
+
+### Active DRAFT esistente (senza ARCH-007)
+Typed conflict + zero writes; source e DRAFT esistente invariati.
+**Non** delete/replace/merge; **non** UX RIPRENDI / ELIMINA E DUPLICA (owner **ARCH-007**).
+
+### Source immutability
+Dopo duplicate: source ACCEPTED invariata (snapshot/children/`updatedAt`).
+
+### CTA / success (UI — vedi anche UX)
+`NUOVO ORDINE DA QUESTO` VISIBLE+ENABLED sul detail valido; success → apri nuovo DRAFT in NewOrder standard.
 
 ## 24. Menu attivo/inattivo
 

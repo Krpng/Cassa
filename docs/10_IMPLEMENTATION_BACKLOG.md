@@ -396,7 +396,7 @@ AC (congelati — D-045):
 - observe order (purge mid-open → Unavailable, no stale);
 - snapshot-only; ordering = `AcceptancePreviewOrdering` (PIZZE→FRITTURA→BIBITE, `createdSequence ASC`);
 - CTA: `STAMPA` VISIBLE+DISABLED (PRINT = M8/M9); `INDIETRO`/System Back → Today; `HOME` → Home;
-- **non** mostrare: `RISTAMPA`, `NUOVO ORDINE DA QUESTO`, edit controls, `ACCETTA`, `COMPLETA`.
+- in **ARCH-004 alone** non mostrare: `RISTAMPA`, `NUOVO ORDINE DA QUESTO` (CTA activated by ARCH-006 / D-046), edit controls, `ACCETTA`, `COMPLETA`.
 
 Test: ARCH-T010..ARCH-T026.
 
@@ -404,11 +404,14 @@ Test: ARCH-T010..ARCH-T026.
 > **CANCELLED BY PRODUCT SCOPE CHANGE** come requisito di archivio storico.
 > Gli snapshot restano obbligatori per immutabilità/ristampa degli Accepted **ancora presenti** (giornata corrente).
 
-### ARCH-006 [P1] Duplicate transaction — PENDING PRODUCT DECISION
-> Non implementare finché non richiesto esplicitamente per ordini di oggi.
+### ARCH-006 [P1] Duplicate transaction — READY FOR IMPLEMENTATION (D-046)
+Current-day ACCEPTED only from Accepted Order Detail → new independent DRAFT (faithful snapshot copy, no catalog reprice).
+AC: source guard; atomic txn; field map D-046; CTA VISIBLE+ENABLED; success → NewOrder; existing DRAFT → typed conflict + zero writes (no ARCH-007 UX yet).
+Schema: v2 unchanged / migration NONE.
+Test: DUP-001..005, ARCH-T027..ARCH-T033.
 
-### ARCH-007 [P1] Draft conflict on duplicate — PENDING PRODUCT DECISION
-> Dipende da ARCH-006; non implementare ora.
+### ARCH-007 [P1] Draft conflict on duplicate — ACTIVE / NOT IMPLEMENTED
+> Dipende da ARCH-006. Owns RIPRENDI / ELIMINA E DUPLICA / ANNULLA. Non implementare in ARCH-006.
 
 ### RET-001 [P0] Daily accepted-order purge — COMPLETE
 Hard delete `ACCEPTED` where `businessDate < currentBusinessDate`.

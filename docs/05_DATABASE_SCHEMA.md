@@ -348,15 +348,19 @@ Nota: `clockProvider.now()` e tutti i campi timestamp della stessa accept usano 
 Se fallisce:
 - resta `3x`.
 
-## 18. Transazione duplicate
+## 18. Transazione duplicate (ARCH-006 / D-046)
 
-- verifica source Accepted;
-- verifica assenza draft o conflitto risolto prima;
-- crea order Draft;
-- copia items e child modifiers;
-- copia snapshot/prezzi;
-- sourceOrderId=source.id;
-- nessun display/businessDate/acceptedAt.
+Una sola Room transaction. Sequenza semantica:
+
+1. verifica source `ACCEPTED` + `businessDate == currentBusinessDate`;
+2. verifica assenza active DRAFT (se presente → typed conflict, **zero writes**; risoluzione UX = ARCH-007);
+3. crea order DRAFT (`draftSlot=1`, `sourceOrderId=source.id`, no display/businessDate/acceptedAt);
+4. copia items con **nuovi** UUID, snapshot/prezzi/`createdSequence` exact, `productId` COPY;
+5. copia additions/removals con **nuovi** child UUID, snapshot + `additionId`/`ingredientId` COPY;
+6. `generalNote` COPY; **non** copiare `totalCents` Accepted come autoritativo (totale DRAFT = ORD-022 da items).
+
+Se fallisce: rollback completo (nessun DRAFT parziale).
+Schema: DB version = 2 unchanged; `sourceOrderId` già presente; migration NONE.
 
 ## 19. Import transaction
 
