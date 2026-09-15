@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -406,6 +407,10 @@ class HomeViewModelTest {
         override suspend fun acceptOrder(
             orderId: String,
         ): it.krpng.cassa.domain.repository.AcceptOrderResult = error("Not used")
+
+        override fun observeAcceptedByBusinessDate(
+            businessDate: java.time.LocalDate,
+        ): Flow<List<it.krpng.cassa.domain.model.AcceptedOrderSummary>> = flowOf(emptyList())
     }
 
     private fun emptyDraft(id: String = "empty-draft-id"): Order = Order(

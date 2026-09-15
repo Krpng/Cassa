@@ -51,6 +51,15 @@ interface OrderDao {
     )
     suspend fun getActiveDraft(): FullOrder?
 
+    @Query(
+        """
+        SELECT * FROM orders
+        WHERE status = 'ACCEPTED' AND businessDate = :businessDate
+        ORDER BY acceptedAt DESC
+        """,
+    )
+    fun observeAcceptedByBusinessDate(businessDate: String): Flow<List<OrderEntity>>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDraft(order: OrderEntity): Long
 

@@ -445,6 +445,10 @@ class AcceptancePreviewViewModelTest {
             }
             return result
         }
+
+        override fun observeAcceptedByBusinessDate(
+            businessDate: java.time.LocalDate,
+        ): Flow<List<it.krpng.cassa.domain.model.AcceptedOrderSummary>> = write()
     }
 
     private companion object {

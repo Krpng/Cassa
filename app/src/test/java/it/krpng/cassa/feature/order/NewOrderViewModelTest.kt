@@ -32,6 +32,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -1496,6 +1497,10 @@ class NewOrderViewModelTest {
         }
 
         override suspend fun acceptOrder(orderId: String): AcceptOrderResult = error("Not used")
+
+        override fun observeAcceptedByBusinessDate(
+            businessDate: java.time.LocalDate,
+        ): Flow<List<it.krpng.cassa.domain.model.AcceptedOrderSummary>> = flowOf(emptyList())
     }
 
     private class FakeProductRepository(

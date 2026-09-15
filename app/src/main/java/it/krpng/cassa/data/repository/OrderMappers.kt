@@ -7,6 +7,7 @@ import it.krpng.cassa.data.database.entity.OrderItemEntity
 import it.krpng.cassa.data.database.entity.OrderItemRemovalEntity
 import it.krpng.cassa.data.database.relation.FullOrder
 import it.krpng.cassa.data.database.relation.OrderItemWithModifiers
+import it.krpng.cassa.domain.model.AcceptedOrderSummary
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.OrderItem
 import it.krpng.cassa.domain.model.OrderItemAddition
@@ -32,6 +33,20 @@ internal fun FullOrder.toDomain(): Order = Order(
         .sortedWith(compareBy({ it.item.createdSequence }, { it.item.id }))
         .map(OrderItemWithModifiers::toDomain),
 )
+
+internal fun OrderEntity.toAcceptedOrderSummaryOrNull(): AcceptedOrderSummary? {
+    val number = displayNumber ?: return null
+    val accepted = acceptedAt ?: return null
+    val date = businessDate?.let(LocalDate::parse) ?: return null
+    if (status != OrderStatus.ACCEPTED) return null
+    return AcceptedOrderSummary(
+        id = id,
+        displayNumber = number,
+        acceptedAt = Instant.ofEpochMilli(accepted),
+        total = Money.ofCents(totalCents),
+        businessDate = date,
+    )
+}
 
 internal fun Order.toDatabaseModel(): FullOrder = FullOrder(
     order = OrderEntity(

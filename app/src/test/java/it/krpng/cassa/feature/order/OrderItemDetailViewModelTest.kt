@@ -29,6 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -1033,6 +1034,10 @@ class OrderItemDetailViewModelTest {
         override suspend fun acceptOrder(
             orderId: String,
         ): it.krpng.cassa.domain.repository.AcceptOrderResult = error("Not used")
+
+        override fun observeAcceptedByBusinessDate(
+            businessDate: java.time.LocalDate,
+        ): Flow<List<it.krpng.cassa.domain.model.AcceptedOrderSummary>> = flowOf(emptyList())
 
         private fun Order?.orEmptyItems(): List<OrderItem> = this?.items.orEmpty()
     }

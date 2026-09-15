@@ -265,6 +265,10 @@ class RoomRepositoriesTest {
 
         override fun observeActiveDraft(): Flow<FullOrder?> = flowOf(result)
 
+        override fun observeAcceptedByBusinessDate(
+            businessDate: String,
+        ): Flow<List<OrderEntity>> = flowOf(emptyList())
+
         override suspend fun getActiveDraft(): FullOrder? = result
 
         override suspend fun insertDraft(order: OrderEntity): Long = 1

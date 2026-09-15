@@ -98,6 +98,67 @@ class RoomOrderRepositoryTest {
     }
 
     @Test
+    fun observeAcceptedByBusinessDateFiltersAndOrdersByAcceptedAtDesc() = runBlocking {
+        val today = "2026-09-15"
+        val yesterday = "2026-09-14"
+        val base = FIXED_NOW.toEpochMilli()
+        database.orderDao().insertDraft(
+            acceptedOrder().copy(
+                id = "draft-skip",
+                status = OrderStatus.DRAFT,
+                draftSlot = 1,
+                displayNumber = null,
+                businessDate = null,
+                acceptedAt = null,
+            ),
+        )
+        database.orderDao().insertDraft(
+            acceptedOrder().copy(
+                id = "old-today",
+                displayNumber = "099",
+                businessDate = today,
+                acceptedAt = base,
+                totalCents = 100,
+            ),
+        )
+        database.orderDao().insertDraft(
+            acceptedOrder().copy(
+                id = "new-today",
+                displayNumber = "001",
+                businessDate = today,
+                acceptedAt = base + 2_000,
+                totalCents = 300,
+            ),
+        )
+        database.orderDao().insertDraft(
+            acceptedOrder().copy(
+                id = "mid-today",
+                displayNumber = "050",
+                businessDate = today,
+                acceptedAt = base + 1_000,
+                totalCents = 200,
+            ),
+        )
+        database.orderDao().insertDraft(
+            acceptedOrder().copy(
+                id = "other-day",
+                displayNumber = "777",
+                businessDate = yesterday,
+                acceptedAt = base + 5_000,
+                totalCents = 999,
+            ),
+        )
+
+        val rows = repository.observeAcceptedByBusinessDate(
+            java.time.LocalDate.parse(today),
+        ).first()
+
+        assertEquals(listOf("001", "050", "099"), rows.map { it.displayNumber })
+        assertEquals(listOf("new-today", "mid-today", "old-today"), rows.map { it.id })
+        assertEquals(listOf(300L, 200L, 100L), rows.map { it.total.cents })
+    }
+
+    @Test
     fun deleteDraftCannotDeleteAcceptedOrder() = runBlocking {
         val accepted = acceptedOrder()
         database.orderDao().insertDraft(accepted)

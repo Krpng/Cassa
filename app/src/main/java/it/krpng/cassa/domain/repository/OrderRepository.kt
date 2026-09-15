@@ -1,6 +1,7 @@
 package it.krpng.cassa.domain.repository
 
 import it.krpng.cassa.core.money.Money
+import it.krpng.cassa.domain.model.AcceptedOrderSummary
 import it.krpng.cassa.domain.model.NumberingMode
 import it.krpng.cassa.domain.model.Order
 import java.time.Instant
@@ -62,6 +63,12 @@ interface OrderRepository {
     ): UpdateGeneralNoteResult
 
     suspend fun acceptOrder(orderId: String): AcceptOrderResult
+
+    /**
+     * Accepted orders for a business date, newest [acceptedAt] first.
+     * List rows only — no item/modifier graph (avoids N+1 for Today/Archive lists).
+     */
+    fun observeAcceptedByBusinessDate(businessDate: LocalDate): Flow<List<AcceptedOrderSummary>>
 }
 
 sealed interface AcceptOrderResult {

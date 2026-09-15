@@ -18,6 +18,7 @@ import it.krpng.cassa.data.database.entity.OrderItemEntity
 import it.krpng.cassa.data.database.entity.OrderItemRemovalEntity
 import it.krpng.cassa.data.database.entity.ProductEntity
 import it.krpng.cassa.data.database.relation.OrderItemWithModifiers
+import it.krpng.cassa.domain.model.AcceptedOrderSummary
 import it.krpng.cassa.domain.model.NumberingMode
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.model.ProductCategory
@@ -47,6 +48,7 @@ import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.time.DateTimeException
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 import javax.inject.Inject
@@ -89,6 +91,13 @@ class RoomOrderRepository @Inject constructor(
 
     override fun observeActiveDraft(): Flow<Order?> =
         orderDao.observeActiveDraft().map { draft -> draft?.toDomain() }
+
+    override fun observeAcceptedByBusinessDate(
+        businessDate: LocalDate,
+    ): Flow<List<AcceptedOrderSummary>> =
+        orderDao.observeAcceptedByBusinessDate(businessDate.toString()).map { rows ->
+            rows.mapNotNull { entity -> entity.toAcceptedOrderSummaryOrNull() }
+        }
 
     override suspend fun getActiveDraft(): Order? =
         orderDao.getActiveDraft()?.toDomain()
