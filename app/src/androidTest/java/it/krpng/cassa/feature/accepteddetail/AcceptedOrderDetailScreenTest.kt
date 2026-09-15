@@ -63,6 +63,47 @@ class AcceptedOrderDetailScreenTest {
     }
 
     @Test
+    fun arch7T001ConflictDialogVisible() {
+        setContent(
+            contentState(
+                activeDraftConflict = ActiveDraftConflictUi("existing-draft"),
+            ),
+        )
+        composeRule.onNodeWithText("C'È GIÀ UN ORDINE IN CORSO").assertIsDisplayed()
+        composeRule.onNodeWithText("RIPRENDI ORDINE IN CORSO").assertIsDisplayed()
+        composeRule.onNodeWithText("ELIMINA DRAFT E DUPLICA").assertIsDisplayed()
+        composeRule.onNodeWithText("ANNULLA").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Puoi riprendere l'ordine in corso oppure eliminarlo e creare un nuovo ordine da questo.",
+        ).assertIsDisplayed()
+    }
+
+    @Test
+    fun arch7T002CancelInvokesCallback() {
+        var cancelClicks = 0
+        setContent(
+            contentState(activeDraftConflict = ActiveDraftConflictUi("existing-draft")),
+            onConflictCancel = { cancelClicks += 1 },
+        )
+        composeRule.onNodeWithText("ANNULLA").performClick()
+        composeRule.runOnIdle { assertEquals(1, cancelClicks) }
+    }
+
+    @Test
+    fun arch7ReplaceDisabledWhileInFlight() {
+        setContent(
+            contentState(
+                activeDraftConflict = ActiveDraftConflictUi("existing-draft"),
+                isReplacing = true,
+            ),
+        )
+        composeRule.onNodeWithText("SOSTITUZIONE…").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Riprendi ordine in corso").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("Elimina draft e duplica").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("Annulla conflitto duplicazione").assertIsNotEnabled()
+    }
+
+    @Test
     fun archT025IndietroInvokesBackToToday() {
         var backClicks = 0
         setContent(contentState(), onBackToToday = { backClicks += 1 })
@@ -102,8 +143,6 @@ class AcceptedOrderDetailScreenTest {
         composeRule.onNodeWithText(
             "Esiste già un ordine in corso. Il nuovo ordine non è stato creato.",
         ).assertIsDisplayed()
-        composeRule.onNodeWithText("ELIMINA E DUPLICA").assertDoesNotExist()
-        composeRule.onNodeWithText("RIPRENDI").assertDoesNotExist()
     }
 
     @Test
@@ -121,6 +160,9 @@ class AcceptedOrderDetailScreenTest {
         onBackToToday: () -> Unit = {},
         onHome: () -> Unit = {},
         onDuplicateOrder: () -> Unit = {},
+        onConflictCancel: () -> Unit = {},
+        onConflictResume: () -> Unit = {},
+        onConflictReplace: () -> Unit = {},
     ) {
         composeRule.setContent {
             MaterialTheme {
@@ -129,6 +171,9 @@ class AcceptedOrderDetailScreenTest {
                     onBackToToday = onBackToToday,
                     onHome = onHome,
                     onDuplicateOrder = onDuplicateOrder,
+                    onConflictCancel = onConflictCancel,
+                    onConflictResume = onConflictResume,
+                    onConflictReplace = onConflictReplace,
                 )
             }
         }
@@ -136,7 +181,9 @@ class AcceptedOrderDetailScreenTest {
 
     private fun contentState(
         isDuplicating: Boolean = false,
+        isReplacing: Boolean = false,
         duplicateError: String? = null,
+        activeDraftConflict: ActiveDraftConflictUi? = null,
     ): AcceptedOrderDetailUiState.Content =
         AcceptedOrderDetailUiState.Content(
             orderId = "o1",
@@ -146,6 +193,8 @@ class AcceptedOrderDetailScreenTest {
             total = Money.ofCents(1_400),
             generalNote = "Consegna alle 21",
             isDuplicating = isDuplicating,
+            isReplacing = isReplacing,
+            activeDraftConflict = activeDraftConflict,
             duplicateError = duplicateError,
             sections = listOf(
                 AcceptedOrderDetailSectionUi(

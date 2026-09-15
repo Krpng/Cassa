@@ -8,10 +8,13 @@ import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.domain.acceptance.AcceptancePreviewOrdering
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.pricing.CalculateOrderTotal
+import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.usecase.DuplicateAcceptedOrder
 import it.krpng.cassa.domain.usecase.DuplicateAcceptedOrderOutcome
 import it.krpng.cassa.domain.usecase.GetCurrentDayAcceptedOrder
 import it.krpng.cassa.domain.usecase.GetCurrentDayAcceptedOrderResult
+import it.krpng.cassa.domain.usecase.ReplaceDraftWithAcceptedOrderDuplicate
+import it.krpng.cassa.domain.usecase.ReplaceDraftWithAcceptedOrderDuplicateOutcome
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -42,6 +45,10 @@ data class AcceptedOrderDetailSectionUi(
     val lines: List<AcceptedOrderDetailLineUi>,
 )
 
+data class ActiveDraftConflictUi(
+    val expectedDraftId: String,
+)
+
 sealed interface AcceptedOrderDetailUiState {
     data object Loading : AcceptedOrderDetailUiState
 
@@ -54,6 +61,8 @@ sealed interface AcceptedOrderDetailUiState {
         val generalNote: String?,
         val sections: List<AcceptedOrderDetailSectionUi>,
         val isDuplicating: Boolean = false,
+        val isReplacing: Boolean = false,
+        val activeDraftConflict: ActiveDraftConflictUi? = null,
         val duplicateError: String? = null,
     ) : AcceptedOrderDetailUiState
 
@@ -75,6 +84,8 @@ class AcceptedOrderDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val getCurrentDayAcceptedOrder: GetCurrentDayAcceptedOrder,
     private val duplicateAcceptedOrder: DuplicateAcceptedOrder,
+    private val replaceDraftWithAcceptedOrderDuplicate: ReplaceDraftWithAcceptedOrderDuplicate,
+    private val orderRepository: OrderRepository,
 ) : ViewModel() {
     private val orderId: String =
         savedStateHandle.get<String>(ORDER_ID_ARGUMENT).orEmpty()
@@ -88,6 +99,8 @@ class AcceptedOrderDetailViewModel @Inject constructor(
 
     private var observeJob: Job? = null
     private var duplicateJob: Job? = null
+    private var replaceJob: Job? = null
+    private var resumeJob: Job? = null
 
     init {
         observe()
@@ -99,26 +112,37 @@ class AcceptedOrderDetailViewModel @Inject constructor(
 
     fun onDuplicateOrder() {
         val content = _uiState.value as? AcceptedOrderDetailUiState.Content ?: return
-        if (content.isDuplicating || duplicateJob?.isActive == true) return
+        if (content.isBusy || duplicateJob?.isActive == true || replaceJob?.isActive == true) return
         duplicateJob = viewModelScope.launch {
-            _uiState.value = content.copy(isDuplicating = true, duplicateError = null)
+            _uiState.value = content.copy(
+                isDuplicating = true,
+                duplicateError = null,
+                activeDraftConflict = null,
+            )
             when (val outcome = duplicateAcceptedOrder(content.orderId)) {
                 is DuplicateAcceptedOrderOutcome.Success -> {
-                    _uiState.value = content.copy(isDuplicating = false, duplicateError = null)
+                    _uiState.value = content.copy(
+                        isDuplicating = false,
+                        duplicateError = null,
+                        activeDraftConflict = null,
+                    )
                     _navigationEvents.send(
                         AcceptedOrderDetailNavigationEvent.OpenNewOrder(outcome.draftId),
                     )
                 }
-                DuplicateAcceptedOrderOutcome.DraftConflict -> {
+                is DuplicateAcceptedOrderOutcome.DraftConflict -> {
                     _uiState.value = content.copy(
                         isDuplicating = false,
-                        duplicateError =
-                            "Esiste già un ordine in corso. Il nuovo ordine non è stato creato.",
+                        duplicateError = null,
+                        activeDraftConflict = ActiveDraftConflictUi(
+                            expectedDraftId = outcome.existingDraftId,
+                        ),
                     )
                 }
                 DuplicateAcceptedOrderOutcome.SourceUnavailable -> {
                     _uiState.value = content.copy(
                         isDuplicating = false,
+                        activeDraftConflict = null,
                         duplicateError = "Ordine non disponibile per la duplicazione.",
                     )
                 }
@@ -127,7 +151,106 @@ class AcceptedOrderDetailViewModel @Inject constructor(
                 -> {
                     _uiState.value = content.copy(
                         isDuplicating = false,
+                        activeDraftConflict = null,
                         duplicateError = "Impossibile creare il nuovo ordine.",
+                    )
+                }
+            }
+        }
+    }
+
+    fun onConflictCancel() {
+        val content = _uiState.value as? AcceptedOrderDetailUiState.Content ?: return
+        if (content.isReplacing) return
+        _uiState.value = content.copy(activeDraftConflict = null, duplicateError = null)
+    }
+
+    fun onConflictResume() {
+        val content = _uiState.value as? AcceptedOrderDetailUiState.Content ?: return
+        val conflict = content.activeDraftConflict ?: return
+        if (content.isBusy || resumeJob?.isActive == true) return
+        resumeJob = viewModelScope.launch {
+            val active = orderRepository.getActiveDraft()
+            when {
+                active == null -> {
+                    _uiState.value = content.copy(
+                        activeDraftConflict = null,
+                        duplicateError = "L'ordine in corso non è più disponibile.",
+                    )
+                }
+                active.id != conflict.expectedDraftId -> {
+                    _uiState.value = content.copy(
+                        activeDraftConflict = null,
+                        duplicateError = "L'ordine in corso è cambiato. Riprova.",
+                    )
+                }
+                else -> {
+                    _uiState.value = content.copy(
+                        activeDraftConflict = null,
+                        duplicateError = null,
+                    )
+                    _navigationEvents.send(
+                        AcceptedOrderDetailNavigationEvent.OpenNewOrder(active.id),
+                    )
+                }
+            }
+        }
+    }
+
+    fun onConflictReplace() {
+        val content = _uiState.value as? AcceptedOrderDetailUiState.Content ?: return
+        val conflict = content.activeDraftConflict ?: return
+        if (content.isBusy || replaceJob?.isActive == true) return
+        replaceJob = viewModelScope.launch {
+            _uiState.value = content.copy(
+                isReplacing = true,
+                duplicateError = null,
+                activeDraftConflict = conflict,
+            )
+            when (
+                val outcome = replaceDraftWithAcceptedOrderDuplicate(
+                    sourceOrderId = content.orderId,
+                    expectedDraftId = conflict.expectedDraftId,
+                )
+            ) {
+                is ReplaceDraftWithAcceptedOrderDuplicateOutcome.Success -> {
+                    _uiState.value = content.copy(
+                        isReplacing = false,
+                        activeDraftConflict = null,
+                        duplicateError = null,
+                    )
+                    _navigationEvents.send(
+                        AcceptedOrderDetailNavigationEvent.OpenNewOrder(outcome.draftId),
+                    )
+                }
+                ReplaceDraftWithAcceptedOrderDuplicateOutcome.DraftMissing -> {
+                    _uiState.value = content.copy(
+                        isReplacing = false,
+                        activeDraftConflict = null,
+                        duplicateError = "L'ordine in corso non è più disponibile.",
+                    )
+                }
+                ReplaceDraftWithAcceptedOrderDuplicateOutcome.DraftChanged -> {
+                    _uiState.value = content.copy(
+                        isReplacing = false,
+                        activeDraftConflict = null,
+                        duplicateError = "L'ordine in corso è cambiato. Riprova.",
+                    )
+                }
+                ReplaceDraftWithAcceptedOrderDuplicateOutcome.SourceUnavailable -> {
+                    _uiState.value = content.copy(
+                        isReplacing = false,
+                        activeDraftConflict = null,
+                        duplicateError = "Ordine non disponibile per la duplicazione.",
+                    )
+                }
+                ReplaceDraftWithAcceptedOrderDuplicateOutcome.SettingsFailure,
+                ReplaceDraftWithAcceptedOrderDuplicateOutcome.PersistenceFailure,
+                -> {
+                    _uiState.value = content.copy(
+                        isReplacing = false,
+                        activeDraftConflict = conflict,
+                        duplicateError = "Impossibile sostituire l'ordine in corso.",
                     )
                 }
             }
@@ -152,9 +275,10 @@ class AcceptedOrderDetailViewModel @Inject constructor(
                     )
                 }
                 .collect { result ->
+                    val previous = _uiState.value as? AcceptedOrderDetailUiState.Content
                     _uiState.value = when (result) {
                         is GetCurrentDayAcceptedOrderResult.Available ->
-                            result.order.toContent(result.zoneId)
+                            result.order.toContent(result.zoneId).withTransient(previous)
                         GetCurrentDayAcceptedOrderResult.Unavailable ->
                             AcceptedOrderDetailUiState.Unavailable
                         GetCurrentDayAcceptedOrderResult.SettingsFailure ->
@@ -164,6 +288,18 @@ class AcceptedOrderDetailViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    private fun AcceptedOrderDetailUiState.Content.withTransient(
+        previous: AcceptedOrderDetailUiState.Content?,
+    ): AcceptedOrderDetailUiState.Content {
+        if (previous == null) return this
+        return copy(
+            isDuplicating = previous.isDuplicating,
+            isReplacing = previous.isReplacing,
+            activeDraftConflict = previous.activeDraftConflict,
+            duplicateError = previous.duplicateError,
+        )
     }
 
     private fun Order.toContent(zoneId: ZoneId): AcceptedOrderDetailUiState.Content {
@@ -209,3 +345,6 @@ class AcceptedOrderDetailViewModel @Inject constructor(
         const val ORDER_ID_ARGUMENT = "orderId"
     }
 }
+
+private val AcceptedOrderDetailUiState.Content.isBusy: Boolean
+    get() = isDuplicating || isReplacing

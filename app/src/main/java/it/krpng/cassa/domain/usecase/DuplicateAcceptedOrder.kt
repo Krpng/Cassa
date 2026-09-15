@@ -20,7 +20,9 @@ sealed interface DuplicateAcceptedOrderOutcome {
 
     data object SourceUnavailable : DuplicateAcceptedOrderOutcome
 
-    data object DraftConflict : DuplicateAcceptedOrderOutcome
+    data class DraftConflict(
+        val existingDraftId: String,
+    ) : DuplicateAcceptedOrderOutcome
 
     data object SettingsFailure : DuplicateAcceptedOrderOutcome
 
@@ -61,8 +63,10 @@ class DuplicateAcceptedOrder @Inject constructor(
                 DuplicateAcceptedOrderOutcome.Success(draftId = result.draftId)
             DuplicateAcceptedOrderResult.SourceUnavailable ->
                 DuplicateAcceptedOrderOutcome.SourceUnavailable
-            DuplicateAcceptedOrderResult.DraftConflict ->
-                DuplicateAcceptedOrderOutcome.DraftConflict
+            is DuplicateAcceptedOrderResult.DraftConflict ->
+                DuplicateAcceptedOrderOutcome.DraftConflict(
+                    existingDraftId = result.existingDraftId,
+                )
             DuplicateAcceptedOrderResult.PersistenceFailure ->
                 DuplicateAcceptedOrderOutcome.PersistenceFailure
         }

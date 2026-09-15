@@ -85,6 +85,16 @@ interface OrderRepository {
         sourceOrderId: String,
         currentBusinessDate: LocalDate,
     ): DuplicateAcceptedOrderResult
+
+    /**
+     * ARCH-007: atomically delete [expectedDraftId] active DRAFT and duplicate [sourceOrderId]
+     * into a new DRAFT. ONE Room transaction — never chain deleteDraft + duplicateAcceptedOrder.
+     */
+    suspend fun replaceDraftWithAcceptedOrderDuplicate(
+        sourceOrderId: String,
+        currentBusinessDate: LocalDate,
+        expectedDraftId: String,
+    ): ReplaceDraftWithAcceptedOrderDuplicateResult
 }
 
 sealed interface DuplicateAcceptedOrderResult {
@@ -96,9 +106,25 @@ sealed interface DuplicateAcceptedOrderResult {
     data object SourceUnavailable : DuplicateAcceptedOrderResult
 
     /** Active DRAFT already present — ARCH-006 rejects with zero writes. */
-    data object DraftConflict : DuplicateAcceptedOrderResult
+    data class DraftConflict(
+        val existingDraftId: String,
+    ) : DuplicateAcceptedOrderResult
 
     data object PersistenceFailure : DuplicateAcceptedOrderResult
+}
+
+sealed interface ReplaceDraftWithAcceptedOrderDuplicateResult {
+    data class Created(
+        val draftId: String,
+    ) : ReplaceDraftWithAcceptedOrderDuplicateResult
+
+    data object SourceUnavailable : ReplaceDraftWithAcceptedOrderDuplicateResult
+
+    data object DraftMissing : ReplaceDraftWithAcceptedOrderDuplicateResult
+
+    data object DraftChanged : ReplaceDraftWithAcceptedOrderDuplicateResult
+
+    data object PersistenceFailure : ReplaceDraftWithAcceptedOrderDuplicateResult
 }
 
 sealed interface PurgeAcceptedBeforeResult {

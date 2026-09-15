@@ -17,6 +17,7 @@ import it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.ReplaceDraftWithAcceptedOrderDuplicateResult
 import it.krpng.cassa.domain.repository.SettingsRepository
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
@@ -192,6 +193,13 @@ class PurgeOldAcceptedOrdersTest {
             sourceOrderId: String,
             currentBusinessDate: LocalDate,
         ): DuplicateAcceptedOrderResult = DuplicateAcceptedOrderResult.SourceUnavailable
+
+        override suspend fun replaceDraftWithAcceptedOrderDuplicate(
+            sourceOrderId: String,
+            currentBusinessDate: LocalDate,
+            expectedDraftId: String,
+        ): ReplaceDraftWithAcceptedOrderDuplicateResult =
+            ReplaceDraftWithAcceptedOrderDuplicateResult.SourceUnavailable
     }
 
     private companion object {

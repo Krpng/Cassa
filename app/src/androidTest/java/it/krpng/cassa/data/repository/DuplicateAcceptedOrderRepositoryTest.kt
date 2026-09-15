@@ -155,7 +155,7 @@ class DuplicateAcceptedOrderRepositoryTest {
         val itemsBefore = countRows("order_items")
 
         assertEquals(
-            DuplicateAcceptedOrderResult.DraftConflict,
+            DuplicateAcceptedOrderResult.DraftConflict(existingDraftId),
             repository.duplicateAcceptedOrder(sourceId, businessDate),
         )
         assertEquals(ordersBefore, countRows("orders"))

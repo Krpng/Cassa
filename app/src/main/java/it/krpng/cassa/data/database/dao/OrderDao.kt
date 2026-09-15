@@ -212,6 +212,19 @@ interface OrderDao {
         updatedAt: Long,
     ): Int
 
+    /**
+     * Removals use FK NO ACTION on order_items — must be deleted before draft/order_items cascade.
+     */
+    @Query(
+        """
+        DELETE FROM order_item_removals
+        WHERE orderItemId IN (
+            SELECT id FROM order_items WHERE orderId = :orderId
+        )
+        """,
+    )
+    suspend fun deleteRemovalsForOrder(orderId: String): Int
+
     @Query(
         """
         DELETE FROM orders

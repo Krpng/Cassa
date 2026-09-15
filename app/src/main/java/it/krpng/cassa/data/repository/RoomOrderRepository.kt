@@ -45,6 +45,7 @@ import it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.ReplaceDraftWithAcceptedOrderDuplicateResult
 import it.krpng.cassa.domain.repository.SettingsRepository
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
@@ -131,32 +132,65 @@ class RoomOrderRepository @Inject constructor(
             if (source.businessDate != currentBusinessDate) {
                 return@runInTransaction DuplicateAcceptedOrderResult.SourceUnavailable
             }
-            if (orderDao.getActiveDraft() != null) {
-                return@runInTransaction DuplicateAcceptedOrderResult.DraftConflict
+            val activeDraft = orderDao.getActiveDraft()
+            if (activeDraft != null) {
+                return@runInTransaction DuplicateAcceptedOrderResult.DraftConflict(
+                    existingDraftId = activeDraft.order.id,
+                )
             }
 
-            val now = clockProvider.now()
-            val draft = source.toIndependentDraft(now)
-            val model = draft.toDatabaseModel()
-            val insertResult = orderDao.insertDraft(model.order)
-            if (insertResult == INSERT_CONFLICT) {
-                return@runInTransaction DuplicateAcceptedOrderResult.DraftConflict
-            }
-            for (itemWithModifiers in model.items) {
-                orderDao.insertOrderItem(itemWithModifiers.item)
-                if (itemWithModifiers.additions.isNotEmpty()) {
-                    orderDao.insertOrderItemAdditions(itemWithModifiers.additions)
-                }
-                if (itemWithModifiers.removals.isNotEmpty()) {
-                    orderDao.insertOrderItemRemovals(itemWithModifiers.removals)
-                }
-            }
-            DuplicateAcceptedOrderResult.Created(draftId = draft.id)
+            insertIndependentDraftCopy(source)
         }
     } catch (error: CancellationException) {
         throw error
     } catch (_: SQLiteException) {
         DuplicateAcceptedOrderResult.PersistenceFailure
+    }
+
+    override suspend fun replaceDraftWithAcceptedOrderDuplicate(
+        sourceOrderId: String,
+        currentBusinessDate: LocalDate,
+        expectedDraftId: String,
+    ): ReplaceDraftWithAcceptedOrderDuplicateResult = try {
+        if (expectedDraftId.isBlank()) {
+            return ReplaceDraftWithAcceptedOrderDuplicateResult.DraftMissing
+        }
+        transactionRunner.runInTransaction {
+            val sourceFull = orderDao.getFullOrder(sourceOrderId)
+                ?: return@runInTransaction ReplaceDraftWithAcceptedOrderDuplicateResult.SourceUnavailable
+            val source = sourceFull.toDomain()
+            if (source.status != OrderStatus.ACCEPTED) {
+                return@runInTransaction ReplaceDraftWithAcceptedOrderDuplicateResult.SourceUnavailable
+            }
+            if (source.businessDate != currentBusinessDate) {
+                return@runInTransaction ReplaceDraftWithAcceptedOrderDuplicateResult.SourceUnavailable
+            }
+
+            val activeDraft = orderDao.getActiveDraft()
+                ?: return@runInTransaction ReplaceDraftWithAcceptedOrderDuplicateResult.DraftMissing
+            if (activeDraft.order.id != expectedDraftId) {
+                return@runInTransaction ReplaceDraftWithAcceptedOrderDuplicateResult.DraftChanged
+            }
+
+            // Removals are FK NO ACTION on order_items — delete before order CASCADE.
+            orderDao.deleteRemovalsForOrder(expectedDraftId)
+            if (orderDao.deleteDraft(expectedDraftId) != 1) {
+                return@runInTransaction ReplaceDraftWithAcceptedOrderDuplicateResult.DraftMissing
+            }
+
+            when (val created = insertIndependentDraftCopy(source)) {
+                is DuplicateAcceptedOrderResult.Created ->
+                    ReplaceDraftWithAcceptedOrderDuplicateResult.Created(draftId = created.draftId)
+                else -> {
+                    // Must abort the Room transaction so the deleted DRAFT is restored.
+                    throw SQLiteException("replacement draft insert failed after delete")
+                }
+            }
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: SQLiteException) {
+        ReplaceDraftWithAcceptedOrderDuplicateResult.PersistenceFailure
     }
 
     override suspend fun getActiveDraft(): Order? =
@@ -997,6 +1031,37 @@ class RoomOrderRepository @Inject constructor(
             sourceOrderId = null,
             items = emptyList(),
         )
+    }
+
+    /**
+     * Faithful independent DRAFT: new UUIDs, COPY snapshots/prices/sequences/refs/notes,
+     * total = ZERO (ORD-022 live from items), sourceOrderId = this ACCEPTED id.
+     * Caller must ensure no active DRAFT occupies draftSlot when inserting.
+     */
+    private suspend fun insertIndependentDraftCopy(source: Order): DuplicateAcceptedOrderResult {
+        require(source.status == OrderStatus.ACCEPTED)
+        val now = clockProvider.now()
+        val draft = source.toIndependentDraft(now)
+        val model = draft.toDatabaseModel()
+        val insertResult = orderDao.insertDraft(model.order)
+        if (insertResult == INSERT_CONFLICT) {
+            val race = orderDao.getActiveDraft()
+            return if (race != null) {
+                DuplicateAcceptedOrderResult.DraftConflict(existingDraftId = race.order.id)
+            } else {
+                DuplicateAcceptedOrderResult.PersistenceFailure
+            }
+        }
+        for (itemWithModifiers in model.items) {
+            orderDao.insertOrderItem(itemWithModifiers.item)
+            if (itemWithModifiers.additions.isNotEmpty()) {
+                orderDao.insertOrderItemAdditions(itemWithModifiers.additions)
+            }
+            if (itemWithModifiers.removals.isNotEmpty()) {
+                orderDao.insertOrderItemRemovals(itemWithModifiers.removals)
+            }
+        }
+        return DuplicateAcceptedOrderResult.Created(draftId = draft.id)
     }
 
     /**

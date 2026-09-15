@@ -458,6 +458,12 @@ class AcceptancePreviewViewModelTest {
             sourceOrderId: String,
             currentBusinessDate: java.time.LocalDate,
         ): it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult = write()
+
+        override suspend fun replaceDraftWithAcceptedOrderDuplicate(
+            sourceOrderId: String,
+            currentBusinessDate: java.time.LocalDate,
+            expectedDraftId: String,
+        ): it.krpng.cassa.domain.repository.ReplaceDraftWithAcceptedOrderDuplicateResult = write()
     }
 
     private companion object {

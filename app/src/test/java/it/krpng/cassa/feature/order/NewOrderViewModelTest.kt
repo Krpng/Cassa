@@ -1512,6 +1512,12 @@ class NewOrderViewModelTest {
             currentBusinessDate: java.time.LocalDate,
         ): it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult =
             it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult.SourceUnavailable
+        override suspend fun replaceDraftWithAcceptedOrderDuplicate(
+            sourceOrderId: String,
+            currentBusinessDate: java.time.LocalDate,
+            expectedDraftId: String,
+        ): it.krpng.cassa.domain.repository.ReplaceDraftWithAcceptedOrderDuplicateResult =
+            it.krpng.cassa.domain.repository.ReplaceDraftWithAcceptedOrderDuplicateResult.SourceUnavailable
     }
 
     private class FakeProductRepository(

@@ -271,6 +271,8 @@ class RoomRepositoriesTest {
 
         override suspend fun deleteRemovalsForAcceptedBefore(businessDate: String): Int = 0
 
+        override suspend fun deleteRemovalsForOrder(orderId: String): Int = 0
+
         override suspend fun deleteAcceptedBefore(businessDate: String): Int = 0
 
         override suspend fun getActiveDraft(): FullOrder? = result

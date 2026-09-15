@@ -23,6 +23,7 @@ import it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
+import it.krpng.cassa.domain.repository.ReplaceDraftWithAcceptedOrderDuplicateResult
 import it.krpng.cassa.domain.repository.SettingsRepository
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
@@ -30,6 +31,7 @@ import it.krpng.cassa.domain.repository.UpdateNumberingModeResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import it.krpng.cassa.domain.usecase.DuplicateAcceptedOrder
 import it.krpng.cassa.domain.usecase.GetCurrentDayAcceptedOrder
+import it.krpng.cassa.domain.usecase.ReplaceDraftWithAcceptedOrderDuplicate
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -47,6 +49,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -290,23 +293,7 @@ class AcceptedOrderDetailViewModelTest {
         val repository = FakeOrderRepository(MutableStateFlow(order)).apply {
             duplicateResult = DuplicateAcceptedOrderResult.Created("new-draft-id")
         }
-        val settings = FakeSettingsRepository()
-        val clock = FixedClock(romeLocal("2026-09-15T18:00:00"))
-        val viewModel = AcceptedOrderDetailViewModel(
-            savedStateHandle = SavedStateHandle(
-                mapOf(AcceptedOrderDetailViewModel.ORDER_ID_ARGUMENT to ORDER_ID),
-            ),
-            getCurrentDayAcceptedOrder = GetCurrentDayAcceptedOrder(
-                orderRepository = repository,
-                settingsRepository = settings,
-                clockProvider = clock,
-            ),
-            duplicateAcceptedOrder = DuplicateAcceptedOrder(
-                orderRepository = repository,
-                settingsRepository = settings,
-                clockProvider = clock,
-            ),
-        )
+        val viewModel = detailViewModel(repository)
         advanceUntilIdle()
         val events = mutableListOf<AcceptedOrderDetailNavigationEvent>()
         val collectJob = launch {
@@ -322,40 +309,168 @@ class AcceptedOrderDetailViewModelTest {
     }
 
     @Test
-    fun duplicateConflictShowsErrorWithoutNavigation() = runTest(mainDispatcher) {
+    fun `ARCH7-T001 duplicate conflict opens ActiveDraftConflict`() = runTest(mainDispatcher) {
         val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
-            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("existing-draft")
+            activeDraft = draftOrder(id = "existing-draft")
         }
-        val settings = FakeSettingsRepository()
-        val clock = FixedClock(romeLocal("2026-09-15T18:00:00"))
-        val viewModel = AcceptedOrderDetailViewModel(
-            savedStateHandle = SavedStateHandle(
-                mapOf(AcceptedOrderDetailViewModel.ORDER_ID_ARGUMENT to ORDER_ID),
-            ),
-            getCurrentDayAcceptedOrder = GetCurrentDayAcceptedOrder(
-                orderRepository = repository,
-                settingsRepository = settings,
-                clockProvider = clock,
-            ),
-            duplicateAcceptedOrder = DuplicateAcceptedOrder(
-                orderRepository = repository,
-                settingsRepository = settings,
-                clockProvider = clock,
-            ),
-        )
+        val viewModel = detailViewModel(repository)
         advanceUntilIdle()
         viewModel.onDuplicateOrder()
         advanceUntilIdle()
         val content = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
-        assertTrue(content.duplicateError!!.contains("ordine in corso"))
+        assertEquals("existing-draft", content.activeDraftConflict?.expectedDraftId)
+        assertNull(content.duplicateError)
     }
 
-    private fun viewModel(
-        orderFlow: MutableStateFlow<Order?>,
+    @Test
+    fun `ARCH7-T002 cancel conflict clears dialog with zero writes`() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("existing-draft")
+            activeDraft = draftOrder(id = "existing-draft")
+        }
+        val viewModel = detailViewModel(repository)
+        advanceUntilIdle()
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        viewModel.onConflictCancel()
+        advanceUntilIdle()
+        val content = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+        assertNull(content.activeDraftConflict)
+        assertEquals(0, repository.replaceCalls)
+        assertEquals(1, repository.duplicateCalls)
+    }
+
+    @Test
+    fun `ARCH7-T003 resume opens existing draft with zero writes`() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("existing-draft")
+            activeDraft = draftOrder(id = "existing-draft", withItem = true)
+        }
+        val viewModel = detailViewModel(repository)
+        advanceUntilIdle()
+        val events = mutableListOf<AcceptedOrderDetailNavigationEvent>()
+        val collectJob = launch { viewModel.navigationEvents.collect { events += it } }
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        viewModel.onConflictResume()
+        advanceUntilIdle()
+        assertEquals(
+            listOf(AcceptedOrderDetailNavigationEvent.OpenNewOrder("existing-draft")),
+            events,
+        )
+        assertEquals(0, repository.replaceCalls)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `ARCH7-T004 resume works with empty persisted draft`() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("empty-draft")
+            activeDraft = draftOrder(id = "empty-draft", withItem = false)
+        }
+        val viewModel = detailViewModel(repository)
+        advanceUntilIdle()
+        val events = mutableListOf<AcceptedOrderDetailNavigationEvent>()
+        val collectJob = launch { viewModel.navigationEvents.collect { events += it } }
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        viewModel.onConflictResume()
+        advanceUntilIdle()
+        assertEquals(
+            listOf(AcceptedOrderDetailNavigationEvent.OpenNewOrder("empty-draft")),
+            events,
+        )
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `ARCH7-T014 replace success navigates to new draft`() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("existing-draft")
+            activeDraft = draftOrder(id = "existing-draft")
+            replaceResult = ReplaceDraftWithAcceptedOrderDuplicateResult.Created("replaced-draft")
+        }
+        val viewModel = detailViewModel(repository)
+        advanceUntilIdle()
+        val events = mutableListOf<AcceptedOrderDetailNavigationEvent>()
+        val collectJob = launch { viewModel.navigationEvents.collect { events += it } }
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        viewModel.onConflictReplace()
+        advanceUntilIdle()
+        assertEquals(
+            listOf(AcceptedOrderDetailNavigationEvent.OpenNewOrder("replaced-draft")),
+            events,
+        )
+        assertEquals(1, repository.replaceCalls)
+        assertEquals("existing-draft", repository.lastExpectedDraftId)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun draftMissingOnReplaceShowsErrorWithoutNavigation() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("existing-draft")
+            activeDraft = draftOrder(id = "existing-draft")
+            replaceResult = ReplaceDraftWithAcceptedOrderDuplicateResult.DraftMissing
+        }
+        val viewModel = detailViewModel(repository)
+        advanceUntilIdle()
+        val events = mutableListOf<AcceptedOrderDetailNavigationEvent>()
+        val collectJob = launch { viewModel.navigationEvents.collect { events += it } }
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        viewModel.onConflictReplace()
+        advanceUntilIdle()
+        val content = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+        assertNull(content.activeDraftConflict)
+        assertTrue(content.duplicateError!!.contains("non è più disponibile"))
+        assertTrue(events.isEmpty())
+        collectJob.cancel()
+    }
+
+    @Test
+    fun draftChangedOnReplaceShowsErrorWithoutNavigation() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("existing-draft")
+            activeDraft = draftOrder(id = "existing-draft")
+            replaceResult = ReplaceDraftWithAcceptedOrderDuplicateResult.DraftChanged
+        }
+        val viewModel = detailViewModel(repository)
+        advanceUntilIdle()
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        viewModel.onConflictReplace()
+        advanceUntilIdle()
+        val content = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+        assertNull(content.activeDraftConflict)
+        assertTrue(content.duplicateError!!.contains("cambiato"))
+    }
+
+    @Test
+    fun resumeDraftMissingShowsError() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("existing-draft")
+            activeDraft = draftOrder(id = "existing-draft")
+        }
+        val viewModel = detailViewModel(repository)
+        advanceUntilIdle()
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        repository.activeDraft = null
+        viewModel.onConflictResume()
+        advanceUntilIdle()
+        val content = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+        assertNull(content.activeDraftConflict)
+        assertTrue(content.duplicateError!!.contains("non è più disponibile"))
+    }
+
+    private fun detailViewModel(
+        repository: FakeOrderRepository,
         settingsFail: Boolean = false,
         orderId: String = ORDER_ID,
     ): AcceptedOrderDetailViewModel {
-        val repository = FakeOrderRepository(orderFlow)
         val settings = FakeSettingsRepository(fail = settingsFail)
         val clock = FixedClock(romeLocal("2026-09-15T18:00:00"))
         return AcceptedOrderDetailViewModel(
@@ -372,8 +487,21 @@ class AcceptedOrderDetailViewModelTest {
                 settingsRepository = settings,
                 clockProvider = clock,
             ),
+            replaceDraftWithAcceptedOrderDuplicate = ReplaceDraftWithAcceptedOrderDuplicate(
+                orderRepository = repository,
+                settingsRepository = settings,
+                clockProvider = clock,
+            ),
+            orderRepository = repository,
         )
     }
+
+    private fun viewModel(
+        orderFlow: MutableStateFlow<Order?>,
+        settingsFail: Boolean = false,
+        orderId: String = ORDER_ID,
+    ): AcceptedOrderDetailViewModel =
+        detailViewModel(FakeOrderRepository(orderFlow), settingsFail, orderId)
 
     private class FixedClock(private val now: Instant) : ClockProvider {
         override fun now(): Instant = now
@@ -408,14 +536,20 @@ class AcceptedOrderDetailViewModelTest {
     ) : OrderRepository {
         var duplicateResult: DuplicateAcceptedOrderResult =
             DuplicateAcceptedOrderResult.SourceUnavailable
+        var replaceResult: ReplaceDraftWithAcceptedOrderDuplicateResult =
+            ReplaceDraftWithAcceptedOrderDuplicateResult.SourceUnavailable
+        var activeDraft: Order? = null
+        var duplicateCalls: Int = 0
+        var replaceCalls: Int = 0
+        var lastExpectedDraftId: String? = null
 
         override suspend fun getById(orderId: String): Order? = orderFlow.value
 
         override fun observeById(orderId: String): Flow<Order?> = orderFlow
 
-        override fun observeActiveDraft(): Flow<Order?> = flowOf(null)
+        override fun observeActiveDraft(): Flow<Order?> = flowOf(activeDraft)
 
-        override suspend fun getActiveDraft(): Order? = null
+        override suspend fun getActiveDraft(): Order? = activeDraft
 
         override suspend fun createDraft(): CreateDraftResult = CreateDraftResult.AlreadyExists
 
@@ -480,7 +614,20 @@ class AcceptedOrderDetailViewModelTest {
         override suspend fun duplicateAcceptedOrder(
             sourceOrderId: String,
             currentBusinessDate: LocalDate,
-        ): DuplicateAcceptedOrderResult = duplicateResult
+        ): DuplicateAcceptedOrderResult {
+            duplicateCalls += 1
+            return duplicateResult
+        }
+
+        override suspend fun replaceDraftWithAcceptedOrderDuplicate(
+            sourceOrderId: String,
+            currentBusinessDate: LocalDate,
+            expectedDraftId: String,
+        ): ReplaceDraftWithAcceptedOrderDuplicateResult {
+            replaceCalls += 1
+            lastExpectedDraftId = expectedDraftId
+            return replaceResult
+        }
     }
 
     private companion object {
@@ -490,6 +637,26 @@ class AcceptedOrderDetailViewModelTest {
 
         fun romeLocal(localDateTime: String): Instant =
             LocalDateTime.parse(localDateTime).atZone(ROME).toInstant()
+
+        fun draftOrder(id: String, withItem: Boolean = false): Order = Order(
+            id = id,
+            status = OrderStatus.DRAFT,
+            displayNumber = null,
+            numberingMode = null,
+            numberingCycle = null,
+            businessDate = null,
+            createdAt = NOW,
+            updatedAt = NOW,
+            acceptedAt = null,
+            total = Money.ZERO,
+            generalNote = null,
+            sourceOrderId = null,
+            items = if (withItem) {
+                listOf(item(id = "d1", category = ProductCategory.PIZZA, sequence = 1))
+            } else {
+                emptyList()
+            },
+        )
 
         fun acceptedOrder(
             businessDate: LocalDate = LocalDate.parse("2026-09-15"),

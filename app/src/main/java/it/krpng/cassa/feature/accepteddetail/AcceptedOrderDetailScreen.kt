@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -56,6 +57,9 @@ fun AcceptedOrderDetailRoute(
         onHome = onHome,
         onDuplicateOrder = viewModel::onDuplicateOrder,
         onClearDuplicateError = viewModel::clearDuplicateError,
+        onConflictCancel = viewModel::onConflictCancel,
+        onConflictResume = viewModel::onConflictResume,
+        onConflictReplace = viewModel::onConflictReplace,
         onRetry = viewModel::retry,
     )
 }
@@ -67,6 +71,9 @@ fun AcceptedOrderDetailScreen(
     onHome: () -> Unit,
     onDuplicateOrder: () -> Unit = {},
     onClearDuplicateError: () -> Unit = {},
+    onConflictCancel: () -> Unit = {},
+    onConflictResume: () -> Unit = {},
+    onConflictReplace: () -> Unit = {},
     onRetry: () -> Unit = {},
 ) {
     Column(
@@ -155,7 +162,7 @@ fun AcceptedOrderDetailScreen(
                     modifier = Modifier.weight(1f),
                 )
                 val duplicateError = state.duplicateError
-                if (duplicateError != null) {
+                if (duplicateError != null && state.activeDraftConflict == null) {
                     Text(
                         text = duplicateError,
                         style = MaterialTheme.typography.bodyLarge,
@@ -171,7 +178,7 @@ fun AcceptedOrderDetailScreen(
                         Text("CHIUDI")
                     }
                 }
-                if (state.isDuplicating) {
+                if (state.isDuplicating || state.isReplacing) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -180,7 +187,11 @@ fun AcceptedOrderDetailScreen(
                     ) {
                         CircularProgressIndicator(
                             modifier = Modifier.semantics {
-                                contentDescription = "Creazione nuovo ordine"
+                                contentDescription = if (state.isReplacing) {
+                                    "Sostituzione ordine in corso"
+                                } else {
+                                    "Creazione nuovo ordine"
+                                }
                             },
                         )
                     }
@@ -189,11 +200,98 @@ fun AcceptedOrderDetailScreen(
                     onHome = onHome,
                     onDuplicateOrder = onDuplicateOrder,
                     printEnabled = false,
-                    duplicateEnabled = !state.isDuplicating,
+                    duplicateEnabled = !state.isDuplicating && !state.isReplacing,
                 )
+                if (state.activeDraftConflict != null) {
+                    ActiveDraftConflictDialog(
+                        isReplacing = state.isReplacing,
+                        replaceError = state.duplicateError,
+                        onResume = onConflictResume,
+                        onReplace = onConflictReplace,
+                        onCancel = onConflictCancel,
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun ActiveDraftConflictDialog(
+    isReplacing: Boolean,
+    replaceError: String?,
+    onResume: () -> Unit,
+    onReplace: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = {
+            if (!isReplacing) onCancel()
+        },
+        title = {
+            Text(
+                text = "C'È GIÀ UN ORDINE IN CORSO",
+                modifier = Modifier.semantics {
+                    contentDescription = "Dialog conflitto ordine in corso"
+                },
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Puoi riprendere l'ordine in corso oppure eliminarlo e creare un nuovo ordine da questo.",
+                )
+                if (replaceError != null) {
+                    Text(
+                        text = replaceError,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.semantics {
+                            contentDescription = "Errore sostituzione: $replaceError"
+                        },
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Column {
+                TextButton(
+                    onClick = onResume,
+                    enabled = !isReplacing,
+                    modifier = Modifier.semantics {
+                        contentDescription = "Riprendi ordine in corso"
+                    },
+                ) {
+                    Text("RIPRENDI ORDINE IN CORSO")
+                }
+                TextButton(
+                    onClick = onReplace,
+                    enabled = !isReplacing,
+                    modifier = Modifier.semantics {
+                        contentDescription = "Elimina draft e duplica"
+                    },
+                ) {
+                    Text(
+                        if (isReplacing) {
+                            "SOSTITUZIONE…"
+                        } else {
+                            "ELIMINA DRAFT E DUPLICA"
+                        },
+                    )
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onCancel,
+                enabled = !isReplacing,
+                modifier = Modifier.semantics {
+                    contentDescription = "Annulla conflitto duplicazione"
+                },
+            ) {
+                Text("ANNULLA")
+            }
+        },
+    )
 }
 
 @Composable
