@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -36,14 +37,25 @@ import it.krpng.cassa.feature.common.CassaBackButton
 fun AcceptedOrderDetailRoute(
     onBackToToday: () -> Unit,
     onHome: () -> Unit,
+    onOpenNewOrder: (draftId: String) -> Unit,
     viewModel: AcceptedOrderDetailViewModel = hiltViewModel(),
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
     BackHandler(onBack = onBackToToday)
+    LaunchedEffect(viewModel, onOpenNewOrder) {
+        viewModel.navigationEvents.collect { event ->
+            when (event) {
+                is AcceptedOrderDetailNavigationEvent.OpenNewOrder ->
+                    onOpenNewOrder(event.draftId)
+            }
+        }
+    }
     AcceptedOrderDetailScreen(
         state = state,
         onBackToToday = onBackToToday,
         onHome = onHome,
+        onDuplicateOrder = viewModel::onDuplicateOrder,
+        onClearDuplicateError = viewModel::clearDuplicateError,
         onRetry = viewModel::retry,
     )
 }
@@ -53,6 +65,8 @@ fun AcceptedOrderDetailScreen(
     state: AcceptedOrderDetailUiState,
     onBackToToday: () -> Unit,
     onHome: () -> Unit,
+    onDuplicateOrder: () -> Unit = {},
+    onClearDuplicateError: () -> Unit = {},
     onRetry: () -> Unit = {},
 ) {
     Column(
@@ -85,7 +99,9 @@ fun AcceptedOrderDetailScreen(
                 }
                 DetailActions(
                     onHome = onHome,
+                    onDuplicateOrder = null,
                     printEnabled = false,
+                    duplicateEnabled = false,
                 )
             }
             AcceptedOrderDetailUiState.Unavailable -> {
@@ -105,7 +121,9 @@ fun AcceptedOrderDetailScreen(
                 }
                 DetailActions(
                     onHome = onHome,
+                    onDuplicateOrder = null,
                     printEnabled = false,
+                    duplicateEnabled = false,
                 )
             }
             is AcceptedOrderDetailUiState.Error -> {
@@ -126,7 +144,9 @@ fun AcceptedOrderDetailScreen(
                 }
                 DetailActions(
                     onHome = onHome,
+                    onDuplicateOrder = null,
                     printEnabled = false,
+                    duplicateEnabled = false,
                 )
             }
             is AcceptedOrderDetailUiState.Content -> {
@@ -134,9 +154,42 @@ fun AcceptedOrderDetailScreen(
                     state = state,
                     modifier = Modifier.weight(1f),
                 )
+                val duplicateError = state.duplicateError
+                if (duplicateError != null) {
+                    Text(
+                        text = duplicateError,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 4.dp)
+                            .semantics {
+                                contentDescription = "Errore duplicazione: $duplicateError"
+                            },
+                    )
+                    TextButton(onClick = onClearDuplicateError) {
+                        Text("CHIUDI")
+                    }
+                }
+                if (state.isDuplicating) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.semantics {
+                                contentDescription = "Creazione nuovo ordine"
+                            },
+                        )
+                    }
+                }
                 DetailActions(
                     onHome = onHome,
+                    onDuplicateOrder = onDuplicateOrder,
                     printEnabled = false,
+                    duplicateEnabled = !state.isDuplicating,
                 )
             }
         }
@@ -293,7 +346,9 @@ private fun DetailLine(line: AcceptedOrderDetailLineUi) {
 @Composable
 private fun DetailActions(
     onHome: () -> Unit,
+    onDuplicateOrder: (() -> Unit)?,
     printEnabled: Boolean,
+    duplicateEnabled: Boolean,
 ) {
     Column(
         modifier = Modifier
@@ -302,6 +357,18 @@ private fun DetailActions(
             .padding(top = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        if (onDuplicateOrder != null) {
+            Button(
+                onClick = onDuplicateOrder,
+                enabled = duplicateEnabled,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .semantics { contentDescription = "Nuovo ordine da questo" },
+            ) {
+                Text("NUOVO ORDINE DA QUESTO")
+            }
+        }
         Button(
             onClick = {},
             enabled = printEnabled,

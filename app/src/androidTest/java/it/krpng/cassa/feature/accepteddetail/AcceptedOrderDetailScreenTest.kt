@@ -3,6 +3,7 @@ package it.krpng.cassa.feature.accepteddetail
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -42,9 +43,23 @@ class AcceptedOrderDetailScreenTest {
     }
 
     @Test
-    fun archT024NuovoOrdineDaQuestoAbsent() {
-        setContent(contentState())
-        composeRule.onNodeWithText("NUOVO ORDINE DA QUESTO").assertDoesNotExist()
+    fun archT033NuovoOrdineDaQuestoVisibleAndEnabled() {
+        var duplicateClicks = 0
+        setContent(contentState(), onDuplicateOrder = { duplicateClicks += 1 })
+        composeRule.onNodeWithText("NUOVO ORDINE DA QUESTO").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Nuovo ordine da questo").assertIsEnabled()
+        composeRule.onNodeWithText("STAMPA").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Stampa non disponibile").assertIsNotEnabled()
+        composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
+        composeRule.onNodeWithText("NUOVO ORDINE DA QUESTO").performClick()
+        composeRule.runOnIdle { assertEquals(1, duplicateClicks) }
+    }
+
+    @Test
+    fun archT032DuplicateDisabledWhileInFlight() {
+        setContent(contentState(isDuplicating = true))
+        composeRule.onNodeWithContentDescription("Nuovo ordine da questo").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("Creazione nuovo ordine").assertIsDisplayed()
     }
 
     @Test
@@ -77,10 +92,26 @@ class AcceptedOrderDetailScreenTest {
     }
 
     @Test
+    fun duplicateConflictShowsMinimalError() {
+        setContent(
+            contentState(
+                duplicateError =
+                    "Esiste già un ordine in corso. Il nuovo ordine non è stato creato.",
+            ),
+        )
+        composeRule.onNodeWithText(
+            "Esiste già un ordine in corso. Il nuovo ordine non è stato creato.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("ELIMINA E DUPLICA").assertDoesNotExist()
+        composeRule.onNodeWithText("RIPRENDI").assertDoesNotExist()
+    }
+
+    @Test
     fun unavailableShowsMessageWithoutStaleContent() {
         setContent(AcceptedOrderDetailUiState.Unavailable)
         composeRule.onNodeWithText("Ordine non disponibile.").assertIsDisplayed()
         composeRule.onNodeWithText("042").assertDoesNotExist()
+        composeRule.onNodeWithText("NUOVO ORDINE DA QUESTO").assertDoesNotExist()
         composeRule.onNodeWithText("STAMPA").assertIsDisplayed()
         composeRule.onNodeWithText("HOME").assertIsDisplayed()
     }
@@ -89,6 +120,7 @@ class AcceptedOrderDetailScreenTest {
         state: AcceptedOrderDetailUiState,
         onBackToToday: () -> Unit = {},
         onHome: () -> Unit = {},
+        onDuplicateOrder: () -> Unit = {},
     ) {
         composeRule.setContent {
             MaterialTheme {
@@ -96,12 +128,16 @@ class AcceptedOrderDetailScreenTest {
                     state = state,
                     onBackToToday = onBackToToday,
                     onHome = onHome,
+                    onDuplicateOrder = onDuplicateOrder,
                 )
             }
         }
     }
 
-    private fun contentState(): AcceptedOrderDetailUiState.Content =
+    private fun contentState(
+        isDuplicating: Boolean = false,
+        duplicateError: String? = null,
+    ): AcceptedOrderDetailUiState.Content =
         AcceptedOrderDetailUiState.Content(
             orderId = "o1",
             displayNumber = "042",
@@ -109,6 +145,8 @@ class AcceptedOrderDetailScreenTest {
             totalLabel = Money.ofCents(1_400).formatEur(),
             total = Money.ofCents(1_400),
             generalNote = "Consegna alle 21",
+            isDuplicating = isDuplicating,
+            duplicateError = duplicateError,
             sections = listOf(
                 AcceptedOrderDetailSectionUi(
                     title = "PIZZE",

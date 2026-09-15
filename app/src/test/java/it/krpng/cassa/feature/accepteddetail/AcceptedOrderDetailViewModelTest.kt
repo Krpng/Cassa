@@ -16,6 +16,7 @@ import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
+import it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult
 import it.krpng.cassa.domain.repository.NumberingModeLoadResult
 import it.krpng.cassa.domain.repository.OrderRepository
 import it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult
@@ -27,6 +28,7 @@ import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateNumberingModeResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
+import it.krpng.cassa.domain.usecase.DuplicateAcceptedOrder
 import it.krpng.cassa.domain.usecase.GetCurrentDayAcceptedOrder
 import java.time.Instant
 import java.time.LocalDate
@@ -37,6 +39,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -281,20 +284,93 @@ class AcceptedOrderDetailViewModelTest {
         assertTrue(viewModel.uiState.value is AcceptedOrderDetailUiState.Error)
     }
 
+    @Test
+    fun `ARCH-T032 duplicate success emits OpenNewOrder navigation`() = runTest(mainDispatcher) {
+        val order = acceptedOrder()
+        val repository = FakeOrderRepository(MutableStateFlow(order)).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.Created("new-draft-id")
+        }
+        val settings = FakeSettingsRepository()
+        val clock = FixedClock(romeLocal("2026-09-15T18:00:00"))
+        val viewModel = AcceptedOrderDetailViewModel(
+            savedStateHandle = SavedStateHandle(
+                mapOf(AcceptedOrderDetailViewModel.ORDER_ID_ARGUMENT to ORDER_ID),
+            ),
+            getCurrentDayAcceptedOrder = GetCurrentDayAcceptedOrder(
+                orderRepository = repository,
+                settingsRepository = settings,
+                clockProvider = clock,
+            ),
+            duplicateAcceptedOrder = DuplicateAcceptedOrder(
+                orderRepository = repository,
+                settingsRepository = settings,
+                clockProvider = clock,
+            ),
+        )
+        advanceUntilIdle()
+        val events = mutableListOf<AcceptedOrderDetailNavigationEvent>()
+        val collectJob = launch {
+            viewModel.navigationEvents.collect { events += it }
+        }
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        assertEquals(
+            listOf(AcceptedOrderDetailNavigationEvent.OpenNewOrder("new-draft-id")),
+            events,
+        )
+        collectJob.cancel()
+    }
+
+    @Test
+    fun duplicateConflictShowsErrorWithoutNavigation() = runTest(mainDispatcher) {
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict
+        }
+        val settings = FakeSettingsRepository()
+        val clock = FixedClock(romeLocal("2026-09-15T18:00:00"))
+        val viewModel = AcceptedOrderDetailViewModel(
+            savedStateHandle = SavedStateHandle(
+                mapOf(AcceptedOrderDetailViewModel.ORDER_ID_ARGUMENT to ORDER_ID),
+            ),
+            getCurrentDayAcceptedOrder = GetCurrentDayAcceptedOrder(
+                orderRepository = repository,
+                settingsRepository = settings,
+                clockProvider = clock,
+            ),
+            duplicateAcceptedOrder = DuplicateAcceptedOrder(
+                orderRepository = repository,
+                settingsRepository = settings,
+                clockProvider = clock,
+            ),
+        )
+        advanceUntilIdle()
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        val content = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+        assertTrue(content.duplicateError!!.contains("ordine in corso"))
+    }
+
     private fun viewModel(
         orderFlow: MutableStateFlow<Order?>,
         settingsFail: Boolean = false,
         orderId: String = ORDER_ID,
     ): AcceptedOrderDetailViewModel {
         val repository = FakeOrderRepository(orderFlow)
+        val settings = FakeSettingsRepository(fail = settingsFail)
+        val clock = FixedClock(romeLocal("2026-09-15T18:00:00"))
         return AcceptedOrderDetailViewModel(
             savedStateHandle = SavedStateHandle(
                 mapOf(AcceptedOrderDetailViewModel.ORDER_ID_ARGUMENT to orderId),
             ),
             getCurrentDayAcceptedOrder = GetCurrentDayAcceptedOrder(
                 orderRepository = repository,
-                settingsRepository = FakeSettingsRepository(fail = settingsFail),
-                clockProvider = FixedClock(romeLocal("2026-09-15T18:00:00")),
+                settingsRepository = settings,
+                clockProvider = clock,
+            ),
+            duplicateAcceptedOrder = DuplicateAcceptedOrder(
+                orderRepository = repository,
+                settingsRepository = settings,
+                clockProvider = clock,
             ),
         )
     }
@@ -330,6 +406,9 @@ class AcceptedOrderDetailViewModelTest {
     private class FakeOrderRepository(
         private val orderFlow: MutableStateFlow<Order?>,
     ) : OrderRepository {
+        var duplicateResult: DuplicateAcceptedOrderResult =
+            DuplicateAcceptedOrderResult.SourceUnavailable
+
         override suspend fun getById(orderId: String): Order? = orderFlow.value
 
         override fun observeById(orderId: String): Flow<Order?> = orderFlow
@@ -397,6 +476,11 @@ class AcceptedOrderDetailViewModelTest {
         override suspend fun purgeAcceptedBefore(
             currentBusinessDate: LocalDate,
         ): PurgeAcceptedBeforeResult = PurgeAcceptedBeforeResult.Purged(0)
+
+        override suspend fun duplicateAcceptedOrder(
+            sourceOrderId: String,
+            currentBusinessDate: LocalDate,
+        ): DuplicateAcceptedOrderResult = duplicateResult
     }
 
     private companion object {

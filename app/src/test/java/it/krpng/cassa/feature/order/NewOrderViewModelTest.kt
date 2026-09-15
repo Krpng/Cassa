@@ -1506,6 +1506,12 @@ class NewOrderViewModelTest {
             currentBusinessDate: java.time.LocalDate,
         ): it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult =
             it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult.Purged(0)
+
+        override suspend fun duplicateAcceptedOrder(
+            sourceOrderId: String,
+            currentBusinessDate: java.time.LocalDate,
+        ): it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult =
+            it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult.SourceUnavailable
     }
 
     private class FakeProductRepository(

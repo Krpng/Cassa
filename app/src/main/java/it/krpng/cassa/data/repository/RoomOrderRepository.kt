@@ -37,6 +37,7 @@ import it.krpng.cassa.domain.repository.ChangeQuantityResult
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
+import it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult
 import it.krpng.cassa.domain.repository.NumberingModeLoadResult
 import it.krpng.cassa.domain.repository.NumberingRepository
 import it.krpng.cassa.domain.repository.OrderRepository
@@ -49,6 +50,7 @@ import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
 import java.time.DateTimeException
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -113,6 +115,48 @@ class RoomOrderRepository @Inject constructor(
         throw error
     } catch (_: SQLiteException) {
         PurgeAcceptedBeforeResult.PersistenceFailure
+    }
+
+    override suspend fun duplicateAcceptedOrder(
+        sourceOrderId: String,
+        currentBusinessDate: LocalDate,
+    ): DuplicateAcceptedOrderResult = try {
+        transactionRunner.runInTransaction {
+            val sourceFull = orderDao.getFullOrder(sourceOrderId)
+                ?: return@runInTransaction DuplicateAcceptedOrderResult.SourceUnavailable
+            val source = sourceFull.toDomain()
+            if (source.status != OrderStatus.ACCEPTED) {
+                return@runInTransaction DuplicateAcceptedOrderResult.SourceUnavailable
+            }
+            if (source.businessDate != currentBusinessDate) {
+                return@runInTransaction DuplicateAcceptedOrderResult.SourceUnavailable
+            }
+            if (orderDao.getActiveDraft() != null) {
+                return@runInTransaction DuplicateAcceptedOrderResult.DraftConflict
+            }
+
+            val now = clockProvider.now()
+            val draft = source.toIndependentDraft(now)
+            val model = draft.toDatabaseModel()
+            val insertResult = orderDao.insertDraft(model.order)
+            if (insertResult == INSERT_CONFLICT) {
+                return@runInTransaction DuplicateAcceptedOrderResult.DraftConflict
+            }
+            for (itemWithModifiers in model.items) {
+                orderDao.insertOrderItem(itemWithModifiers.item)
+                if (itemWithModifiers.additions.isNotEmpty()) {
+                    orderDao.insertOrderItemAdditions(itemWithModifiers.additions)
+                }
+                if (itemWithModifiers.removals.isNotEmpty()) {
+                    orderDao.insertOrderItemRemovals(itemWithModifiers.removals)
+                }
+            }
+            DuplicateAcceptedOrderResult.Created(draftId = draft.id)
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: SQLiteException) {
+        DuplicateAcceptedOrderResult.PersistenceFailure
     }
 
     override suspend fun getActiveDraft(): Order? =
@@ -952,6 +996,40 @@ class RoomOrderRepository @Inject constructor(
             generalNote = null,
             sourceOrderId = null,
             items = emptyList(),
+        )
+    }
+
+    /**
+     * Faithful independent DRAFT: new UUIDs, COPY snapshots/prices/sequences/refs/notes,
+     * total = ZERO (ORD-022 live from items), sourceOrderId = this ACCEPTED id.
+     */
+    private fun Order.toIndependentDraft(now: Instant): Order {
+        require(status == OrderStatus.ACCEPTED)
+        return Order(
+            id = UUID.randomUUID().toString(),
+            status = OrderStatus.DRAFT,
+            displayNumber = null,
+            numberingMode = null,
+            numberingCycle = null,
+            businessDate = null,
+            createdAt = now,
+            updatedAt = now,
+            acceptedAt = null,
+            total = Money.ZERO,
+            generalNote = generalNote,
+            sourceOrderId = id,
+            items = items.map { item ->
+                val newItemId = UUID.randomUUID().toString()
+                item.copy(
+                    id = newItemId,
+                    additions = item.additions.map { addition ->
+                        addition.copy(id = UUID.randomUUID().toString())
+                    },
+                    removals = item.removals.map { removal ->
+                        removal.copy(id = UUID.randomUUID().toString())
+                    },
+                )
+            },
         )
     }
 

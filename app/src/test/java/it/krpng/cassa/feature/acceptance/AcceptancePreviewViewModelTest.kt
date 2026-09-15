@@ -453,6 +453,11 @@ class AcceptancePreviewViewModelTest {
         override suspend fun purgeAcceptedBefore(
             currentBusinessDate: java.time.LocalDate,
         ): it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult = write()
+
+        override suspend fun duplicateAcceptedOrder(
+            sourceOrderId: String,
+            currentBusinessDate: java.time.LocalDate,
+        ): it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult = write()
     }
 
     private companion object {

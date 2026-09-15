@@ -155,6 +155,14 @@ fun CassaNavHost() {
                         launchSingleTop = true
                     }
                 },
+                onOpenNewOrder = { draftId ->
+                    navController.navigate(NewOrderDestination.createRoute(draftId)) {
+                        popUpTo(CassaDestination.HOME.route) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable(CassaDestination.MENU.route) {

@@ -208,6 +208,12 @@ class AcceptedOrdersRetentionInitializerTest {
         override suspend fun purgeAcceptedBefore(
             currentBusinessDate: LocalDate,
         ): PurgeAcceptedBeforeResult = PurgeAcceptedBeforeResult.Purged(0)
+
+        override suspend fun duplicateAcceptedOrder(
+            sourceOrderId: String,
+            currentBusinessDate: java.time.LocalDate,
+        ): it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult =
+            it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult.SourceUnavailable
     }
 
     private object UnusedSettingsRepository : SettingsRepository {

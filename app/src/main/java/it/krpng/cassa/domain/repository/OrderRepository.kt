@@ -76,6 +76,29 @@ interface OrderRepository {
      * Does not touch DRAFT, numbering_state, or catalog.
      */
     suspend fun purgeAcceptedBefore(currentBusinessDate: LocalDate): PurgeAcceptedBeforeResult
+
+    /**
+     * ARCH-006: duplicate a current-day ACCEPTED order into a new independent DRAFT.
+     * Caller supplies already-resolved [currentBusinessDate]. Atomic; rejects if active DRAFT exists.
+     */
+    suspend fun duplicateAcceptedOrder(
+        sourceOrderId: String,
+        currentBusinessDate: LocalDate,
+    ): DuplicateAcceptedOrderResult
+}
+
+sealed interface DuplicateAcceptedOrderResult {
+    data class Created(
+        val draftId: String,
+    ) : DuplicateAcceptedOrderResult
+
+    /** Missing, not ACCEPTED, or businessDate != currentBusinessDate. */
+    data object SourceUnavailable : DuplicateAcceptedOrderResult
+
+    /** Active DRAFT already present — ARCH-006 rejects with zero writes. */
+    data object DraftConflict : DuplicateAcceptedOrderResult
+
+    data object PersistenceFailure : DuplicateAcceptedOrderResult
 }
 
 sealed interface PurgeAcceptedBeforeResult {

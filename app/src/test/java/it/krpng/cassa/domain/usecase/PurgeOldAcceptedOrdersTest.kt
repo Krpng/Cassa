@@ -12,6 +12,7 @@ import it.krpng.cassa.domain.repository.CustomizationQuantityIntent
 import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.NumberingModeLoadResult
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.DuplicateAcceptedOrderResult
 import it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
@@ -186,6 +187,11 @@ class PurgeOldAcceptedOrdersTest {
             purgedBefore += currentBusinessDate
             return PurgeAcceptedBeforeResult.Purged(deletedOrderCount = 0)
         }
+
+        override suspend fun duplicateAcceptedOrder(
+            sourceOrderId: String,
+            currentBusinessDate: LocalDate,
+        ): DuplicateAcceptedOrderResult = DuplicateAcceptedOrderResult.SourceUnavailable
     }
 
     private companion object {
