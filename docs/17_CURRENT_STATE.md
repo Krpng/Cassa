@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001/002 COMPLETE; PRINT-003 READY — D-050)
+NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001/002/003 COMPLETE; PRINT-004 READY — D-051)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1041,7 +1041,8 @@ historical_archive: OUT_OF_SCOPE
 NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
-first_M8_task_next: PRINT-003 READY (D-050)
+PRINT-003: COMPLETE (bb71f72 / D-050)
+first_M8_task_next: PRINT-004 READY (D-051)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1134,3 +1135,37 @@ M9: NOT STARTED
 
 Do **not** implement PRINT-003 until explicitly authorized.
 Do **not** start PRINT-004+ / M9 in PRINT-003.
+
+## 34. PRINT-004 CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-051
+HEAD_at_freeze_docs: bb71f72
+PRINT-001: COMPLETE
+PRINT-002: COMPLETE
+PRINT-003: COMPLETE
+PRINT-004: READY FOR IMPLEMENTATION
+title: Formatter draft/final (ReceiptComposer body)
+owns:
+  - ReceiptComposer implementation
+  - DRAFT/FINAL/reprint(=FINAL) text layout from Order snapshots
+  - sections PIZZE/FRITTURA/BIBITE; createdSequence order
+  - DETAILED / TOTAL_ONLY price visibility
+  - notes / total / wrapping / EMPHASIZED header+section titles
+  - PRINT-T001..T008, T010..T014
+excludes:
+  - EscPosEncoder / code page / cut / feed bytes (PRINT-005)
+  - FakePrinter / PrinterService Mutex (PRINT-006/007)
+  - Bluetooth / NETUM / STAMPA CTA (M9)
+  - catalog reprice / Room entities
+  - schema / print_jobs / migration
+schema: DB_v2 UNCHANGED
+migration: NONE
+PRINT-005+: NOT STARTED
+M9: NOT STARTED
+```
+
+**FINAL REFINEMENT:** TOTAL_ONLY blank-between-items = mandatory (§11); DETAILED price fit/wrap rule frozen; money = `cents`→`#,##` with `,` / 2 decimals / no grouping / no €. Open questions blocking PRINT-004: **NONE**.
+
+Do **not** implement PRINT-004 until explicitly authorized.
+Do **not** start PRINT-005+ / M9 in PRINT-004.

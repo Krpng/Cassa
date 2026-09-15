@@ -408,7 +408,7 @@ interface ReceiptComposer {
 ```
 
 Implementazioni (later tasks):
-- `ReceiptComposer` body / text layout = PRINT-004;
+- `ReceiptComposer` body / text layout = **PRINT-004 (D-051 READY)** — layout rules frozen; no ESC/POS;
 - `EscPosEncoder` = PRINT-005;
 - `FakePrinterDriver` = PRINT-006;
 - `BluetoothEscPosPrinterDriver` = M9.

@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001 **COMPLETE** (`581f27d`). PRINT-002 **COMPLETE** (`c0ce4e7`). Next authorized task: **PRINT-003** (D-050). Do not start PRINT-004+ until PRINT-003 is COMPLETE and authorized.
+> PRINT-001/002/003 **COMPLETE** (`bb71f72` tip). Next authorized task: **PRINT-004** (D-051). Do not start PRINT-005+ until PRINT-004 is COMPLETE and authorized.
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -486,7 +486,7 @@ Demo M7 (COMPLETE):
 
 **Demo:** none (contracts only).
 
-### PRINT-003 [P0] PricePrintMode — READY FOR IMPLEMENTATION (D-050)
+### PRINT-003 [P0] PricePrintMode — COMPLETE (D-050)
 > Preference **wiring/persistence** for `PricePrintMode` (enum already PRINT-001). No receipt rendering. No ESC/POS. No Bluetooth/NETUM. No Room schema change.
 
 **Depends on:** PRINT-001 COMPLETE (`581f27d`); PRINT-002 COMPLETE (`c0ce4e7`). Normative: `docs/00_SOURCE_OF_TRUTH.md` (device/printer prefs → DataStore); `docs/04_ANDROID_ARCHITECTURE.md` §18; `docs/05_DATABASE_SCHEMA.md` §12; `docs/07_PRINTING_SPEC.md` §3/§11.
@@ -517,8 +517,25 @@ Demo M7 (COMPLETE):
 
 **Demo:** none required (preference wiring).
 
-### PRINT-004 [P0] Formatter draft/final
-> Implements receipt text layout from `docs/07_PRINTING_SPEC.md` §§4–15 via `ReceiptComposer` (sections, total, notes, wrap, DETAILED/TOTAL_ONLY). Primary owner of PRINT-T001..T008, T010..T014. **NOT STARTED.**
+### PRINT-004 [P0] Formatter draft/final — READY FOR IMPLEMENTATION (D-051)
+> Implements `ReceiptComposer` body: Order snapshot → `PrintableDocument` text layout per `docs/07_PRINTING_SPEC.md` §§4–15. Pure Kotlin. No ESC/POS bytes, no FakePrinter, no Bluetooth, no UI, no schema.
+
+**Depends on:** PRINT-001/002/003 COMPLETE (`bb71f72`). Contracts: `ReceiptComposer` / `PrintableDocument` (D-049); `PricePrintMode` DataStore SoT (D-050).
+
+**Owns (AC):** see **D-051**. Summary:
+1. Implement `ReceiptComposer.compose(order, kind, pricePrintMode, charsPerLine)`.
+2. DRAFT / FINAL / reprint(=FINAL) content rules; snapshot-only; no catalog reprice.
+3. Sections PIZZE → FRITTURA → BIBITE; empty omitted; `createdSequence` ASC (+ `id` tie-break).
+4. Item/addition/removal/note/total layout; DETAILED vs TOTAL_ONLY (incl. §11 blank between TOTAL_ONLY items); DETAILED price placement fit/wrap rule; money `0,00`/`1000,00` (no grouping, no €); wrapping; `PrintEmphasis` NORMAL/EMPHASIZED only.
+5. Deterministic for same inputs.
+6. Schema v2 unchanged; migration NONE.
+
+**Owned tests:** PRINT-T001..T008, T010..T014 (not marked PASS until implementation).
+**Not owned:** PRINT-T009 (mutex/service), PRINT-T020..027 (service/BT/Fake).
+
+**Explicitly deferred:** EscPosEncoder (PRINT-005); Fake (PRINT-006); PrinterService+Mutex (PRINT-007); M9 BT/NETUM/UI/STAMPA enable; feed/cut bytes; code page.
+
+**Demo:** unit golden/layout tests on PrintableDocument lines (no hardware).
 
 ### PRINT-005 [P0] ESC/POS encoder
 

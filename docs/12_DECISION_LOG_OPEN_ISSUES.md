@@ -333,6 +333,100 @@ After PRINT-002 COMPLETE (`c0ce4e7`): **PRINT-003 = READY FOR IMPLEMENTATION**.
 - Italian Settings copy for DETAILED/TOTAL_ONLY;
 - whether a Settings radio lands in PRINT-003 vs only M9 printer settings (public UI optional).
 
+
+### D-051 PRINT-004 receipt formatter / ReceiptComposer body freeze (2026-09-15)
+After PRINT-003 COMPLETE (`bb71f72`): **PRINT-004 = READY FOR IMPLEMENTATION**.
+
+**Owns:** `ReceiptComposer` implementation mapping `domain.model.Order` snapshot → `PrintableDocument` (pre-ESC/POS text lines). Normative layout: `docs/07_PRINTING_SPEC.md` §§4–15. Align section grouping with existing `AcceptancePreviewOrdering` (PIZZE/FRITTURA/BIBITE titles; empty omitted; `createdSequence` ASC, then `id`).
+
+#### Input / SoT
+- Input order = domain `Order` aggregate snapshots only (items/additions/removals/names/prices/flags/total/generalNote/displayNumber).
+- **No** catalog reread, **no** reprice, **no** Room entities in composer.
+- Reprint = `PrintKind.FINAL` with same FINAL content; never emit `RISTAMPA`.
+
+#### DRAFT vs FINAL
+- **DRAFT:** header text `BOZZA`; no `displayNumber`; no date/time (already forbidden §5).
+- **FINAL:** header text = `displayNumber` only (must be non-null for meaningful FINAL; if null treat as empty header text without inventing a number).
+- Neither DRAFT nor FINAL prints date/time/fiscal/logo/QR/`ORDINE`/`RISTAMPA`.
+
+#### Header / separators
+- Banner lines of `=` with length = `charsPerLine`.
+- Center header token (`BOZZA` / displayNumber) on its line.
+- Header token line: `PrintEmphasis.EMPHASIZED`; banner `=` lines: `NORMAL`.
+- Section title line compact form `|---------- {TITLE} ----------` with dashes adapted to `charsPerLine`; section title: `EMPHASIZED`.
+- Total separator line of `-` length = `charsPerLine`, then `TOTALE` + amount (see money).
+
+#### Categories / items
+- Order: PIZZE → FRITTURA → BIBITE; empty categories omitted.
+- Within category: `createdSequence` ASC, then `id` ASC.
+- Item main line: `{qty}x {productPrintedNameSnapshot}` (snapshot already resolved).
+- Additions after main line, `displayOrder` ASC: `+ {printedNameSnapshot}`; indent with 3 spaces as in examples.
+- Removals after additions, `displayOrder` ASC: `- {nameSnapshot}`; indent 3 spaces; **never** a price; never subtract from total.
+- Item note if non-blank: `NOTA: {note}` after that item's modifiers; wrap long notes.
+- Omit blank/null generalNote and blank item notes entirely.
+- General note after all sections, before total:
+  ```
+  NOTE ORDINE:
+  {content}
+  ```
+- Do not waste extra blank separators between DETAILED item blocks.
+- **TOTAL_ONLY item spacing (normative from docs/07 §11 example):** insert exactly one blank line between consecutive items (after each item's modifier/note block, before the next item). Not optional.
+
+#### Money format (PrintableDocument text)
+- Source = integer cents from snapshots.
+- Decimal separator = `,`
+- Always exactly 2 fraction digits.
+- **NO** thousands grouping.
+- **NO** `€` / currency symbol in PrintableLine text.
+- Normative examples: `0,00`, `7,00`, `24,50`, `1000,00`.
+- Charset/`€` glyph encoding remains PRINT-005 / hardware calibration — not PRINT-004.
+
+#### Prices
+- Amounts from snapshot only (`finalUnitPrice`, addition `chargedPrice`, `order.total`).
+- Shown amounts are **quantity-extended** when a line price is printed (`unit * quantity`).
+- **DETAILED:**
+  - Main item shows extended final unit price using **DETAILED price placement** below.
+  - Addition prices shown only if: DETAILED + no manual override on item (`manualUnitPrice == null`) + `automaticExtrasPricingSnapshot == true` + extended charged > 0; else addition line without price.
+  - Charged €0 addition: print `+ Name` without `0,00`.
+  - Removals never priced.
+- **TOTAL_ONLY:** no item/addition line prices; still print total from `order.total`.
+- Total always printed for DRAFT and FINAL from `order.total` snapshot (§15), using the money format above (right-aligned with `TOTALE` on its line within `charsPerLine` when it fits; otherwise wrap label then dedicated right-aligned amount line — same fit rule as price placement).
+
+#### DETAILED price placement (deterministic; character-based only)
+Applies to priced main lines and priced addition lines. Removals have no price.
+- Product/addition text is never truncated.
+- Price text is never truncated.
+- Let `left` = the left-hand text for that logical line (e.g. `2x Margherita` or `   + Provola`).
+- Let `price` = money string as frozen above.
+- If `left.length + 1 + price.length <= charsPerLine`: emit **one** physical line with `left` left-aligned and `price` right-aligned (pad spaces between).
+- Else: wrap `left` normally (word-wrap / hard-split oversized tokens per wrapping rules); then emit `price` on a **dedicated** following physical line, right-aligned to `charsPerLine`.
+- Wrapped continuations of `left` do not repeat the price.
+- No dot/font/ESC-POS width concepts.
+
+#### Wrapping (character-based, not bytes)
+- `charsPerLine` drives wrap and separator widths; not code page / dots / ESC/POS.
+- Prefer wrap on word boundaries; if a single token exceeds width, hard-split the token.
+- Explicit `\n` in notes: split first, then wrap each segment.
+- If `charsPerLine < 1`, clamp to `1` (deterministic guard).
+- Long product names wrap without truncating essential text; do not invent font compression.
+
+#### Emphasis
+Only `NORMAL` / `EMPHASIZED`:
+- EMPHASIZED: header token (BOZZA/displayNumber), section titles.
+- NORMAL: all other lines (including total).
+
+#### Determinism
+Same `Order` + `PrintKind` + `PricePrintMode` + `charsPerLine` ⇒ same `PrintableDocument`.
+No ClockProvider, catalog, Bluetooth/printer state, or randomness.
+
+#### Out of scope
+EscPosEncoder / code page / cut / feed bytes; FakePrinter; PrinterService/Mutex; BT/NETUM; UI; Room migration/`print_jobs`.
+
+**Open questions blocking PRINT-004:**
+NONE.
+
+Hardware/encoder-only items remain deferred (PRINT-005+ / M9): code page, `€` glyph, cut/feed, physical calibration.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness
