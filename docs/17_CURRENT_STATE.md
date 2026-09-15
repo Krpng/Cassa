@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001 READY — D-055)
+NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001 COMPLETE `345dce6`; BT-002 READY — D-056)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: M8 COMPLETE; first_M9_task_next: BT-001 READY (D-055)
+first_M8_task_next: M8 COMPLETE; first_M9_task_next: BT-001 COMPLETE; BT-002 READY (D-056)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1276,14 +1276,15 @@ Uncommitted PRINT-007 production already matches Q6b (read-only): keep typed Fai
 
 Do **not** start M9 in PRINT-007.
 
-## 38. BT-001 CONTRACT FREEZE (2026-09-15)
+## 38. BT-001 CONTRACT FREEZE (2026-09-15) — COMPLETE
 
 ```yaml
 decision: D-055
 HEAD_at_freeze_docs: cee8162
+implementation_commit: 345dce6
 M8: COMPLETE
-M9: ACTIVE
-BT-001: READY FOR IMPLEMENTATION
+M9: ACTIVE 1/14
+BT-001: COMPLETE
 title: Android Bluetooth runtime permission manager
 owns:
   - BluetoothPermissionManager (Android-facing evaluation + required permission list)
@@ -1304,10 +1305,43 @@ samsung: NO
 netum: NO
 schema: DB_v2 UNCHANGED
 migration: NONE
-BT-002+: NOT STARTED
 ```
 
-**FINAL REFINEMENT:** bonded-only MVP confirmed by architecture §22 / printing §22 / security §5. Open questions blocking BT-001: **NONE**.
+**FINAL:** BT-001 COMPLETE on `345dce6`.
 
-Do **not** implement BT-001 until explicitly authorized.
-Do **not** start BT-002+ / NETUM hardware work in BT-001.
+## 39. BT-002 CONTRACT FREEZE (2026-09-15) — READY
+
+```yaml
+decision: D-056
+status: FROZEN
+HEAD_at_freeze_docs: 345dce6
+M8: COMPLETE
+M9: 1/14 COMPLETE
+BT-001: COMPLETE
+BT-002: READY FOR IMPLEMENTATION
+title: List bonded Bluetooth devices
+owns:
+  - BondedBluetoothDevicesProvider (bondedDevices only)
+  - BondedBluetoothDevice(id=address, name nullable)
+  - BondedDevicesResult Success | Failure(PermissionDenied | BluetoothUnavailable)
+  - Q1 ordering: named first / name CI ASC locale-independent / id ASC; blank after named / id ASC
+  - Q2 adapter null -> Failure(BluetoothUnavailable) local (not PrinterError)
+excludes:
+  - discovery / BLUETOOTH_SCAN / location / pairing
+  - adapter.isEnabled / PrinterError.BluetoothDisabled (BT-004/005)
+  - persistence (BT-003); RFCOMM/NETUM/STAMPA UI
+  - PrinterService / PrintResult / PrinterError changes
+  - UI name placeholder strings (BT-006)
+blocking_open_questions: NONE
+manual_after_impl: PHONE ONLY
+netum_for_listing: NO
+samsung: NO
+schema: DB_v2 UNCHANGED
+migration: NONE
+BT-003+: NOT STARTED
+```
+
+**FINAL REFINEMENT:** Q1–Q2 resolved. Open questions blocking BT-002: **NONE**.
+
+Do **not** implement BT-002 until explicitly authorized.
+Do **not** start BT-003+ / NETUM hardware work in BT-002.

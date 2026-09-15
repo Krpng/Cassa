@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. Next: **M9 / BT-001** (D-055 READY). Do not start BT-002+ until BT-001 is COMPLETE and authorized.
+> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). Next: **BT-002** (D-056 FROZEN — READY).
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -530,9 +530,9 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE (`cee8162`). Next authorized task: **BT-001** Runtime permission manager — **READY** (D-055). Do not start BT-002+ / NETUM until BT-001 is COMPLETE and authorized. No hardware required for BT-001.
+> M8 COMPLETE. BT-001 COMPLETE (`345dce6` / D-055). Next authorized task: **BT-002** List bonded devices — **READY** (D-056). Do not start BT-003+ until BT-002 is COMPLETE and authorized.
 
-### BT-001 [P1] Runtime permission manager — READY FOR IMPLEMENTATION (D-055)
+### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
 
 **Depends on:** M8 COMPLETE (`cee8162`). Contract: **D-055**.
@@ -552,7 +552,27 @@ Demo M7 (COMPLETE):
 
 **Demo:** none (permissions/unit). Hardware: **NO**; Samsung: **NO**; NETUM: **NO**.
 
-### BT-002 [P1] List bonded devices
+### BT-002 [P1] List bonded devices — READY FOR IMPLEMENTATION (D-056)
+> Read Android bonded/paired devices into an app-safe model; `BondedDevicesResult` Success/Failure; bonded-only. No discovery, SCAN, location, persistence, RFCOMM, NETUM, PrinterService, or settings UI.
+
+**Depends on:** BT-001 COMPLETE (`345dce6`). Contract: **D-056**.
+
+**Owns (AC):** see **D-056**. Summary:
+1. `BondedBluetoothDevicesProvider` (or equivalent) — bondedDevices only; maps to `BondedBluetoothDevice(id=address, name nullable)`.
+2. Uses `BluetoothPermissionManager` directly; missing CONNECT (API 31+) → `Failure(PermissionDenied)`; `SecurityException` → `Failure(PermissionDenied)`.
+3. `adapter == null` → `Failure(BluetoothUnavailable)` (BT-002 local error; **not** `PrinterError`).
+4. Empty bonded set (adapter present, permission OK) → `Success(emptyList)`. Duplicate names retained (distinct ids).
+5. Ordering: named first; name case-insensitive ASC (locale-independent); ties by id ASC; null/blank names after named, then id ASC. No UI placeholder strings (BT-006).
+6. `BluetoothDisabled` / `adapter.isEnabled` → **not** owned (BT-004/005). No `PrinterService` / `PrintResult` / `PrinterError` for listing.
+7. Schema v2 unchanged; migration NONE.
+
+**Blocking open questions:** NONE.
+
+**Owned tests:** permission granted → list; permission denied → PermissionDenied; SecurityException → PermissionDenied; adapter null → BluetoothUnavailable; zero bonded → Success(empty); multiples + duplicate names by id; Q1 ordering + locale-independence; no discovery; **no** `isEnabled` tests.
+
+**Manual (after impl/review, not now):** PHONE ONLY — ≥1 system-paired device appears in list; no discovery. NETUM: **NO**. Samsung: **NO**.
+
+**Not owned:** persistence (BT-003); RFCOMM/BluetoothDisabled/`isEnabled` (BT-004/005); settings UI / name fallback (BT-006); STAMPA; NETUM.
 
 ### BT-003 [P1] Persist selected printer
 

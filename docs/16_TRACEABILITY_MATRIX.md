@@ -46,11 +46,12 @@ Questa matrice collega requisiti, backlog e test.
 | EscPosEncoder | PRINT-005 **COMPLETE** (D-052; `cab2c1a`) | byte unit PASS |
 | FakePrinterDriver | PRINT-006 **COMPLETE** (D-053; `0a98b0f`) | PRINT-T026 PASS + Fake unit PASS |
 | PrinterService + Mutex | PRINT-007 **COMPLETE** (D-054; `cee8162`) | PRINT-T009/T020/T022/T024/T027 + service T023/T025 + Q6b PASS |
-| Bluetooth runtime permissions | BT-001 **READY** (D-055) | unit permission matrix; PRINT-T021 partial (PermissionDenied path only) |
+| Bluetooth runtime permissions | BT-001 **COMPLETE** (D-055; `345dce6`) | unit permission matrix; PRINT-T021 partial (PermissionDenied path only) |
+| List bonded Bluetooth devices | BT-002 **READY** (D-056; Q1–Q2 FROZEN) | unit ordering/permission/null-adapter; manual PHONE ONLY after impl |
 | Draft print | PRINT-004/007/020 | PRINT-T001/T025 |
 | Final print | PRINT-004/007/021 | PRINT-T002..014 |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |
-| Bluetooth transport | BT-002..005 | PRINT-T021 full (disabled) + HW |
+| Bluetooth transport | BT-003..005 (+ BT-002 listing) | PRINT-T021 full (disabled) + HW |
 | Printer settings/test | BT-006/007 | PRINT-T027 HW/UI + PRINT-007 service |
 | One copy/mutex | PRINT-007 | PRINT-T009/T024 |
 | Non-fiscal | PRINT spec/release | manual review |

@@ -772,6 +772,92 @@ Bonded list (BT-002); persistence (BT-003); RFCOMM/socket/timeout/reconnect (BT-
 **Open questions blocking BT-001:**
 NONE.
 
+### D-056 BT-002 list bonded devices contract freeze (2026-09-15)
+After BT-001 COMPLETE (`345dce6`): **BT-002 = READY FOR IMPLEMENTATION**.
+
+**Owns:** Android-facing read of **already bonded/paired** Bluetooth devices → app-safe model → deterministic `BondedDevicesResult`. No discovery, pairing, persistence, RFCOMM, NETUM, PrinterService, or printer settings UI.
+
+#### Data source / permissions (frozen)
+- **Bonded/paired only** (`bondedDevices` / equivalent). Architecture §22; printing §22; UX §20; security §5; D-055.
+- **Discovery ABSENT:** no `startDiscovery` / `cancelDiscovery` / discovery BroadcastReceiver / pairing request.
+- No `BLUETOOTH_SCAN`; no location permissions. API 31+ bonded read requires runtime `BLUETOOTH_CONNECT` granted (D-055). `BLUETOOTH_ADMIN` still **not** required unless platform evidence appears at implementation.
+- **Permission boundary:** BT-002 **uses `BluetoothPermissionManager` (BT-001) directly**. Do **not** duplicate `BluetoothRuntimePermissionPolicy`. If required runtime permissions are missing → **do not** access bondedDevices → `Failure(PermissionDenied)`. UI request launcher = later (BT-006); BT-002 does not present permission UI.
+
+#### Device model (frozen)
+- Conceptual `BondedBluetoothDevice`: stable `id` + nullable `name`.
+- **Stable id** = Android Bluetooth **device address** string (`BluetoothDevice.address` / MAC-form). Aligns with DataStore `selectedPrinterId/address` (schema §12; architecture §18).
+- **Do not** expose `android.bluetooth.BluetoothDevice` outside the platform layer.
+- **Null/blank name:** retain the device if `id` is valid; `name` stays nullable. **No** UI placeholder strings (e.g. “Dispositivo senza nome”) in BT-002 — visual fallback = **BT-006**.
+- **Duplicate display names:** retained as separate devices (distinct `id`).
+
+#### Q1 — Ordering (FROZEN)
+Deterministic sort of the Success list:
+1. devices with **non-blank** name first;
+2. named devices by name **case-insensitive ASC**;
+3. name ties → stable `id`/address ASC;
+4. null/blank-name devices **after** named devices;
+5. null/blank-name devices by stable `id`/address ASC.
+
+Case-insensitive comparison must be **locale-independent** (must not depend on the device’s current locale; do not use default-locale `lowercase()` / default `Collator`).
+
+#### Q2 — Null adapter (FROZEN)
+- `BluetoothAdapter` unavailable/null **≠** empty bonded list **≠** Bluetooth disabled.
+- `adapter == null` → `Failure(BluetoothUnavailable)`.
+- **Do not** return `Success(emptyList)` for null adapter — empty list means: stack available + permission satisfied + zero bonded devices.
+- **`BluetoothUnavailable`** is a **BT-002 local** result error — **not** a new `PrinterError` variant; **not** `PrinterError.BluetoothDisabled`.
+
+#### Bluetooth disabled (unchanged — out of BT-002)
+- Adapter exists but disabled → **not evaluated** by BT-002.
+- BT-002 must **not** call/use `adapter.isEnabled`.
+- `PrinterError.BluetoothDisabled` remains **BT-004 / BT-005** (PRINT-T021 full).
+
+#### Semantically distinct outcomes (frozen)
+| Condition | Result |
+|---|---|
+| adapter null | `Failure(BluetoothUnavailable)` |
+| adapter disabled | not evaluated by BT-002 |
+| permission missing | `Failure(PermissionDenied)` |
+| zero bonded devices (adapter present, permission OK) | `Success(emptyList)` |
+| SecurityException while reading bondedDevices | `Failure(PermissionDenied)` — no raw `SecurityException` escapes |
+
+#### Result model (frozen)
+Minimal platform result (Kotlin names may follow project style), semantically:
+- `BondedDevicesResult.Success(devices: List<BondedBluetoothDevice>)`
+- `BondedDevicesResult.Failure(error)` with at least:
+  - `PermissionDenied`
+  - `BluetoothUnavailable`
+
+Do **not** use `PrinterService`, `PrintResult`, or `PrinterError` for this platform listing. Do **not** introduce a general Bluetooth error hierarchy beyond this listing result.
+
+#### Abstraction (frozen)
+Minimal Android-facing provider (name equivalent to `BondedBluetoothDevicesProvider`) under `platform.bluetooth`; testable with injected/fake bonded input + permission manager. No new domain repository layer for listing alone.
+
+#### Tests (BT-002 owned)
+Unit (injected/fake preferred):
+- permission granted → bonded list;
+- permission denied/missing → `PermissionDenied`;
+- `SecurityException` → `PermissionDenied`;
+- adapter null → `BluetoothUnavailable`;
+- available adapter + zero bonded → `Success(emptyList)`;
+- multiple devices retained; duplicate names retained by distinct id;
+- named sorted case-insensitive ASC; same-name tie → id ASC;
+- null/blank names after named; null/blank → id ASC;
+- ordering independent of current locale;
+- no discovery / SCAN / location.
+**No** unit test of `adapter.isEnabled` (disabled ownership = BT-004/005).
+
+#### Manual (after implementation/review — not this docs task)
+**YES — PHONE ONLY:** pair ≥1 device in Android Settings → provider returns it; no discovery. **NETUM not required.** Samsung not mandated.
+
+#### Schema
+DB v2 unchanged; migration NONE. Persistence of selection = **BT-003**.
+
+#### Out of scope
+Selected-printer persistence (BT-003); RFCOMM/socket/connect/print (BT-004/005); `BluetoothDisabled` / `isEnabled` (BT-004/005); settings/testPrint UI (BT-006/007); STAMPA enable / PRINT-020+; PrinterProfileProvider; NETUM; discovery/SCAN/location; schema/`print_jobs`; PrinterService / `PrinterError` changes.
+
+**Open questions blocking BT-002:**
+NONE.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness
