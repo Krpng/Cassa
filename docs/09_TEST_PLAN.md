@@ -539,9 +539,11 @@ Addition price changes -> historical reprint old price.
 ### SNAP-004
 Deactivate product -> historical order readable.
 
-## 12. Duplicate (ARCH-006 / D-046 COMPLETE + ARCH-007 / D-047 READY)
+## 12. Duplicate (ARCH-006 / D-046 COMPLETE + ARCH-007 / D-047 COMPLETE)
 
-> Scope: current-day ACCEPTED → new DRAFT. ARCH-006 path (no active DRAFT) COMPLETE. Conflict resolution UX = ARCH-007 (D-047 READY; code NOT STARTED). DUP-005 reject path remains ARCH-006 repository contract.
+> Scope: current-day ACCEPTED → new DRAFT. ARCH-006 path (no active DRAFT) COMPLETE (`67be68b`). Conflict resolution UX = ARCH-007 COMPLETE (`fcd614b`; contract `86baf12`). DUP-005 reject path remains ARCH-006 repository contract; UI resolution = ARCH-007 dialog.
+
+Baseline M7 close: DUP-001..005 PASS; ARCH-T027..033 PASS; ARCH7-T001..T015 PASS; Manual ARCH-007 5/5 PASS; JVM 506 PASS; connected 160 PASS.
 
 ### DUP-001 [ARCH-006]
 Exact lines / product snapshots / qty / additions / removals / item notes / `createdSequence` exact copy; new item+child UUIDs.
@@ -878,7 +880,7 @@ Restart -> recover draft.
 
 ### UI-006
 Ordini di oggi → dettaglio Accepted giornata corrente (ARCH-004 / ARCH-T010..026).
-Duplicazione da detail: ARCH-006 / D-046 COMPLETE (DUP-001..005, ARCH-T027..033) + ARCH-007 / D-047 READY (ARCH7-T001..T015). Ex “Archive → detail → duplicate”: **OBSOLETE**.
+Duplicazione da detail: ARCH-006 / D-046 COMPLETE (DUP-001..005, ARCH-T027..033) + ARCH-007 / D-047 COMPLETE (ARCH7-T001..T015). Ex “Archive → detail → duplicate”: **OBSOLETE**.
 
 ### UI-007
 Import -> preview -> confirm.

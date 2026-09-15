@@ -45,11 +45,11 @@
 ## Ordini di oggi / retention
 - [ ] today businessDate only
 - [ ] no historical archive UI requirement
-- [ ] RET-001 purge older ACCEPTED
-- [ ] DRAFT preserved across 05:00
-- [ ] current-day Accepted detail
+- [x] RET-001 purge older ACCEPTED
+- [x] DRAFT preserved across 05:00
+- [x] current-day Accepted detail
 - [ ] reprint (when PRINT ready)
-- [ ] duplicate current-day Accepted → DRAFT (D-046 / ARCH-006 COMPLETE; conflict UX D-047 / ARCH-007)
+- [x] duplicate current-day Accepted → DRAFT (D-046 / ARCH-006 COMPLETE `67be68b`; conflict UX D-047 / ARCH-007 COMPLETE `fcd614b`)
 
 ## Menu
 - [ ] manual products

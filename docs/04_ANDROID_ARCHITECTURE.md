@@ -258,8 +258,8 @@ Responsabilità:
 - today query (current businessDate);
 - daily purge (RET-001);
 - current-day Accepted detail;
-- duplicate current-day Accepted → new DRAFT (ARCH-006 / D-046 COMPLETE);
-- active-DRAFT conflict UX + atomic replace-and-duplicate (ARCH-007 / D-047 READY; code NOT STARTED).
+- duplicate current-day Accepted → new DRAFT (ARCH-006 / D-046 COMPLETE — `67be68b`);
+- active-DRAFT conflict UX + atomic replace-and-duplicate (ARCH-007 / D-047 COMPLETE — `fcd614b`).
 
 Non esporre Entity Room alla UI.
 
@@ -278,7 +278,7 @@ Core:
 - CalculateOrderTotal
 - AcceptOrder
 - DuplicateAcceptedOrder
-- ReplaceDraftWithAcceptedOrderDuplicate *(ARCH-007 recommended; NOT IMPLEMENTED — dedicated ONE Room txn; do not chain deleteDraft + duplicateAcceptedOrder)*
+- ReplaceDraftWithAcceptedOrderDuplicate *(ARCH-007 COMPLETE — dedicated ONE Room txn; do not chain deleteDraft + duplicateAcceptedOrder)*
 - GetTodayOrders
 - SearchArchive
 - AnalyzeMenuImport

@@ -132,7 +132,7 @@ Product decision: `NUOVO ORDINE DA QUESTO` = **REQUIRED** for current-business-d
 **Principle:** DUPLICAZIONE FEDELE MA INDIPENDENTE — nuovo DRAFT, nuovi UUID, contenuto/personalizzazioni/prezzi = snapshot origine; no catalog reread; no reprice; source ACCEPTED unchanged.
 
 **ARCH-006 = COMPLETE** (67be68b; transaction + CTA + success nav; conflict = typed reject only until ARCH-007 UX).
-**ARCH-007 conflict UX = frozen separately in D-047** (READY FOR IMPLEMENTATION; code NOT STARTED).
+**ARCH-007 = COMPLETE** (contract D-047 / `86baf12`; implementation `fcd614b`).
 
 Frozen field map:
 - `productId` / `additionId` / `ingredientId` = **COPY** exact source (null stays null; no name lookup / catalog resolve);
@@ -161,14 +161,16 @@ Success (no active DRAFT): open new DRAFT in standard NewOrder UI (not stay on d
 
 Schema: DB v2 unchanged; `sourceOrderId` already present; migration NONE.
 
-Tests: DUP-001..005 ACTIVE (ARCH-006); ARCH-T027..ARCH-T033 for guard/note/sequence/refs/rollback/nav/CTA. ARCH-007 tests = ARCH7-T001..T015 (D-047).
+Tests: DUP-001..005 PASS (ARCH-006); ARCH-T027..ARCH-T033 PASS; ARCH7-T001..T015 PASS (D-047 / ARCH-007).
 
 ### D-047 ARCH-007 active-DRAFT conflict UX freeze (2026-09-15)
 Product decision: when `NUOVO ORDINE DA QUESTO` hits an **active DRAFT** (including persisted empty DRAFT), show conflict dialog — not a terminal error-only UX.
 
 **Depends on:** ARCH-006 COMPLETE (67be68b). ARCH-006 no-active-DRAFT path **unchanged**.
 
-**ARCH-007 = READY FOR IMPLEMENTATION** (docs freeze only; code NOT STARTED).
+**ARCH-007 = COMPLETE** (docs freeze `86baf12`; implementation `fcd614b` — `feat: handle active draft duplication conflict`).
+
+Baseline close: Manual ARCH-007 5/5 PASS; JVM 506 PASS; connected 160 PASS; schema v2 unchanged; migration NONE.
 
 #### Dialog (frozen copy)
 - Title: `C'È GIÀ UN ORDINE IN CORSO`
@@ -224,8 +226,8 @@ Minimum typed outcomes/errors:
 #### Success navigation (replace)
 → standard NewOrder with **exactly** the new duplicated `draftId`. Old DRAFT must not exist.
 
-#### Architecture recommendation (document only — do not implement here)
-Dedicated repository API + use case, e.g. `ReplaceDraftWithAcceptedOrderDuplicate` (or equivalent), owning the single Room transaction. Do **not** chain separate `deleteDraft` + `duplicateAcceptedOrder` transactions.
+#### Architecture (implemented)
+Dedicated repository API + use case `ReplaceDraftWithAcceptedOrderDuplicate`, owning the single Room transaction. Do **not** chain separate `deleteDraft` + `duplicateAcceptedOrder` transactions.
 
 #### Schema
 DB v2 unchanged; migration NONE; no new DAO required beyond existing draft/order APIs used inside one txn.

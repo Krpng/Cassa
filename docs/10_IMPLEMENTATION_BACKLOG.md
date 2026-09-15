@@ -373,9 +373,9 @@ Demo M6:
 - preview non consuma numeri;
 - STAMPA visibile disabled.
 
-## M7 — Today / current-day Accepted detail / daily purge
+## M7 — Today / current-day Accepted detail / daily purge — COMPLETE
 
-> **M7 CHANGE-OF-SCOPE CONTRACT FREEZE.** Nessun archivio storico. Solo `ACCEPTED` della `currentBusinessDate`. Hard delete automatico dei giorni precedenti (RET-001).
+> **M7 COMPLETE** (HEAD `fcd614b`). Nessun archivio storico. Solo `ACCEPTED` della `currentBusinessDate`. Hard delete automatico dei giorni precedenti (RET-001). Duplication + conflict UX COMPLETE.
 
 ### ARCH-001 [P1] Today query/UI — COMPLETE / PRESERVED
 businessDate corrente; `ACCEPTED` only; `acceptedAt DESC`.
@@ -386,7 +386,7 @@ businessDate corrente; `ACCEPTED` only; `acceptedAt DESC`.
 ### ARCH-003 [P1] Number search — OBSOLETE
 > **CANCELLED BY PRODUCT SCOPE CHANGE.** Niente ricerca ordini cross-day.
 
-### ARCH-004 [P1] Accepted detail — REDEFINED / CTA FREEZE (D-045)
+### ARCH-004 [P1] Accepted detail — COMPLETE (D-045; edc3e9a)
 Dettaglio read-only di un `ACCEPTED` della **sola** giornata corrente.
 > Precedente significato “dettaglio archivio storico” superseded.
 
@@ -410,23 +410,24 @@ AC met: source guard; atomic txn; field map D-046; CTA VISIBLE+ENABLED; success 
 Schema: v2 unchanged / migration NONE.
 Test: DUP-001..005, ARCH-T027..ARCH-T033 — PASS.
 
-### ARCH-007 [P1] Draft conflict on duplicate — READY FOR IMPLEMENTATION (D-047)
-> Dipende da ARCH-006 COMPLETE. Docs freeze D-047. Code NOT STARTED.
+### ARCH-007 [P1] Draft conflict on duplicate — COMPLETE (D-047; contract 86baf12; impl fcd614b)
+> Dipende da ARCH-006 COMPLETE. Docs freeze D-047 (`86baf12`). Implementation COMPLETE (`fcd614b`).
 
-Owns:
+Delivered:
 - conflict dialog (`C'È GIÀ UN ORDINE IN CORSO` + RIPRENDI / ELIMINA DRAFT E DUPLICA / ANNULLA);
 - RIPRENDI → NewOrder(existingDraftId), zero writes (incl. empty persisted DRAFT);
 - ANNULLA → stay on detail, zero writes;
 - ELIMINA DRAFT E DUPLICA → ONE Room transaction replace (never dual-txn delete+duplicate);
 - typed outcomes (`Success` / `SourceUnavailable` / `DraftMissing` / `DraftChanged` / `PersistenceFailure`);
 - success nav → NewOrder(newDraftId);
+- rollback preserves old DRAFT; source ACCEPTED immutable;
 - ARCH-006 no-active-DRAFT path unchanged; D-046 duplication semantics preserved.
 
-Recommended API: `ReplaceDraftWithAcceptedOrderDuplicate` (or equivalent).
+API: `ReplaceDraftWithAcceptedOrderDuplicate`.
 Schema: v2 unchanged / migration NONE.
-Test: ARCH7-T001..ARCH7-T015.
+Test: ARCH7-T001..ARCH7-T015 — PASS (Manual ARCH-007 5/5; JVM 506; connected 160).
 
-Out of scope: printing; archive; merge DRAFT+duplicate; schema/migration; catalog reprice; multi-DRAFT.
+Out of scope (unchanged): printing; archive; merge DRAFT+duplicate; schema/migration; catalog reprice; multi-DRAFT.
 
 ### RET-001 [P0] Daily accepted-order purge — COMPLETE
 Hard delete `ACCEPTED` where `businessDate < currentBusinessDate`.
@@ -441,13 +442,15 @@ AC:
 
 Test: RET-T001..RET-T008.
 
-Demo M7 (aggiornato):
+Demo M7 (COMPLETE):
 - Ordini di oggi = solo giornata corrente;
 - dopo cambio businessDate, Accepted precedenti non più presenti;
-- dettaglio Accepted giornata corrente (ARCH-004 — CTA freeze D-045; implementazione NEXT when authorized).
+- dettaglio Accepted giornata corrente (ARCH-004);
+- duplicazione + conflict UX (ARCH-006/007).
 
-## M8 — Printing foundation
+## M8 — Printing foundation — NEXT
 
+> **NEXT milestone** after M7 COMPLETE. Do not start until explicitly authorized.
 ### PRINT-001 [P0] Printer contracts/models
 
 ### PRINT-002 [P0] PrintableDocument/ReceiptComposer

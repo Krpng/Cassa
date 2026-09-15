@@ -776,7 +776,7 @@ M5 does **not** implement or validate:
 - acceptance
 - order numbering
 - accepted-order archive (**CANCELLED** by M7 D-044; superseded by current-day only + RET-001)
-- duplication of accepted order (**ACTIVE** D-046 / ARCH-006 COMPLETE; D-047 / ARCH-007 READY FOR IMPLEMENTATION)
+- duplication of accepted order (**COMPLETE** D-046 / ARCH-006 `67be68b`; D-047 / ARCH-007 `fcd614b`)
 - fake printing
 - physical NETUM printing
 
@@ -890,30 +890,39 @@ Tests: ACCEPT-T008/T009/T020 PASS cover ACCEPT-002; ACCEPT-T010..012 remain prev
 
 ```yaml
 branch: main
-HEAD_at_freeze_docs: 67be68b
+HEAD_at_M7_COMPLETE: fcd614b
+M7: COMPLETE
 ARCH-001: COMPLETE / PRESERVED (Today = currentBusinessDate ACCEPTED only)
 ARCH-002: OBSOLETE (IERI / date picker)
 ARCH-003: OBSOLETE (cross-day number search)
 ARCH-004: COMPLETE (D-045 + edc3e9a)
 ARCH-005: OBSOLETE as historical archive
 ARCH-006: COMPLETE (D-046 + 67be68b)
-ARCH-007: READY FOR IMPLEMENTATION (D-047 docs freeze; code NOT STARTED)
+ARCH-007: COMPLETE (D-047 contract 86baf12 + impl fcd614b)
 RET-001: COMPLETE
 Home ARCHIVIO: REMOVED (M7 UX cleanup)
 ORDINI DI OGGI: PRESERVED
 Accepted retention: CURRENT BUSINESS DAY ONLY (hard delete; no hidden archive)
+historical_archive: OUT_OF_SCOPE
 DRAFT across 05:00: PRESERVED
 Draft accepted after 05:00: NEW businessDate at AcceptOrder
 numbering_state historical rows: NOT purged by RET-001
 Exact Android 05:00 job: NOT REQUIRED
-Schema: DB v2 UNCHANGED / migration NONE for RET-001 MVP
+Schema: DB v2 UNCHANGED / migration NONE
 Normative decision: D-044; ARCH-004 CTA freeze: D-045; duplication: D-046; conflict UX: D-047
+baseline_close:
+  ARCH7-T001..T015: PASS
+  DUP-001..005: PASS
+  ARCH-T027..033: PASS
+  Manual_ARCH-007: 5/5 PASS
+  JVM: 506 PASS
+  connected: 160 PASS
+NEXT: M8 — PRINT CORE / FAKE PRINTER
 ```
 
 Do **not** resurrect ARCH-002/003/005.
-Do **not** implement PRINT real until authorized.
-Do **not** re-open ARCH-006 contract (COMPLETE).
-Do **not** implement ARCH-007 until explicitly authorized after D-047 (docs READY).
+Do **not** implement PRINT until explicitly authorized (M8 NEXT).
+Do **not** re-open ARCH-006/007 contracts (COMPLETE).
 
 ## 27. ARCH-004 CTA / NAVIGATION CONTRACT FREEZE (2026-09-15)
 
@@ -973,8 +982,10 @@ ARCH-006 no-active-DRAFT path is COMPLETE and must remain unchanged by ARCH-007.
 ```yaml
 decision: D-047
 HEAD_at_freeze_docs: 67be68b
+contract_commit: 86baf12
+implementation_COMPLETE: fcd614b
 depends_on: ARCH-006 COMPLETE
-ARCH-007: READY FOR IMPLEMENTATION (code NOT STARTED)
+ARCH-007: COMPLETE
 trigger: NUOVO_ORDINE_DA_QUESTO + active DRAFT (incl. empty persisted)
 dialog_title: C'È GIÀ UN ORDINE IN CORSO
 actions:
@@ -995,12 +1006,39 @@ typed_outcomes:
   - DraftMissing
   - DraftChanged
   - PersistenceFailure
-recommended_api: ReplaceDraftWithAcceptedOrderDuplicate
+api: ReplaceDraftWithAcceptedOrderDuplicate
 schema: DB_v2 UNCHANGED
 migration: NONE
-tests: ARCH7-T001..T015
+tests: ARCH7-T001..T015 PASS
 out_of_scope: printing / archive / merge / multi-DRAFT / schema
 ```
 
-Do **not** implement ARCH-007 until explicitly authorized after this freeze.
 Do **not** change ARCH-006 duplicate semantics or no-active-DRAFT success path.
+
+## 30. M7 COMPLETE — HANDOFF TO M8 (2026-09-15)
+
+```yaml
+M7: COMPLETE
+HEAD: fcd614b
+commits:
+  ARCH-006_impl: 67be68b  # feat: duplicate accepted order into draft
+  ARCH-007_contract: 86baf12  # docs: freeze active draft conflict flow
+  ARCH-007_impl: fcd614b  # feat: handle active draft duplication conflict
+delivered:
+  - current-day Accepted only (ARCH-001)
+  - RET-001 purge previous business-day ACCEPTED on lifecycle foreground/use
+  - numbering_state preserved
+  - current-day Accepted detail read-only (ARCH-004)
+  - duplicate Accepted -> new DRAFT (ARCH-006)
+  - active DRAFT conflict UX (ARCH-007)
+  - RIPRENDI / ELIMINA DRAFT E DUPLICA / ANNULLA
+  - atomic replace + rollback preserves old DRAFT
+  - empty persisted DRAFT handled
+  - source ACCEPTED immutable
+schema: v2 UNCHANGED
+migration: NONE
+historical_archive: OUT_OF_SCOPE
+NEXT: M8 — PRINT CORE / FAKE PRINTER
+```
+
+Do **not** start M8 until explicitly authorized.

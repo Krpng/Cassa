@@ -664,9 +664,9 @@ Nessun controllo di modifica:
 - edit note / additions / removals / manual price;
 - `ACCETTA`, `COMPLETA`.
 
-## 16. Duplicazione — READY (D-046 / ARCH-006 + D-047 / ARCH-007)
+## 16. Duplicazione — COMPLETE (D-046 / ARCH-006 + D-047 / ARCH-007)
 
-> **ACTIVE.** `NUOVO ORDINE DA QUESTO` = REQUIRED da Accepted Order Detail (solo current-day ACCEPTED). Contratto campo/transazione: `docs/02_BUSINESS_RULES.md` §23 + D-046 + D-047.
+> **COMPLETE.** `NUOVO ORDINE DA QUESTO` = REQUIRED da Accepted Order Detail (solo current-day ACCEPTED). Contratto: `docs/02_BUSINESS_RULES.md` §23 + D-046 + D-047. Implementazione: ARCH-006 `67be68b`; ARCH-007 `fcd614b` (contract freeze `86baf12`).
 
 ### CTA (ARCH-006 — COMPLETE)
 
@@ -681,7 +681,7 @@ Sul detail valido (`ACCEPTED` + currentBusinessDate):
 Duplicate success → apri **direttamente** il nuovo DRAFT nella **NewOrder** UI standard.
 Non restare sul detail. Non andare Home. Non creare un secondo editor.
 
-### Conflitto DRAFT — dialog (ARCH-007 / D-047)
+### Conflitto DRAFT — dialog (ARCH-007 / D-047 — COMPLETE)
 
 Se esiste **active DRAFT** (incluso DRAFT vuoto persistito `draftSlot=1`):
 

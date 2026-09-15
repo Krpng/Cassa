@@ -25,7 +25,7 @@ Dopo `ACCEPTED`:
 - non ricalcolare da menu corrente;
 - consentire lettura;
 - stampa / ristampa funzionale con label UI **`STAMPA`** (mai `RISTAMPA`) quando PRINT in scope;
-- duplicazione current-day = **ACTIVE** (ARCH-006 COMPLETE / ARCH-007 READY, D-046 + D-047), non parte del solo ARCH-004 (che non mostrava ancora la CTA).
+- duplicazione current-day = **COMPLETE** (ARCH-006 `67be68b` / ARCH-007 `fcd614b`, D-046 + D-047), non parte del solo ARCH-004 (che non mostrava ancora la CTA).
 
 La regola deve essere enforced nel dominio/repository, non solo nascondendo pulsanti.
 
@@ -814,9 +814,9 @@ Dettaglio Accepted (**ARCH-004 FREEZE** — D-045):
 - **non** mostrare `RISTAMPA`, `NUOVO ORDINE DA QUESTO`, controlli edit / `ACCETTA` / `COMPLETA`;
 - missing / DRAFT / old-or-purged → Unavailable (observe; no crash).
 
-Duplicazione (ARCH-006/007, **D-046** + **D-047**): ACTIVE — `NUOVO ORDINE DA QUESTO` required da Accepted detail giornata corrente. ARCH-006 = COMPLETE (duplicate txn + CTA). ARCH-007 = conflict UX READY FOR IMPLEMENTATION (D-047; code NOT STARTED).
+Duplicazione (ARCH-006/007, **D-046** + **D-047**): **COMPLETE** — `NUOVO ORDINE DA QUESTO` da Accepted detail giornata corrente. ARCH-006 = COMPLETE (`67be68b`). ARCH-007 = COMPLETE (`fcd614b`; conflict UX + atomic replace).
 
-## 23. Duplicazione — READY (D-046 + D-047)
+## 23. Duplicazione — COMPLETE (D-046 + D-047)
 
 > **ACTIVE PRODUCT REQUIREMENT.** Congelato in D-046 (duplicate) + D-047 (conflict UX). Scope: solo `ACCEPTED` con `businessDate = currentBusinessDate` da Accepted Order Detail. Principio: **DUPLICAZIONE FEDELE MA INDIPENDENTE**.
 
@@ -911,7 +911,7 @@ Typed outcomes (no silent success; revalidate in Room, non solo UI cache):
 - `DraftChanged`
 - `PersistenceFailure`
 
-API raccomandata (document only): use case/repository dedicato tipo `ReplaceDraftWithAcceptedOrderDuplicate`.
+API raccomandata (implementata): use case/repository dedicato `ReplaceDraftWithAcceptedOrderDuplicate`.
 
 ### Source immutability
 Dopo duplicate o replace: source ACCEPTED invariata (snapshot/children/`updatedAt`).
