@@ -1223,7 +1223,7 @@ class NewOrderViewModelTest {
         }
 
     @Test
-    fun `accepted order is never exposed as an editable draft`() = runTest(mainDispatcher) {
+    fun `ACCEPT-T019 accepted order is never exposed as an editable draft`() = runTest(mainDispatcher) {
         val accepted = draft().copy(status = OrderStatus.ACCEPTED)
         val repository = FakeOrderRepository(MutableStateFlow(accepted))
 

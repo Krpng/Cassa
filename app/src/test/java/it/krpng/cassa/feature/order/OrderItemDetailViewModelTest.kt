@@ -182,6 +182,21 @@ class OrderItemDetailViewModelTest {
     }
 
     @Test
+    fun `ACCEPT-T019 accepted order maps to unavailable without save`() = runTest(dispatcher) {
+        val acceptedRepository = FakeOrderRepository(draft().copy(status = OrderStatus.ACCEPTED))
+        val viewModel = viewModel(acceptedRepository)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertFalse(state.canSave)
+        assertEquals("Questo ordine non è modificabile.", state.errorMessage)
+        assertTrue(state.productName.isEmpty())
+        assertTrue(acceptedRepository.updates.isEmpty())
+        viewModel.save()
+        assertTrue(acceptedRepository.updates.isEmpty())
+    }
+
+    @Test
     fun `accepted order and item from another order are not editable`() = runTest(dispatcher) {
         val acceptedRepository = FakeOrderRepository(draft().copy(status = OrderStatus.ACCEPTED))
         val acceptedViewModel = viewModel(acceptedRepository)

@@ -153,6 +153,40 @@ class OrderItemDetailScreenTest {
     }
 
     @Test
+    fun acceptT019AcceptedOrderHidesEditorAndSave() {
+        composeRule.setContent {
+            MaterialTheme {
+                OrderItemDetailScreen(
+                    state = OrderItemDetailUiState(
+                        isLoading = false,
+                        canSave = false,
+                        errorMessage = "Questo ordine non è modificabile.",
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onQuantityChanged = {},
+                    onDecreaseQuantity = {},
+                    onIncreaseQuantity = {},
+                    onNoteChanged = {},
+                    onStartManualPriceEdit = {},
+                    onManualPriceChanged = {},
+                    onSave = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Questo ordine non è modificabile.").assertIsDisplayed()
+        composeRule.onNodeWithText("SALVA").assertDoesNotExist()
+        composeRule.onNodeWithText("QUANTITÀ").assertDoesNotExist()
+        composeRule.onNodeWithText("NOTA").assertDoesNotExist()
+        composeRule.onNodeWithText("PREZZO MANUALE").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Diminuisci quantità").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Aumenta quantità").assertDoesNotExist()
+        composeRule.onNodeWithText("ACCETTA").assertDoesNotExist()
+        composeRule.onNodeWithText("COMPLETA").assertDoesNotExist()
+    }
+
+    @Test
     fun pizzaAdditionsShowSelectionAndAcceptZeroPriceWithAccessibleToggle() {
         var toggledId: Long? = null
         composeRule.setContent {

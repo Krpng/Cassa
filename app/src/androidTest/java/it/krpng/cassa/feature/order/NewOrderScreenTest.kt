@@ -347,6 +347,45 @@ class NewOrderScreenTest {
     }
 
     @Test
+    fun acceptT019AcceptedOrderHidesAllEditAndCompletaControls() {
+        var retryClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                NewOrderScreen(
+                    state = NewOrderUiState.NotEditable,
+                    onBack = {},
+                    onRetry = { retryClicks += 1 },
+                    onSearchQueryChanged = {},
+                    onFilterSelected = {},
+                    onProductSelected = {},
+                    onQuickAdd = {},
+                    onDismissQuickAddError = {},
+                    onCompleta = {},
+                    onOpenNote = {},
+                    onOpenSearch = {},
+                    onIncreaseLineQuantity = {},
+                    onDecreaseLineQuantity = {},
+                    onRemoveLine = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Questo ordine non è una bozza modificabile.")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("COMPLETA").assertDoesNotExist()
+        composeRule.onNodeWithText("NOTE").assertDoesNotExist()
+        composeRule.onNodeWithText("CERCA").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Cerca prodotti").assertDoesNotExist()
+        composeRule.onNodeWithText("RIMUOVI").assertDoesNotExist()
+        composeRule.onNodeWithText("ORDINE CORRENTE").assertDoesNotExist()
+        composeRule.onNodeWithText("TOTALE").assertDoesNotExist()
+        composeRule.onNodeWithText("ACCETTA").assertDoesNotExist()
+        composeRule.onNodeWithText("STAMPA").assertDoesNotExist()
+        composeRule.onNodeWithText("RIPROVA").performClick()
+        composeRule.runOnIdle { assertEquals(1, retryClicks) }
+    }
+
+    @Test
     fun acceptedOrderIsBlockedAndRetryRemainsAvailable() {
         var retryClicks = 0
         composeRule.setContent {
