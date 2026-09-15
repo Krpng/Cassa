@@ -427,6 +427,109 @@ NONE.
 
 Hardware/encoder-only items remain deferred (PRINT-005+ / M9): code page, `€` glyph, cut/feed, physical calibration.
 
+### D-052 PRINT-005 EscPosEncoder contract freeze (2026-09-15)
+After PRINT-004 COMPLETE (`ba2c8e8`): **PRINT-005 = READY FOR IMPLEMENTATION**.
+
+**Owns:** pure-Kotlin `EscPosEncoder` mapping `PrintableDocument` + `PrinterProfile` → `EncodeResult` (success bytes or typed encode failure) for later `PrinterDriver.print` (architecture §20). Generic M8 ESC/POS baseline — **not** a NETUM compatibility declaration. Physical verification / calibration = **M9 / HW-001**.
+
+#### Boundary
+- Pipeline: `Order snapshot → ReceiptComposer → PrintableDocument → EscPosEncoder → bytes → PrinterDriver → transport`.
+- Input = `PrintableDocument` + `PrinterProfile`.
+- Output = `EncodeResult` (not raw exceptions as normal business flow).
+- Deterministic, stateless, transport-/Android-/Bluetooth-/NETUM-independent.
+- Same document + same relevant profile fields ⇒ exact same success bytes.
+- Forbidden: `BluetoothSocket`, Android Context, `PrinterDriver` impl, NETUM vendor tables, pairing/retries/reconnect, OS locale, clock, random, mutable globals.
+- **No** layout/wrapping/reprice/re-centering (PRINT-004 / D-051 owns text).
+- Schema: **DB v2 unchanged**; migration **NONE**; no `print_jobs`.
+
+#### Consumed PrinterProfile fields
+- **Consumes:** `codePage`, `feedLines`, `supportsCut`, `cutCommandVariant`.
+- **Does not use for layout:** `charsPerLine`, `paperWidthMm`, `pricePrintMode`.
+
+#### Code page / charset (M8)
+- `PrinterProfile.codePage` = **JVM Charset name** (conceptual examples: `CP437`, `windows-1252`, `ISO-8859-1`).
+- Used **only** for `text → encoded bytes`.
+- PRINT-005 does **not** emit `ESC t n` or any hardware printer code-page select.
+- Charset → physical printer page selector mapping = **DEFERRED TO M9**.
+- Unknown / unavailable charset → `EncodeError.UnsupportedEncoding` (typed; no raw charset exception as business flow).
+- Physical NETUM charset calibration = M9 — not frozen here.
+
+#### Text normalization / unencodable (printing spec §24 + this freeze)
+Before charset encode:
+1. smart single quotes → ASCII `'`;
+2. smart double quotes → ASCII `"`;
+3. unicode dash variants → ASCII `-`.
+Then:
+- `€` if still not representable in selected charset → replace with literal ASCII `EUR`;
+- any other still-unrepresentable character → typed failure `EncodeError.UnencodableCharacter` (or equivalent under `UnsupportedEncoding` naming if kept as single family — prefer distinct `UnencodableCharacter`).
+- Encoder conceptually uses **REPORT** for malformed/unmappable input.
+- **Forbidden:** silent `?` replacement; silent character deletion.
+
+#### EncodeResult / EncodeError
+```text
+EncodeResult
+  Success(bytes: ByteArray)
+  Failure(error: EncodeError)
+
+EncodeError (minimum)
+  UnsupportedEncoding
+  UnencodableCharacter
+  InvalidProfile
+```
+- Do **not** reshape `PrinterResult` / `PrintResult` solely to carry `ByteArray`.
+- Mapping `EncodeError` → `PrinterError` / service result = **DEFERRED TO PRINT-007**.
+
+#### Initialization
+- Every encoded document starts with `ESC @` = `0x1B 0x40`.
+- Generic M8 baseline; physical acceptance verified in M9.
+
+#### Emphasis (resolves §23 vs D-051 conflict)
+- `NORMAL` → `ESC E 0` = `0x1B 0x45 0x00`
+- `EMPHASIZED` → `ESC E 1` = `0x1B 0x45 0x01` (**bold only**)
+- **No** double-width, double-height, alignment, or underline commands (would break D-051 character-width assumptions; header centering already textual).
+- After `ESC @`, emphasis state = NORMAL.
+- Emit emphasis command **only on state change**.
+- After all document lines, force final `ESC E 0` (deterministic final reset).
+
+#### Line ending
+- **LF only** = `0x0A` after **every** `PrintableLine`, including the last.
+- Empty `PrintableLine` → one LF.
+- Empty `PrintableDocument` → no document-line LF; init / final-reset / feed / cut still apply per rules below.
+- **No CRLF.**
+
+#### Feed
+- `feedLines` = count of **additional** LF bytes appended after document lines (and after final emphasis reset).
+- `feedLines = 0` → none; `feedLines = N` → `N × 0x0A`.
+- **Do not** use `ESC d n` in M8.
+- `feedLines < 0` → `EncodeError.InvalidProfile` (no silent clamp).
+
+#### Cut
+- `supportsCut = false` → **no** cut bytes; `cutCommandVariant` ignored.
+- `supportsCut = true` → only frozen variants (exact string match on existing `cutCommandVariant: String?`):
+  - `FULL` → `GS V 0` = `0x1D 0x56 0x00`
+  - `PARTIAL` → `GS V 1` = `0x1D 0x56 0x01`
+- `supportsCut = true` + missing/null/unknown variant → `EncodeError.InvalidProfile` (no automatic cutter choice).
+- Physical cutter support (NETUM often tear-only) = M9 profile calibration (`supportsCut=false` remains valid runtime).
+
+#### Command order (deterministic)
+1. `ESC @`
+2. For each line: optional emphasis transition + encoded text + LF
+3. Final `ESC E 0`
+4. `feedLines` × LF
+5. Optional cut command
+No other commands.
+
+#### Owned tests
+No existing numbered PRINT-T IDs. Implementation owns **new** byte-for-byte unit tests at least for:
+ESC @; NORMAL line; EMPHASIZED line; NORMAL→EMPHASIZED→NORMAL transitions; final NORMAL reset; LF after every line; empty line; empty document; deterministic repeated encode; known charset; unknown charset → UnsupportedEncoding; smart-quote normalize; unicode-dash normalize; €→EUR when required; remaining unencodable → typed failure; feedLines 0 / >0 / <0→InvalidProfile; supportsCut=false no cut; FULL cut; PARTIAL cut; supportsCut=true + missing/unknown variant → InvalidProfile; no truncation/silent `?`.
+Do **not** mark any test PASS in this freeze document.
+
+#### Out of scope
+`ESC t` code-page selection; NETUM-specific mappings; physical charset calibration; Bluetooth; concrete `PrinterDriver`; FakePrinter; PrinterService; Mutex; discovery/pairing/reconnect/permissions/UI; Room; migrations.
+
+**Open questions blocking PRINT-005:**
+NONE.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness

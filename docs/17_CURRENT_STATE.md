@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001/002/003 COMPLETE; PRINT-004 READY — D-051)
+NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001..004 COMPLETE; PRINT-005 READY — D-052)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: PRINT-004 READY (D-051)
+first_M8_task_next: PRINT-005 READY (D-052)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1169,3 +1169,39 @@ M9: NOT STARTED
 
 Do **not** implement PRINT-004 until explicitly authorized.
 Do **not** start PRINT-005+ / M9 in PRINT-004.
+
+## 35. PRINT-005 CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-052
+HEAD_at_freeze_docs: ba2c8e8
+PRINT-001..004: COMPLETE
+PRINT-005: READY FOR IMPLEMENTATION
+title: ESC/POS encoder (EscPosEncoder)
+owns:
+  - EncodeResult Success(bytes) / Failure(EncodeError)
+  - EncodeError: UnsupportedEncoding, UnencodableCharacter, InvalidProfile
+  - codePage = JVM Charset name (text bytes only; no ESC t)
+  - text normalize + EUR fallback + REPORT unmappable
+  - ESC @ init; ESC E bold-only transitions + final NORMAL
+  - LF after every line; feed = N x LF; no ESC d n
+  - cut false=none; FULL=GS V 0; PARTIAL=GS V 1
+  - frozen command order; deterministic bytes
+excludes:
+  - ESC t / NETUM charset table (M9)
+  - FakePrinter / PrinterService Mutex (PRINT-006/007)
+  - EncodeError -> PrinterError mapping (PRINT-007)
+  - Bluetooth / NETUM / STAMPA (M9)
+  - align / double-size / underline
+  - schema / print_jobs / migration
+schema: DB_v2 UNCHANGED
+migration: NONE
+blocking_open_questions: NONE
+PRINT-006+: NOT STARTED
+M9: NOT STARTED
+```
+
+**FINAL REFINEMENT:** all former D-052 open questions resolved. Hardware/NETUM verification deferred to M9. Open questions blocking PRINT-005: **NONE**.
+
+Do **not** implement PRINT-005 until explicitly authorized.
+Do **not** start PRINT-006+ / M9 in PRINT-005.

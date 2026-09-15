@@ -408,8 +408,8 @@ interface ReceiptComposer {
 ```
 
 Implementazioni (later tasks):
-- `ReceiptComposer` body / text layout = **PRINT-004 (D-051 READY)** — layout rules frozen; no ESC/POS;
-- `EscPosEncoder` = PRINT-005;
+- `ReceiptComposer` body / text layout = **PRINT-004 (D-051 COMPLETE)**;
+- `EscPosEncoder` = **PRINT-005 (D-052 READY)** — generic M8 ESC/POS: JVM charset encode, `ESC @`, bold-only `ESC E`, LF lines/feed, optional `GS V` cut, `EncodeResult`; no `ESC t` / no double-size/align; physical verify = M9;
 - `FakePrinterDriver` = PRINT-006;
 - `BluetoothEscPosPrinterDriver` = M9.
 ## 21. Concorrenza stampa

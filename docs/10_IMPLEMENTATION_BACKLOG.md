@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001/002/003 **COMPLETE** (`bb71f72` tip). Next authorized task: **PRINT-004** (D-051). Do not start PRINT-005+ until PRINT-004 is COMPLETE and authorized.
+> PRINT-001..004 **COMPLETE** (`ba2c8e8` tip). Next authorized task: **PRINT-005** EscPosEncoder — **READY** (D-052). Do not start PRINT-006+ / M9 until PRINT-005 is COMPLETE and authorized.
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -517,33 +517,34 @@ Demo M7 (COMPLETE):
 
 **Demo:** none required (preference wiring).
 
-### PRINT-004 [P0] Formatter draft/final — READY FOR IMPLEMENTATION (D-051)
-> Implements `ReceiptComposer` body: Order snapshot → `PrintableDocument` text layout per `docs/07_PRINTING_SPEC.md` §§4–15. Pure Kotlin. No ESC/POS bytes, no FakePrinter, no Bluetooth, no UI, no schema.
+### PRINT-004 [P0] Formatter draft/final — COMPLETE (D-051)
+> Complete on `ba2c8e8`. `DefaultReceiptComposer` + PRINT-T001..T008, T010..T014.
 
-**Depends on:** PRINT-001/002/003 COMPLETE (`bb71f72`). Contracts: `ReceiptComposer` / `PrintableDocument` (D-049); `PricePrintMode` DataStore SoT (D-050).
+### PRINT-005 [P0] ESC/POS encoder — READY FOR IMPLEMENTATION (D-052)
+> Pure-Kotlin `EscPosEncoder`: `PrintableDocument` + `PrinterProfile` → `EncodeResult`. Generic M8 ESC/POS baseline. No FakePrinter, no PrinterService, no Bluetooth/NETUM, no UI, no schema.
 
-**Owns (AC):** see **D-051**. Summary:
-1. Implement `ReceiptComposer.compose(order, kind, pricePrintMode, charsPerLine)`.
-2. DRAFT / FINAL / reprint(=FINAL) content rules; snapshot-only; no catalog reprice.
-3. Sections PIZZE → FRITTURA → BIBITE; empty omitted; `createdSequence` ASC (+ `id` tie-break).
-4. Item/addition/removal/note/total layout; DETAILED vs TOTAL_ONLY (incl. §11 blank between TOTAL_ONLY items); DETAILED price placement fit/wrap rule; money `0,00`/`1000,00` (no grouping, no €); wrapping; `PrintEmphasis` NORMAL/EMPHASIZED only.
-5. Deterministic for same inputs.
-6. Schema v2 unchanged; migration NONE.
+**Depends on:** PRINT-004 COMPLETE (`ba2c8e8`). Contract: **D-052**.
 
-**Owned tests:** PRINT-T001..T008, T010..T014 (not marked PASS until implementation).
-**Not owned:** PRINT-T009 (mutex/service), PRINT-T020..027 (service/BT/Fake).
+**Owns (AC):** see **D-052**. Summary:
+1. `EncodeResult.Success(bytes)` / `Failure(EncodeError)`; errors at least `UnsupportedEncoding`, `UnencodableCharacter`, `InvalidProfile`.
+2. `codePage` = JVM Charset name for text bytes only; **no** `ESC t`; physical page select → M9.
+3. Normalize smart quotes/dashes; `€`→`EUR` when unrepresentable; other unmappable → typed failure; no silent `?`/deletion; REPORT semantics.
+4. Init `ESC @`; emphasis bold-only `ESC E 0/1` with transition-only + final NORMAL reset; **no** align/size/underline.
+5. LF (`0x0A`) after every PrintableLine; feed = N×LF; no `ESC d n`; `feedLines < 0` → InvalidProfile.
+6. Cut: false→none; true→`FULL`/`PARTIAL` only (`GS V 0` / `GS V 1`); missing/unknown → InvalidProfile.
+7. Command order frozen; deterministic; schema v2 unchanged; migration NONE.
 
-**Explicitly deferred:** EscPosEncoder (PRINT-005); Fake (PRINT-006); PrinterService+Mutex (PRINT-007); M9 BT/NETUM/UI/STAMPA enable; feed/cut bytes; code page.
+**Owned tests:** new byte-for-byte unit tests listed in D-052 (no existing PRINT-T IDs). Do not claim PRINT-T001..027.
 
-**Demo:** unit golden/layout tests on PrintableDocument lines (no hardware).
+**Explicitly deferred:** Fake (PRINT-006); PrinterService+Mutex + EncodeError→PrinterError mapping (PRINT-007); M9 BT/NETUM/`ESC t`/physical calibration.
 
-### PRINT-005 [P0] ESC/POS encoder
+**Demo:** unit golden byte vectors (no hardware).
 
 ### PRINT-006 [P0] FakePrinterDriver
 
 ### PRINT-007 [P0] PrinterService + Mutex
 
-Test PRINT-T001..014, 024..027 (owned by PRINT-004 / PRINT-006/007 / M9 — not PRINT-002 gate).
+Test PRINT-T001..014 owned by PRINT-004 (COMPLETE). PRINT-T009 / T020..027 owned by PRINT-006/007 / M9 — not PRINT-005.
 
 Demo M8:
 - fake print completo senza hardware (after PRINT-006/007).
