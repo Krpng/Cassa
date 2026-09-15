@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001..005 **COMPLETE** (`cab2c1a` tip). Next authorized task: **PRINT-006** FakePrinterDriver — **READY** (D-053). Do not start PRINT-007 / M9 until PRINT-006 is COMPLETE and authorized.
+> PRINT-001..006 **COMPLETE** (`0a98b0f` tip). Next authorized task: **PRINT-007** PrinterService + Mutex — **READY** (D-054). Do not start M9 until PRINT-007 is COMPLETE and authorized.
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -523,33 +523,30 @@ Demo M7 (COMPLETE):
 ### PRINT-005 [P0] ESC/POS encoder — COMPLETE (D-052)
 > Complete on `cab2c1a`. `DefaultEscPosEncoder` + EncodeResult/EncodeError + byte-for-byte unit tests.
 
-### PRINT-006 [P0] FakePrinterDriver — READY FOR IMPLEMENTATION (D-053)
-> Pure-Kotlin `FakePrinterDriver` implementing `PrinterDriver` for tests without hardware. Captures encoded bytes; FIFO one-shot failure injection; no Service/Mutex/BT/NETUM/UI/schema.
+### PRINT-006 [P0] FakePrinterDriver — COMPLETE (D-053)
+> Complete on `0a98b0f`. Pure-Kotlin `FakePrinterDriver` + PRINT-T026.
 
-**Depends on:** PRINT-005 COMPLETE (`cab2c1a`). Contract: **D-053**.
+### PRINT-007 [P0] PrinterService + Mutex — READY FOR IMPLEMENTATION (D-054)
+> Production `PrinterService` + per-instance Mutex (whole job). `PrinterProfileProvider` abstraction; Fake + static test profile. No Bluetooth/NETUM/UI/schema; no invented NETUM defaults.
 
-**Owns (AC):** see **D-053**. Summary:
-1. Initial DISCONNECTED; `print` requires connect; disconnected print → `ConnectionLost`, no capture, no queue consume.
-2. Idempotent connect/disconnect; connected connect does not consume connect queue; disconnect clears neither history nor queues.
-3. `enqueueConnectResult` / `enqueuePrintResult` FIFO one-shot; empty → Success.
-4. Ordered `capturedPayloads` with defensive copies; capture before returning print result; derived last/count; no profile recording.
-5. Connect inject: Timeout/ConnectionFailed/PrinterNotConfigured; Print inject: Timeout/ConnectionLost/PrintFailed/PrinterNotConfigured; ConnectionLost → disconnected.
-6. `isConnected` read-only; no public `PrinterState`; not thread-safe; Mutex → PRINT-007.
-7. Schema v2 unchanged; migration NONE.
+**Depends on:** PRINT-006 COMPLETE (`0a98b0f`). Contract: **D-054**.
 
-**Owned tests:** PRINT-T026 + Fake unit list in D-053 (not PASS until implementation).
-**Not owned:** PRINT-T020/T022/T009/T024 → PRINT-007; T021/T023/T025/T027 → PRINT-007/M9.
+**Owns (AC):** see **D-054**. Summary:
+1. Implement existing `printDraft` / `printAccepted` / `testPrint` without signature changes.
+2. Obtain profile only via `PrinterProfileProvider` (not configured → `PrinterNotConfigured`); real provider = M9.
+3. Draft→DRAFT compose; Accepted/reprint→FINAL; testPrint = synthetic lines (TEST STAMPANTE / Cassa / accents+€); no Order access on testPrint.
+4. EncodeError one-to-one → `UnsupportedEncoding` / `UnencodableCharacter` / `InvalidPrinterProfile`; driver errors propagate unchanged.
+5. Eligibility: missing → `OrderNotFound`; wrong status → `InvalidOrderState`.
+6. Whole job in `mutex.withLock`; connect only after successful encode; `disconnect()` in `finally` after connect attempt; no retry/reconnect.
+7. Never call `AcceptOrder`; no Room/numbering mutations; schema v2 unchanged; no STAMPA enable.
 
-**Explicitly deferred:** PrinterService+Mutex (PRINT-007); BT/NETUM (M9).
+**Owned tests:** PRINT-T009, T020, T022, T024, T027 + service invariants of T023/T025.
+**Not owned / M9:** T021; UI retry; STAMPA enable; concrete profile provider; Accept+print wiring.
+**Already PASS:** PRINT-T026 (PRINT-006).
 
-**Demo:** unit Fake capture + injected Timeout (no hardware).
+**Blocking open questions:** NONE.
 
-### PRINT-007 [P0] PrinterService + Mutex
-
-Test PRINT-T026 owned by PRINT-006. PRINT-T009/T020/T022/T024 → PRINT-007; T021/T023/T025/T027 → PRINT-007/M9.
-
-Demo M8:
-- fake print completo senza hardware (after PRINT-006/007).
+**Demo M8:** fake print completo senza hardware (static/fake profile provider + FakePrinterDriver).
 ## M9 — Bluetooth NETUM
 
 > Physical printer / Bluetooth / NETUM. **NOT STARTED.** Must not begin in PRINT-002.

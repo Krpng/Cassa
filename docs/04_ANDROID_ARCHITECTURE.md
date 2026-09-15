@@ -410,11 +410,12 @@ interface ReceiptComposer {
 Implementazioni (later tasks):
 - `ReceiptComposer` body / text layout = **PRINT-004 (D-051 COMPLETE)**;
 - `EscPosEncoder` = **PRINT-005 (D-052 COMPLETE)**;
-- `FakePrinterDriver` = **PRINT-006 (D-053 READY)** — PrinterDriver fake: connect-required print, FIFO inject, ordered payload history with defensive copies, `isConnected` only (no domain PrinterState); Mutex/service = PRINT-007;
-- `BluetoothEscPosPrinterDriver` = M9.
+- `FakePrinterDriver` = **PRINT-006 (D-053 COMPLETE)** — PrinterDriver fake: connect-required print, FIFO inject, ordered payload history with defensive copies, `isConnected` only (no domain PrinterState);
+- `PrinterService` + `Mutex` + `PrinterProfileProvider` = **PRINT-007 (D-054 READY)** — whole-job Mutex; abstract profile provider (concrete = M9); EncodeError one-to-one map; synthetic testPrint; no STAMPA/BT/NETUM;
+- `BluetoothEscPosPrinterDriver` + concrete profile provider = M9.
 ## 21. Concorrenza stampa
 
-`PrinterService` deve serializzare le stampe con `Mutex`.
+`PrinterService` deve serializzare le stampe con `Mutex` (D-054: **one Mutex per service instance**; entire print job inside `withLock`, including compose/encode/driver lifecycle).
 
 La UI disabilita i pulsanti mentre stampa, ma la protezione reale è anche nel servizio.
 
@@ -453,6 +454,11 @@ Printer:
 - ConnectionLost
 - Timeout
 - PrintFailed
+- UnsupportedEncoding (**D-054** / EncodeError map)
+- UnencodableCharacter (**D-054**)
+- InvalidPrinterProfile (**D-054**; from EncodeError.InvalidProfile)
+- OrderNotFound (**D-054** eligibility)
+- InvalidOrderState (**D-054** eligibility)
 - Unknown
 
 Non propagare eccezioni raw alla UI.

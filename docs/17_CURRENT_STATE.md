@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001..005 COMPLETE; PRINT-006 READY — D-053)
+NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001..006 COMPLETE; PRINT-007 READY — D-054)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: PRINT-006 READY (D-053)
+first_M8_task_next: PRINT-007 READY (D-054)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1212,7 +1212,8 @@ Do **not** start PRINT-006+ / M9 in PRINT-005.
 decision: D-053
 HEAD_at_freeze_docs: cab2c1a
 PRINT-001..005: COMPLETE
-PRINT-006: READY FOR IMPLEMENTATION
+PRINT-006: COMPLETE
+impl_commit: 0a98b0f
 title: FakePrinterDriver
 owns:
   - PrinterDriver fake (no Service/Mutex)
@@ -1221,7 +1222,7 @@ owns:
   - FIFO one-shot enqueueConnectResult/enqueuePrintResult
   - ordered capturedPayloads + defensive copies
   - isConnected read-only (no domain PrinterState)
-  - PRINT-T026
+  - PRINT-T026 PASS
 excludes:
   - PrinterService / Mutex (PRINT-007)
   - PRINT-T020/T022/T009/T024 (PRINT-007)
@@ -1230,11 +1231,44 @@ excludes:
 schema: DB_v2 UNCHANGED
 migration: NONE
 blocking_open_questions: NONE
-PRINT-007: NOT STARTED
+PRINT-007: READY (D-054)
 M9: NOT STARTED
 ```
 
-**FINAL REFINEMENT:** all former D-053 open questions resolved. Test-plan check: T020/T022 under Printer service — no Fake contradiction. Open questions blocking PRINT-006: **NONE**.
+**FINAL REFINEMENT:** all former D-053 open questions resolved. Implementation COMPLETE on `0a98b0f`.
 
-Do **not** implement PRINT-006 until explicitly authorized.
-Do **not** start PRINT-007 / M9 in PRINT-006.
+Do **not** start PRINT-007 / M9 until PRINT-007 implementation is explicitly authorized.
+
+## 37. PRINT-007 CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-054
+HEAD_at_freeze_docs: 0a98b0f
+PRINT-001..006: COMPLETE
+PRINT-007: READY FOR IMPLEMENTATION
+title: PrinterService + Mutex
+owns:
+  - PrinterService impl (existing signatures)
+  - PrinterProfileProvider abstraction (concrete = M9)
+  - whole-job Mutex (one per service instance)
+  - EncodeError one-to-one PrinterError map
+  - OrderNotFound / InvalidOrderState eligibility
+  - synthetic deterministic testPrint document
+  - connect after encode; disconnect finally after connect attempt
+  - PRINT-T009 T020 T022 T024 T027 + service T023/T025
+excludes:
+  - concrete DataStore/hardware profile provider (M9)
+  - invented NETUM charsPerLine/codePage/feed defaults
+  - STAMPA enable / retry UI / settings UI
+  - Bluetooth / NETUM / permissions / reconnect
+  - AcceptOrder mutation / print_jobs / schema
+blocking_open_questions: NONE
+schema: DB_v2 UNCHANGED
+migration: NONE
+M9: NOT STARTED
+```
+
+**FINAL REFINEMENT:** Q1–Q6 resolved. Open questions blocking PRINT-007: **NONE**.
+
+Do **not** implement PRINT-007 until explicitly authorized.
+Do **not** start M9 in PRINT-007.

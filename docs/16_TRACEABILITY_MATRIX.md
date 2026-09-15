@@ -44,13 +44,14 @@ Questa matrice collega requisiti, backlog e test.
 | PricePrintMode preference (DataStore) | PRINT-003 **COMPLETE** (D-050; `bb71f72`) | unit PASS; PRINT-T012 rendering deferred to PRINT-004 |
 | Receipt formatter / ReceiptComposer body | PRINT-004 **COMPLETE** (D-051; `ba2c8e8`) | PRINT-T001..T008, T010..T014 PASS |
 | EscPosEncoder | PRINT-005 **COMPLETE** (D-052; `cab2c1a`) | byte unit PASS |
-| FakePrinterDriver | PRINT-006 **READY** (D-053) | PRINT-T026 + Fake unit tests |
-| Draft print | PRINT-004/020 | PRINT-T001/T025 |
-| Final print | PRINT-004/021 | PRINT-T002..014 |
+| FakePrinterDriver | PRINT-006 **COMPLETE** (D-053; `0a98b0f`) | PRINT-T026 PASS + Fake unit PASS |
+| PrinterService + Mutex | PRINT-007 **READY** (D-054) | PRINT-T009/T020/T022/T024/T027 + service T023/T025 |
+| Draft print | PRINT-004/007/020 | PRINT-T001/T025 |
+| Final print | PRINT-004/007/021 | PRINT-T002..014 |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |
-| Bluetooth | BT-001..005 | PRINT-T020..026 + HW |
-| Printer settings/test | BT-006/007 | PRINT-T027 + HW |
-| One copy/mutex | PRINT-007/024 | PRINT-T009/T024 |
+| Bluetooth | BT-001..005 | PRINT-T021 + HW (T020/T022 service-level = PRINT-007) |
+| Printer settings/test | BT-006/007 | PRINT-T027 HW/UI + PRINT-007 service |
+| One copy/mutex | PRINT-007 | PRINT-T009/T024 |
 | Non-fiscal | PRINT spec/release | manual review |
 | Privacy/min permissions | QA-006/007/008 | release checklist |
 | Migration safety | DB-009, QA-009 | migration tests |

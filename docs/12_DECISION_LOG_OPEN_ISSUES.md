@@ -608,6 +608,93 @@ PrinterService; Mutex; composer/encoder orchestration; EncodeError mapping; Blue
 **Open questions blocking PRINT-006:**
 NONE.
 
+### D-054 PRINT-007 PrinterService / Mutex contract freeze (2026-09-15)
+After PRINT-006 COMPLETE (`0a98b0f`): **PRINT-007 = READY FOR IMPLEMENTATION**.
+
+**Owns:** production `PrinterService` orchestration + per-instance `Mutex` serialization (architecture §20–21; printing spec §§18–21, §25–26; backlog PRINT-007). Dependencies: `OrderRepository` (read snapshots), `ReceiptComposer`, `EscPosEncoder`, `PrinterDriver` (Fake in M8), **`PrinterProfileProvider`** (abstraction in PRINT-007; concrete hardware/config provider = M9). No Bluetooth, NETUM, permissions, pairing, reconnect, STAMPA CTA enable, Room/`print_jobs`, invented NETUM profile defaults.
+
+#### Q1 — PrinterProfile runtime source (RESOLVED)
+- Introduce minimal **`PrinterProfileProvider`** abstraction (exact Kotlin shape chosen at implementation; no useless hierarchies).
+- Semantics: `getActiveProfile()` → one complete runtime `PrinterProfile` **or** not configured.
+- Provider returns **one complete** profile including current `pricePrintMode`.
+- `PrinterService` does **not** assemble the profile manually and does **not** read individual DataStore keys.
+- Not configured → `PrintResult.Failure(PrinterError.PrinterNotConfigured)`.
+- PRINT-007: interface/provider contract + **test/static provider allowed** in unit tests.
+- Real hardware/configuration-backed provider (DataStore device fields + D-050 `pricePrintMode`) = **DEFERRED TO M9**.
+- **Forbidden in PRINT-007:** inventing `charsPerLine` / `codePage` / `feedLines` / `supportsCut` / `cutCommandVariant` defaults; inventing a NETUM profile; Hilt binding to a fake hardware profile.
+
+#### Q2 — EncodeError → PrinterError (RESOLVED)
+Extend typed `PrinterError` with explicit equivalents (do **not** map encode failures to `Unknown`):
+- `EncodeError.UnsupportedEncoding` → `PrinterError.UnsupportedEncoding`
+- `EncodeError.UnencodableCharacter` → `PrinterError.UnencodableCharacter`
+- `EncodeError.InvalidProfile` → `PrinterError.InvalidPrinterProfile`
+Driver errors propagate **unchanged** as `PrintResult.Failure(same PrinterError)`:
+`BluetoothDisabled`, `PermissionDenied`, `PrinterNotConfigured`, `ConnectionFailed`, `ConnectionLost`, `Timeout`, `PrintFailed`, `Unknown`.
+No raw encoding exceptions leave the service. Service has no Bluetooth knowledge.
+
+#### Q3 — testPrint document (RESOLVED)
+- Must **not** create/read/update an Order; must **not** consume numbers; must **not** use `ReceiptComposer`.
+- Build synthetic deterministic `PrintableDocument` then: profile → `EscPosEncoder` → `PrinterDriver`.
+- Use `PrintKind.DRAFT` only as existing-model technical value — **do not** add `PrintKind.TEST`. `PrintKind` does not change encoding.
+- Exact lines:
+  - EMPHASIZED: `TEST STAMPANTE`
+  - NORMAL: `Cassa`
+  - NORMAL: `à è ì ò ù €`
+- No date/time/random/order id/device id.
+- Encode failures follow Q2 mapping.
+
+#### Q4 — Order eligibility (RESOLVED)
+- `printDraft`: order must exist and status **DRAFT**.
+- `printAccepted`: order must exist and status **ACCEPTED**.
+- Missing → `PrinterError.OrderNotFound`; wrong status → `PrinterError.InvalidOrderState`.
+- Do **not** use `Unknown` / `PrintFailed` / `PrinterNotConfigured` for these cases.
+- Printing never mutates order status; Accepted remains immutable.
+
+#### Q5 — Mutex scope (RESOLVED)
+- One `Mutex` per `PrinterService` implementation instance.
+- All of `printDraft` / `printAccepted` / `testPrint` share that Mutex.
+- Entire print job inside `mutex.withLock`: load order (if applicable), get profile, compose or build test doc, encode, connect, print, disconnect/cleanup, result mapping.
+- Do **not** move compose/encode outside the lock in M8. Not a persisted print queue.
+
+#### Q6 — Connect/disconnect lifecycle (RESOLVED)
+Per job order:
+1. validate/load input → 2. obtain profile → 3. compose/build document → 4. encode → 5. connect → 6. print → 7. disconnect.
+- Failures **before** `connect()`: no connect, no disconnect (missing order, invalid state, profile missing, encode failure).
+- After `connect()` is attempted: `disconnect()` **MUST** run in `finally` (connect Failure, print Failure, unexpected exception). Allowed because `disconnect()` is idempotent (D-053 / driver contract).
+- No retry / reconnect / second print attempt in PRINT-007 (M9/UI).
+- Unexpected non-typed exception → `PrintResult.Failure(PrinterError.Unknown)` with disconnect still guaranteed after connect attempt.
+
+#### Pipelines (frozen)
+**printDraft:** Mutex → load persisted DRAFT snapshot → profile → `ReceiptComposer(kind=DRAFT, pricePrintMode=profile.pricePrintMode, charsPerLine=profile.charsPerLine)` → encode → connect → print → disconnect finally.
+**printAccepted / reprint:** same with `kind=FINAL`; never `RISTAMPA`; no reprice/renumber.
+**testPrint:** Mutex → profile → synthetic document (Q3) → encode → driver lifecycle.
+
+#### Acceptance / snapshot boundary
+- `PrinterService` **never** calls `AcceptOrder`.
+- Accept success independent of physical print success.
+- Print failure on ACCEPTED: remains ACCEPTED; displayNumber/totals unchanged; no rollback/renumber. Retry = same snapshot + same number.
+- Draft print never consumes a displayNumber.
+- No catalog reread, reprice, order/numbering mutations, or Room writes as part of printing.
+
+#### Test ownership
+| ID | Scenario | Owner | M8 w/o hardware |
+|---|---|---|---|
+| PRINT-T009 | one logical print request → one driver print attempt | **PRINT-007** | YES |
+| PRINT-T020 | not configured → typed failure | **PRINT-007** | YES |
+| PRINT-T021 | Bluetooth disabled | **M9** | NO |
+| PRINT-T022 | Fake ConnectionLost → Accepted remains | **PRINT-007** | YES |
+| PRINT-T023 | retry same number | **PRINT-007** service invariant + **M9** UI | PARTIAL |
+| PRINT-T024 | Mutex serializes concurrent | **PRINT-007** | YES (deterministic gated driver OK; no sleep/races) |
+| PRINT-T025 | draft retry no number | **PRINT-007** service invariant + **M9** UI | PARTIAL |
+| PRINT-T026 | Fake timeout | **PRINT-006** — PASS | n/a |
+| PRINT-T027 | testPrint creates/modifies no Order | **PRINT-007** | YES |
+
+#### Out of scope
+Bluetooth*/NETUM/permissions/discovery/pairing/reconnect; ESC t / physical calibration; STAMPA enable; retry/settings UI; Accept+print wiring (PRINT-020+); inventing NETUM profile defaults; `print_jobs` / persisted queue; FakePrinterDriver changes unless real D-053 incompatibility.
+
+**Open questions blocking PRINT-007:**
+NONE.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness
