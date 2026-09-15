@@ -5,7 +5,7 @@ import it.krpng.cassa.domain.model.PricePrintMode
 
 /**
  * Maps an order snapshot to a [PrintableDocument] (D-049 / architecture §20).
- * Interface only — layout/body is PRINT-004.
+ * Layout/body: [DefaultReceiptComposer] (PRINT-004 / D-051).
  *
  * [order] is the domain [Order] aggregate (draft or accepted snapshot), never a Room entity.
  */
