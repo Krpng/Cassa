@@ -530,6 +530,84 @@ Do **not** mark any test PASS in this freeze document.
 **Open questions blocking PRINT-005:**
 NONE.
 
+### D-053 PRINT-006 FakePrinterDriver contract freeze (2026-09-15)
+After PRINT-005 COMPLETE (`cab2c1a`): **PRINT-006 = READY FOR IMPLEMENTATION**.
+
+**Owns:** pure-Kotlin `FakePrinterDriver` implementing existing `PrinterDriver` for tests/dev without hardware (printing spec §25; architecture §20; D-048). Driver fake only — not a Fake of the whole print system. No Bluetooth, NETUM, PrinterService, Mutex, UI, schema.
+
+**Test-plan ownership check (2026-09-15):** `docs/09_TEST_PLAN.md` §16 places PRINT-T020 (“Not configured → typed error”) and PRINT-T022 (“Connection lost, Accepted remains”) under **Printer service**; neither text assigns them to Fake/PRINT-006. PRINT-T026 (“Fake timeout”) is Fake-owned. **No contradiction → ownership freeze below is allowed.**
+
+#### Boundary
+- Implements frozen `PrinterDriver` without changing its signature:
+  - `connect(profile: PrinterProfile): PrinterResult`
+  - `print(data: ByteArray): PrinterResult`
+  - `disconnect(): Unit`
+- `print` receives **already-encoded** bytes (PRINT-005). No `ReceiptComposer` / `EscPosEncoder` inside Fake.
+- Driver outcomes = `PrinterResult` / `PrinterError`. `PrintResult` = PrinterService (PRINT-007).
+- Schema: **DB v2 unchanged**; migration **NONE**; no `print_jobs`.
+- Mutex / request serialization = **PRINT-007**. Fake is **not** thread-safe by contract (no internal Mutex).
+
+#### Connection lifecycle
+- Internal binary state only: **DISCONNECTED** | **CONNECTED**. Do **not** introduce a public domain `PrinterState` type.
+- Read-only test observation: `isConnected: Boolean`.
+- Initial state = **DISCONNECTED**.
+- `print` requires `connected == true`.
+- `print` while disconnected → `PrinterResult.Failure(PrinterError.ConnectionLost)`; **payload not captured**; **queued print result not consumed**.
+- `PrinterNotConfigured` is **not** the representation of plain disconnected.
+- `connect` while DISCONNECTED + Success → CONNECTED; + Failure → remains DISCONNECTED.
+- `connect` while already CONNECTED → `Success`, remains CONNECTED (**idempotent**); **does not consume** queued connect results.
+- `disconnect`: CONNECTED→DISCONNECTED; DISCONNECTED→DISCONNECTED (**idempotent**); no exception; **does not** clear captured history or queued injected results.
+- Clean slate = **new Fake instance**.
+
+#### Failure injection (minimal)
+```text
+enqueueConnectResult(result: PrinterResult)
+enqueuePrintResult(result: PrinterResult)
+```
+- FIFO, one-shot. Queue non-empty → consume first; empty → `PrinterResult.Success`.
+- No random, sleep, artificial delay, callbacks, lambdas, general-purpose mock DSL.
+- Connect injectables: `Timeout`, `ConnectionFailed`, `PrinterNotConfigured` (and Success via empty queue / explicit Success).
+- Print injectables: `Timeout`, `ConnectionLost`, `PrintFailed`, `PrinterNotConfigured` (and Success via empty queue / explicit Success).
+- `ConnectionFailed` = connect injectable only (not a required print outcome).
+
+#### State effects after calls
+- connect Success → connected=true
+- connect Failure → connected=false
+- print Success / Timeout / PrintFailed / PrinterNotConfigured → remains connected
+- print ConnectionLost → connected=false
+
+#### Recording
+- Ordered history `capturedPayloads` of every `print(bytes)` that starts while **connected**.
+- Capture happens **before** returning the configured print result (so Timeout/ConnectionLost/PrintFailed/PrinterNotConfigured attempts are captured if connected at call start).
+- Multiple prints preserve invocation order.
+- Defensive copies: copy on capture; copy on observation. Mutating caller buffer or returned observation must not alter Fake internal history.
+- Convenience derived accessors allowed: `lastCapturedPayload`, `capturedCount` (not duplicate sources of truth).
+- **Do not** record/retain `PrinterProfile` in Fake observation API (keep Fake small; do not change `PrinterDriver` to invent extra hooks).
+
+#### Determinism
+Same initial Fake + same queued results + same call sequence + same payloads ⇒ same results + same final `isConnected` + same captured history. No clock/random/sleep/hardware.
+
+#### Owned PRINT-T IDs
+| ID | Owner |
+|----|-------|
+| PRINT-T026 Fake timeout | **PRINT-006** |
+| PRINT-T020 Not configured | **PRINT-007** |
+| PRINT-T022 Connection lost, Accepted remains | **PRINT-007** |
+| PRINT-T009 one print request | **PRINT-007** |
+| PRINT-T024 Mutex blocks concurrent | **PRINT-007** |
+| PRINT-T021/T023/T025/T027 | **PRINT-007 / M9** per documented scope |
+
+Do **not** mark any test PASS in this freeze. Implementation owns Fake unit tests listed below.
+
+#### Unit tests (contract; not PASS here)
+initial disconnected; connect success/failure; repeated connect idempotent + does not consume queue; disconnect; repeated disconnect; print while disconnected → ConnectionLost + not captured + queue not consumed; successful capture; defensive copy input/observation; multiple captures order; default Success; FIFO connect/print injection; connect Timeout/ConnectionFailed/PrinterNotConfigured; print Timeout/ConnectionLost/PrintFailed/PrinterNotConfigured; ConnectionLost disconnects; other print failures remain connected; deterministic repeated scenario.
+
+#### Out of scope
+PrinterService; Mutex; composer/encoder orchestration; EncodeError mapping; Bluetooth/NETUM/permissions/pairing/reconnect; physical printing; UI; Room; migrations.
+
+**Open questions blocking PRINT-006:**
+NONE.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness

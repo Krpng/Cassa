@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001..004 COMPLETE; PRINT-005 READY — D-052)
+NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001..005 COMPLETE; PRINT-006 READY — D-053)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: PRINT-005 READY (D-052)
+first_M8_task_next: PRINT-006 READY (D-053)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1205,3 +1205,36 @@ M9: NOT STARTED
 
 Do **not** implement PRINT-005 until explicitly authorized.
 Do **not** start PRINT-006+ / M9 in PRINT-005.
+
+## 36. PRINT-006 CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-053
+HEAD_at_freeze_docs: cab2c1a
+PRINT-001..005: COMPLETE
+PRINT-006: READY FOR IMPLEMENTATION
+title: FakePrinterDriver
+owns:
+  - PrinterDriver fake (no Service/Mutex)
+  - initial DISCONNECTED; print requires connect
+  - idempotent connect/disconnect
+  - FIFO one-shot enqueueConnectResult/enqueuePrintResult
+  - ordered capturedPayloads + defensive copies
+  - isConnected read-only (no domain PrinterState)
+  - PRINT-T026
+excludes:
+  - PrinterService / Mutex (PRINT-007)
+  - PRINT-T020/T022/T009/T024 (PRINT-007)
+  - Bluetooth / NETUM (M9)
+  - profile recording / schema / print_jobs
+schema: DB_v2 UNCHANGED
+migration: NONE
+blocking_open_questions: NONE
+PRINT-007: NOT STARTED
+M9: NOT STARTED
+```
+
+**FINAL REFINEMENT:** all former D-053 open questions resolved. Test-plan check: T020/T022 under Printer service — no Fake contradiction. Open questions blocking PRINT-006: **NONE**.
+
+Do **not** implement PRINT-006 until explicitly authorized.
+Do **not** start PRINT-007 / M9 in PRINT-006.

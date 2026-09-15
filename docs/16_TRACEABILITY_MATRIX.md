@@ -43,7 +43,8 @@ Questa matrice collega requisiti, backlog e test.
 | PrintableDocument/ReceiptComposer contracts | PRINT-002 **COMPLETE** (D-049; `c0ce4e7`) | contract/unit PASS |
 | PricePrintMode preference (DataStore) | PRINT-003 **COMPLETE** (D-050; `bb71f72`) | unit PASS; PRINT-T012 rendering deferred to PRINT-004 |
 | Receipt formatter / ReceiptComposer body | PRINT-004 **COMPLETE** (D-051; `ba2c8e8`) | PRINT-T001..T008, T010..T014 PASS |
-| EscPosEncoder | PRINT-005 **READY** (D-052) | new byte unit tests (no numbered PRINT-T owned) |
+| EscPosEncoder | PRINT-005 **COMPLETE** (D-052; `cab2c1a`) | byte unit PASS |
+| FakePrinterDriver | PRINT-006 **READY** (D-053) | PRINT-T026 + Fake unit tests |
 | Draft print | PRINT-004/020 | PRINT-T001/T025 |
 | Final print | PRINT-004/021 | PRINT-T002..014 |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |

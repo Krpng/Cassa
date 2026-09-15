@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001..004 **COMPLETE** (`ba2c8e8` tip). Next authorized task: **PRINT-005** EscPosEncoder — **READY** (D-052). Do not start PRINT-006+ / M9 until PRINT-005 is COMPLETE and authorized.
+> PRINT-001..005 **COMPLETE** (`cab2c1a` tip). Next authorized task: **PRINT-006** FakePrinterDriver — **READY** (D-053). Do not start PRINT-007 / M9 until PRINT-006 is COMPLETE and authorized.
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -520,31 +520,33 @@ Demo M7 (COMPLETE):
 ### PRINT-004 [P0] Formatter draft/final — COMPLETE (D-051)
 > Complete on `ba2c8e8`. `DefaultReceiptComposer` + PRINT-T001..T008, T010..T014.
 
-### PRINT-005 [P0] ESC/POS encoder — READY FOR IMPLEMENTATION (D-052)
-> Pure-Kotlin `EscPosEncoder`: `PrintableDocument` + `PrinterProfile` → `EncodeResult`. Generic M8 ESC/POS baseline. No FakePrinter, no PrinterService, no Bluetooth/NETUM, no UI, no schema.
+### PRINT-005 [P0] ESC/POS encoder — COMPLETE (D-052)
+> Complete on `cab2c1a`. `DefaultEscPosEncoder` + EncodeResult/EncodeError + byte-for-byte unit tests.
 
-**Depends on:** PRINT-004 COMPLETE (`ba2c8e8`). Contract: **D-052**.
+### PRINT-006 [P0] FakePrinterDriver — READY FOR IMPLEMENTATION (D-053)
+> Pure-Kotlin `FakePrinterDriver` implementing `PrinterDriver` for tests without hardware. Captures encoded bytes; FIFO one-shot failure injection; no Service/Mutex/BT/NETUM/UI/schema.
 
-**Owns (AC):** see **D-052**. Summary:
-1. `EncodeResult.Success(bytes)` / `Failure(EncodeError)`; errors at least `UnsupportedEncoding`, `UnencodableCharacter`, `InvalidProfile`.
-2. `codePage` = JVM Charset name for text bytes only; **no** `ESC t`; physical page select → M9.
-3. Normalize smart quotes/dashes; `€`→`EUR` when unrepresentable; other unmappable → typed failure; no silent `?`/deletion; REPORT semantics.
-4. Init `ESC @`; emphasis bold-only `ESC E 0/1` with transition-only + final NORMAL reset; **no** align/size/underline.
-5. LF (`0x0A`) after every PrintableLine; feed = N×LF; no `ESC d n`; `feedLines < 0` → InvalidProfile.
-6. Cut: false→none; true→`FULL`/`PARTIAL` only (`GS V 0` / `GS V 1`); missing/unknown → InvalidProfile.
-7. Command order frozen; deterministic; schema v2 unchanged; migration NONE.
+**Depends on:** PRINT-005 COMPLETE (`cab2c1a`). Contract: **D-053**.
 
-**Owned tests:** new byte-for-byte unit tests listed in D-052 (no existing PRINT-T IDs). Do not claim PRINT-T001..027.
+**Owns (AC):** see **D-053**. Summary:
+1. Initial DISCONNECTED; `print` requires connect; disconnected print → `ConnectionLost`, no capture, no queue consume.
+2. Idempotent connect/disconnect; connected connect does not consume connect queue; disconnect clears neither history nor queues.
+3. `enqueueConnectResult` / `enqueuePrintResult` FIFO one-shot; empty → Success.
+4. Ordered `capturedPayloads` with defensive copies; capture before returning print result; derived last/count; no profile recording.
+5. Connect inject: Timeout/ConnectionFailed/PrinterNotConfigured; Print inject: Timeout/ConnectionLost/PrintFailed/PrinterNotConfigured; ConnectionLost → disconnected.
+6. `isConnected` read-only; no public `PrinterState`; not thread-safe; Mutex → PRINT-007.
+7. Schema v2 unchanged; migration NONE.
 
-**Explicitly deferred:** Fake (PRINT-006); PrinterService+Mutex + EncodeError→PrinterError mapping (PRINT-007); M9 BT/NETUM/`ESC t`/physical calibration.
+**Owned tests:** PRINT-T026 + Fake unit list in D-053 (not PASS until implementation).
+**Not owned:** PRINT-T020/T022/T009/T024 → PRINT-007; T021/T023/T025/T027 → PRINT-007/M9.
 
-**Demo:** unit golden byte vectors (no hardware).
+**Explicitly deferred:** PrinterService+Mutex (PRINT-007); BT/NETUM (M9).
 
-### PRINT-006 [P0] FakePrinterDriver
+**Demo:** unit Fake capture + injected Timeout (no hardware).
 
 ### PRINT-007 [P0] PrinterService + Mutex
 
-Test PRINT-T001..014 owned by PRINT-004 (COMPLETE). PRINT-T009 / T020..027 owned by PRINT-006/007 / M9 — not PRINT-005.
+Test PRINT-T026 owned by PRINT-006. PRINT-T009/T020/T022/T024 → PRINT-007; T021/T023/T025/T027 → PRINT-007/M9.
 
 Demo M8:
 - fake print completo senza hardware (after PRINT-006/007).
