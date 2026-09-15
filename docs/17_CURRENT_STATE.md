@@ -894,11 +894,11 @@ HEAD_at_freeze_docs: c9f8446a12d4c18317fa99354fa3a4ca88022631
 ARCH-001: COMPLETE / PRESERVED (Today = currentBusinessDate ACCEPTED only)
 ARCH-002: OBSOLETE (IERI / date picker)
 ARCH-003: OBSOLETE (cross-day number search)
-ARCH-004: REDEFINED — current-day ACCEPTED detail only
+ARCH-004: REDEFINED + D-045 CTA/nav freeze — READY FOR IMPLEMENTATION when authorized
 ARCH-005: OBSOLETE as historical archive
 ARCH-006/007: PENDING PRODUCT DECISION
-RET-001: ADDED — daily hard-delete ACCEPTED where businessDate < currentBusinessDate
-Home ARCHIVIO: removed from product scope (UI removal = separate task when authorized)
+RET-001: COMPLETE
+Home ARCHIVIO: REMOVED (M7 UX cleanup)
 ORDINI DI OGGI: PRESERVED
 Accepted retention: CURRENT BUSINESS DAY ONLY (hard delete; no hidden archive)
 DRAFT across 05:00: PRESERVED
@@ -906,8 +906,31 @@ Draft accepted after 05:00: NEW businessDate at AcceptOrder
 numbering_state historical rows: NOT purged by RET-001
 Exact Android 05:00 job: NOT REQUIRED
 Schema: DB v2 UNCHANGED / migration NONE for RET-001 MVP
-Normative decision: D-044
+Normative decision: D-044; ARCH-004 CTA freeze: D-045
 ```
 
-Do **not** implement RET-001 / ARCH-004 / Home ARCHIVIO removal / duplicate until explicitly authorized after this freeze.
+Do **not** implement ARCH-004 until explicitly authorized after D-045.
 Do **not** resurrect ARCH-002/003/005.
+Do **not** implement ARCH-006/007 / PRINT real until authorized.
+
+## 27. ARCH-004 CTA / NAVIGATION CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-045
+HEAD_at_freeze_docs: 02c8a5c
+ARCH-004: READY FOR IMPLEMENTATION (docs freeze complete; code NOT STARTED)
+detail: CURRENT_DAY_ACCEPTED_READ_ONLY
+print_label: STAMPA
+print_state_ARCH_004: VISIBLE_DISABLED
+RISTAMPA_label: NOT_USED
+print_owner: M8/M9
+INDIETRO: -> TODAY
+system_back: -> TODAY
+HOME: -> HOME
+NUOVO_ORDINE_DA_QUESTO: NOT_VISIBLE
+duplicate_owner: ARCH-006
+ordering: AcceptancePreviewOrdering
+tests: ARCH-T010..ARCH-T026
+RET-001: COMPLETE
+M7_UX_CLEANUP: COMPLETE
+```

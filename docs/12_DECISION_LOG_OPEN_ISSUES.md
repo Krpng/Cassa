@@ -117,6 +117,15 @@ Congelato:
 - schema DB v2 unchanged / migration NONE for RET-001 MVP (explicit removals delete, then orders);
 - correttezza purge su app enter-in-use; esecuzione esatta 05:00 Android non richiesta.
 
+### D-045 ARCH-004 CTA / navigation contract freeze (2026-09-15)
+Congelato per dettaglio Accepted current-day (ARCH-004):
+- read-only; guard `ACCEPTED` + `businessDate = currentBusinessDate`; observe → Unavailable se missing/DRAFT/old/purged (no crash, no stale);
+- ordering = stesso preview Acceptance (`AcceptancePreviewOrdering`: PIZZE → FRITTURA → BIBITE; `createdSequence ASC`);
+- label stampa UI = **`STAMPA`** (mai `RISTAMPA`); in ARCH-004 `STAMPA` = VISIBLE + DISABLED fino a PRINT (M8/M9);
+- navigation: Today tap → detail; `INDIETRO`/System Back → Today; `HOME` → Home (no reopen preview/edit);
+- `NUOVO ORDINE DA QUESTO` = NOT VISIBLE (owner ARCH-006; conflitto DRAFT = ARCH-007);
+- test dedicati ARCH-T010..ARCH-T026 (non riusare ARCH-T001..003).
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness

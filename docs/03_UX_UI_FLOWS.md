@@ -570,7 +570,8 @@ Empty:
 `Nessun ordine accettato nella giornata operativa corrente.`
 
 Tap:
-- dettaglio Accepted della giornata corrente (ARCH-004 ridefinito).
+- dettaglio Accepted della giornata corrente (ARCH-004);
+- navigation e CTA: vedi §15 (FREEZE).
 
 Niente filtri IERI / selezione data / ricerca cross-day (ARCH-002/003 OBSOLETE).
 
@@ -583,30 +584,90 @@ Contratto storico (non attivo):
 - chip `OGGI` / `IERI` / `SCEGLI DATA`;
 - risultati multi-giorno.
 
-## 15. Dettaglio Accepted (giornata corrente)
+## 15. Dettaglio Accepted (giornata corrente) — ARCH-004 FREEZE
 
-Solo ordini `ACCEPTED` della `currentBusinessDate` (ARCH-004 ridefinito).
+Solo ordini `ACCEPTED` della `currentBusinessDate` (ARCH-004).
 
-Mostra:
-- numero;
-- data/ora;
-- sezioni;
-- modifiche;
-- note;
-- prezzi;
-- totale.
+### Entry / navigation
 
-Azioni:
-- `RISTAMPA` (quando PRINT in scope);
-- `HOME`.
+```text
+ORDINI DI OGGI → tap row → Accepted detail(orderId)
+```
 
-> `NUOVO ORDINE DA QUESTO` / duplicazione: **PENDING PRODUCT DECISION** (ex ARCH-006/007). Non mostrare finché non deciso.
+Uscita:
 
-Nessun controllo edit.
+- `[ INDIETRO ]` → `ORDINI DI OGGI` (lista Today);
+- System Back → `ORDINI DI OGGI`;
+- `[ HOME ]` → Home, senza riaprire preview/edit/accept flow.
+
+### Guard
+
+Mostrabile solo se:
+
+```text
+status = ACCEPTED
+AND businessDate = currentBusinessDate
+```
+
+Altrimenti stato **Unavailable / Not found** (no crash), con uscita consentita via `INDIETRO` e/o `HOME`:
+
+- orderId assente / eliminato (anche mid-open dopo RET-001 purge);
+- ordine `DRAFT`;
+- `ACCEPTED` di `businessDate` precedente.
+
+Il dettaglio deve **osservare** l'ordine: se RET-001 lo elimina mentre la schermata è aperta → Unavailable, non dati stale.
+
+### Contenuto (snapshot-only)
+
+Header:
+
+- `displayNumber`;
+- data/ora (`acceptedAt`);
+- totale persistito (`totalCents` Accepted).
+
+Sezioni ordine — **stessa regola del preview Acceptance** (riuso obbligatorio di `AcceptancePreviewOrdering` o primitive equivalente condivisa):
+
+1. `PIZZE`
+2. `FRITTURA`
+3. `BIBITE`
+
+Categorie vuote omesse. Dentro ogni categoria: `createdSequence ASC`.
+
+Per ogni riga (solo snapshot persistiti; **nessun** reprice / rilettura catalogo):
+
+- quantity;
+- product name / printed name secondo UX esistente;
+- additions / removals snapshot;
+- item note;
+- finalUnitPrice;
+- line total (`finalUnitPriceCents * quantity`);
+- manual price snapshot se presente.
+
+Mostrare anche `generalNote` se presente.
+
+### Azioni ARCH-004
+
+- `[ STAMPA ]` — **VISIBLE + DISABLED** fino al milestone PRINT (M8/M9); nessuna azione stampa; allineato al post-accept M6. Quando PRINT entra in scope, la stessa CTA può diventare enabled **senza cambiare label**.
+- `[ INDIETRO ]` — vedi navigation.
+- `[ HOME ]` — vedi navigation.
+
+**Non** mostrare:
+
+- label `RISTAMPA` (vietata; label normativa unica = `STAMPA`);
+- `NUOVO ORDINE DA QUESTO` (ownership ARCH-006; ARCH-007 = conflitto DRAFT).
+
+### Read-only
+
+Nessun controllo di modifica:
+
+- `+/-`, `RIMUOVI`;
+- edit note / additions / removals / manual price;
+- `ACCETTA`, `COMPLETA`.
 
 ## 16. Duplicazione — PENDING PRODUCT DECISION
 
 > **CANCELLED BY PRODUCT SCOPE CHANGE / PENDING DECISION (M7).** Non implementare finché il prodotto non richiede duplicazione degli ordini **della giornata corrente**.
+> In ARCH-004 la CTA `NUOVO ORDINE DA QUESTO` **non** è visibile (ownership ARCH-006).
 
 Contratto storico (non attivo): se nessun draft → crea draft; se draft esistente → conflitto RIPRENDI / ELIMINA E DUPLICA / ANNULLA.
 

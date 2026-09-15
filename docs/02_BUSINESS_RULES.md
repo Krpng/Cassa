@@ -23,7 +23,9 @@ Dopo `ACCEPTED`:
 - non modificare prezzi;
 - non modificare note;
 - non ricalcolare da menu corrente;
-- consentire solo lettura, ristampa e duplicazione.
+- consentire lettura;
+- stampa / ristampa funzionale con label UI **`STAMPA`** (mai `RISTAMPA`) quando PRINT in scope;
+- duplicazione = PENDING (ARCH-006/007), non parte di ARCH-004.
 
 La regola deve essere enforced nel dominio/repository, non solo nascondendo pulsanti.
 
@@ -747,12 +749,20 @@ Retry:
 - stessi snapshot;
 - nessuna nuova accettazione.
 
-## 21. Ristampa
+## 21. Ristampa (azione) / label UI `STAMPA`
 
-- disponibile da Accepted screen e Ordini di oggi (giornata corrente);
-- nessuna etichetta `RISTAMPA`;
+- disponibile da Accepted screen e dettaglio Ordini di oggi (giornata corrente) quando PRINT in scope;
+- label UI normativa = **`STAMPA`** (mai etichetta `RISTAMPA`);
 - output funzionalmente identico alla stampa finale dello stesso ordine;
 - una sola copia per azione esplicita.
+
+### ARCH-004 (pre-PRINT)
+
+Nel dettaglio current-day (ARCH-004), prima di M8/M9:
+
+- CTA `[ STAMPA ]` = **VISIBLE + DISABLED**;
+- nessuna azione print;
+- coerenza con post-accept M6.
 
 ## 22. Ordini accettati della giornata corrente (no archivio storico)
 
@@ -795,9 +805,16 @@ FK: `order_item_removals` non ha `ON DELETE CASCADE`. Nel MVP purge:
 - dettaglio/storico multi-giorno (ex ARCH-005 come archivio);
 - concetto/pulsante Home `ARCHIVIO`.
 
-Dettaglio Accepted (ARCH-004 ridefinito): read-only di un `ACCEPTED` della **sola** giornata corrente.
+Dettaglio Accepted (**ARCH-004 FREEZE** — D-045):
 
-Duplicazione (ex ARCH-006/007): **PENDING PRODUCT DECISION** — non implementare finché non richiesta esplicitamente per gli ordini di oggi.
+- read-only di un `ACCEPTED` con `businessDate = currentBusinessDate`;
+- ordinamento sezioni = stesso del preview Acceptance (`AcceptancePreviewOrdering`: PIZZE → FRITTURA → BIBITE; `createdSequence ASC`);
+- snapshot-only (no reprice / no catalog);
+- CTA: `STAMPA` visible+disabled (fino a PRINT); `INDIETRO`/System Back → Today; `HOME` → Home;
+- **non** mostrare `RISTAMPA`, `NUOVO ORDINE DA QUESTO`, controlli edit / `ACCETTA` / `COMPLETA`;
+- missing / DRAFT / old-or-purged → Unavailable (observe; no crash).
+
+Duplicazione (ex ARCH-006/007): **PENDING PRODUCT DECISION** — non implementare finché non richiesta esplicitamente per gli ordini di oggi. `NUOVO ORDINE DA QUESTO` non appartiene ad ARCH-004.
 
 ## 23. Duplicazione — PENDING PRODUCT DECISION
 

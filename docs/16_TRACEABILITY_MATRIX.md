@@ -31,7 +31,7 @@ Questa matrice collega requisiti, backlog e test.
 | Mode switch + Settings numbering UI (D-040 RESOLVED) | NUM-005 | NUM-T006, NUM-T015, NUM-T025..035 |
 | Today (current business day) | ARCH-001 COMPLETE | ARCH-T001..003 |
 | Daily Accepted purge / retention | RET-001 | RET-T001..008 |
-| Current-day Accepted detail | ARCH-004 REDEFINED | (detail tests when implemented; ex SNAP for retained orders) |
+| Current-day Accepted detail | ARCH-004 (D-045 CTA/nav freeze) | ARCH-T010..026; SNAP-001..004 (immutability retained) |
 | Archive date filters / cross-day search / historical archive | ARCH-002/003/005 **OBSOLETE** | ARCH-T004/T005 **OBSOLETE** |
 | Historical snapshots as archive feature | ARCH-005 **OBSOLETE** | SNAP-* for multi-day archive **OBSOLETE**; snapshots remain for current-day immutability/reprint |
 | Duplicate | ARCH-006/007 **PENDING PRODUCT DECISION** | DUP-001..005 deferred until product decision |

@@ -599,6 +599,61 @@ repeated purge is idempotent.
 ### RET-T008
 draft created before 05:00 and accepted after 05:00 receives the new businessDate.
 
+## 13c. Current-day Accepted detail (ARCH-004) — D-045
+
+> Test ID dedicati. Non riusare ARCH-T001..003 (lista Today).
+
+### ARCH-T010
+Today row tap → apre Accepted detail dello stesso `orderId`.
+
+### ARCH-T011
+`ACCEPTED` current-day → detail Content (header + sezioni snapshot).
+
+### ARCH-T012
+`ACCEPTED` con `businessDate` precedente → Unavailable / Not found.
+
+### ARCH-T013
+`DRAFT` → Unavailable / Not found (non renderizzato come Accepted detail).
+
+### ARCH-T014
+missing / purged mid-open (RET-001) → Unavailable; no crash; no stale data.
+
+### ARCH-T015
+snapshot-only: cambio catalogo dopo accept non altera name/prezzi/modifiche mostrate.
+
+### ARCH-T016
+`generalNote` Accepted mostrata read-only quando presente.
+
+### ARCH-T017
+item note snapshot mostrata read-only quando presente.
+
+### ARCH-T018
+additions / removals = snapshot Accepted (ordine displayOrder).
+
+### ARCH-T019
+quantity + finalUnitPrice + line total (`finalUnitPriceCents * quantity`) da snapshot.
+
+### ARCH-T020
+sezioni PIZZE → FRITTURA → BIBITE; vuote omesse; within: `createdSequence ASC` (`AcceptancePreviewOrdering`).
+
+### ARCH-T021
+controlli edit assenti (`+/-`, `RIMUOVI`, edit note/additions/price, `ACCETTA`, `COMPLETA`).
+
+### ARCH-T022
+CTA `STAMPA` VISIBLE + DISABLED (pre-PRINT).
+
+### ARCH-T023
+label `RISTAMPA` assente.
+
+### ARCH-T024
+`NUOVO ORDINE DA QUESTO` assente (ARCH-006).
+
+### ARCH-T025
+`INDIETRO` e System Back → `ORDINI DI OGGI`.
+
+### ARCH-T026
+`HOME` → Home (senza riaprire preview/edit/accept).
+
 ## 14. ODS
 
 ### ODS-001
@@ -754,8 +809,8 @@ Customize pizza -> addition/removal/note -> save.
 Restart -> recover draft.
 
 ### UI-006
-Ordini di oggi → dettaglio Accepted giornata corrente.
-> Ex “Archive → detail → duplicate”: **OBSOLETE / PENDING** (archivio rimosso; duplicazione non attiva).
+Ordini di oggi → dettaglio Accepted giornata corrente (ARCH-004 / ARCH-T010..026).
+> Ex “Archive → detail → duplicate”: **OBSOLETE**. Duplicazione = ARCH-006 (CTA assente in ARCH-004).
 
 ### UI-007
 Import -> preview -> confirm.

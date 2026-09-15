@@ -386,9 +386,19 @@ businessDate corrente; `ACCEPTED` only; `acceptedAt DESC`.
 ### ARCH-003 [P1] Number search — OBSOLETE
 > **CANCELLED BY PRODUCT SCOPE CHANGE.** Niente ricerca ordini cross-day.
 
-### ARCH-004 [P1] Accepted detail — REDEFINED
+### ARCH-004 [P1] Accepted detail — REDEFINED / CTA FREEZE (D-045)
 Dettaglio read-only di un `ACCEPTED` della **sola** giornata corrente.
 > Precedente significato “dettaglio archivio storico” superseded.
+
+AC (congelati — D-045):
+- entry: Today row tap → detail(`orderId`);
+- guard: `ACCEPTED` + `businessDate = currentBusinessDate`; else Unavailable;
+- observe order (purge mid-open → Unavailable, no stale);
+- snapshot-only; ordering = `AcceptancePreviewOrdering` (PIZZE→FRITTURA→BIBITE, `createdSequence ASC`);
+- CTA: `STAMPA` VISIBLE+DISABLED (PRINT = M8/M9); `INDIETRO`/System Back → Today; `HOME` → Home;
+- **non** mostrare: `RISTAMPA`, `NUOVO ORDINE DA QUESTO`, edit controls, `ACCETTA`, `COMPLETA`.
+
+Test: ARCH-T010..ARCH-T026.
 
 ### ARCH-005 [P1] Historical snapshot display — OBSOLETE
 > **CANCELLED BY PRODUCT SCOPE CHANGE** come requisito di archivio storico.
@@ -400,7 +410,7 @@ Dettaglio read-only di un `ACCEPTED` della **sola** giornata corrente.
 ### ARCH-007 [P1] Draft conflict on duplicate — PENDING PRODUCT DECISION
 > Dipende da ARCH-006; non implementare ora.
 
-### RET-001 [P0] Daily accepted-order purge — ADDED / NEXT when authorized
+### RET-001 [P0] Daily accepted-order purge — COMPLETE
 Hard delete `ACCEPTED` where `businessDate < currentBusinessDate`.
 
 AC:
@@ -416,7 +426,7 @@ Test: RET-T001..RET-T008.
 Demo M7 (aggiornato):
 - Ordini di oggi = solo giornata corrente;
 - dopo cambio businessDate, Accepted precedenti non più presenti;
-- dettaglio Accepted giornata corrente (quando ARCH-004 implementato).
+- dettaglio Accepted giornata corrente (ARCH-004 — CTA freeze D-045; implementazione NEXT when authorized).
 
 ## M8 — Printing foundation
 
