@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001..006 COMPLETE; PRINT-007 READY — D-054)
+NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001 READY — D-055)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: PRINT-007 READY (D-054)
+first_M8_task_next: M8 COMPLETE; first_M9_task_next: BT-001 READY (D-055)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1275,3 +1275,39 @@ M9: NOT STARTED
 Uncommitted PRINT-007 production already matches Q6b (read-only): keep typed Failure on disconnect throw; Success+disconnect throw → Unknown. **Missing only:** dedicated Q6b unit tests.
 
 Do **not** start M9 in PRINT-007.
+
+## 38. BT-001 CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-055
+HEAD_at_freeze_docs: cee8162
+M8: COMPLETE
+M9: ACTIVE
+BT-001: READY FOR IMPLEMENTATION
+title: Android Bluetooth runtime permission manager
+owns:
+  - BluetoothPermissionManager (Android-facing evaluation + required permission list)
+  - API 31+ BLUETOOTH_CONNECT runtime
+  - API less-than-31 no CONNECT runtime prompt
+  - bonded-only; no SCAN; no location
+  - PermissionDenied path (not full PRINT-T021)
+excludes:
+  - discovery / BLUETOOTH_SCAN flow
+  - adapter enabled / BluetoothDisabled (BT-004/005)
+  - bonded list (BT-002)
+  - persistence (BT-003)
+  - RFCOMM / NETUM / STAMPA UI
+  - PrinterService changes
+blocking_open_questions: NONE
+hardware: NO
+samsung: NO
+netum: NO
+schema: DB_v2 UNCHANGED
+migration: NONE
+BT-002+: NOT STARTED
+```
+
+**FINAL REFINEMENT:** bonded-only MVP confirmed by architecture §22 / printing §22 / security §5. Open questions blocking BT-001: **NONE**.
+
+Do **not** implement BT-001 until explicitly authorized.
+Do **not** start BT-002+ / NETUM hardware work in BT-001.

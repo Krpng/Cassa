@@ -423,21 +423,24 @@ La UI disabilita i pulsanti mentre stampa, ma la protezione reale è anche nel s
 
 ## 22. Bluetooth MVP
 
-Preferenza:
+Preferenza (**D-055 / BT-001 READY**):
 - pairing nel sistema Android;
-- app seleziona un device già bonded.
+- app seleziona un device già bonded;
+- discovery **OUT OF SCOPE** for MVP unless a later task explicitly adds it.
 
 Vantaggi:
 - minore complessità;
 - meno edge case discovery;
 - permessi più contenuti.
 
-Android 12+:
-- gestire `BLUETOOTH_CONNECT`;
-- `BLUETOOTH_SCAN` solo se si implementa discovery.
+Android 12+ (API 31+):
+- gestire runtime `BLUETOOTH_CONNECT` (**BT-001**);
+- `BLUETOOTH_SCAN` solo se si implementa discovery (not BT-001 / not MVP bonded-only).
 
 Pre-Android 12:
-- seguire permessi necessari alla strategia scelta.
+- no runtime `BLUETOOTH_CONNECT` prompt; legacy install-time `BLUETOOTH` (maxSdk 30) as needed for bonded strategy.
+
+`BluetoothPermissionManager` (Android-facing, not domain) = **BT-001**. Adapter enabled / `BluetoothDisabled` = **BT-004/005**. Bonded list = **BT-002**. RFCOMM = **BT-004**.
 
 ## 23. Error model
 

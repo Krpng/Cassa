@@ -708,6 +708,70 @@ Bluetooth*/NETUM/permissions/discovery/pairing/reconnect; ESC t / physical calib
 **Open questions blocking PRINT-007:**
 NONE.
 
+### D-055 BT-001 Android Bluetooth runtime permission contract freeze (2026-09-15)
+After M8 COMPLETE (`cee8162`): **BT-001 = READY FOR IMPLEMENTATION**.
+
+**Owns:** Android-facing runtime permission **evaluation / required-permission list** for the Bluetooth MVP (architecture §22; printing spec §22; security §5). Abstraction name equivalent to `BluetoothPermissionManager` (exact Kotlin shape follows project conventions). No Activity/Compose in domain. No bonded list, discovery, RFCOMM, NETUM, PrinterService, printer UI.
+
+#### MVP strategy (frozen)
+- **Bonded/paired devices only** (pairing via Android Settings; app selects bonded device).
+- **Discovery OUT OF SCOPE** for BT-001 and for MVP unless a later task explicitly adds it.
+- Therefore BT-001 must **not** require `BLUETOOTH_SCAN` and must **not** introduce location permissions for scanning.
+
+#### Platform (current project)
+- `minSdk = 26`, `targetSdk = 36`, `compileSdk = 36`.
+- AndroidManifest today: **no** Bluetooth permissions declared yet.
+
+#### Version behavior (frozen)
+- **API 31+ (Android 12+):** runtime `BLUETOOTH_CONNECT` is required for bonded-device operations; manager reports required permission(s) and granted/denied/missing state.
+- **API < 31:** no runtime `BLUETOOTH_CONNECT` prompt; manager reports no CONNECT runtime requirement. Preserve legacy install-time Bluetooth permission declarations needed for the bonded strategy (see Manifest).
+- Do **not** request `BLUETOOTH_SCAN` for bonded-only MVP.
+- Do **not** add `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` for discovery.
+
+#### Manifest (declare at implementation; not in this docs-only task)
+Expected declarations for bonded-only MVP:
+- `android.permission.BLUETOOTH_CONNECT` (runtime on API 31+).
+- `android.permission.BLUETOOTH` with `android:maxSdkVersion="30"` (legacy install-time).
+- **Not** `BLUETOOTH_SCAN`; **not** location permissions.
+- `BLUETOOTH_ADMIN`: **not** required by BT-001; revisit only if BT-002 proves a platform need for bonded enumeration (do not invent here).
+
+#### Abstraction semantics (frozen)
+Capable at least of:
+- determining whether required runtime permissions are already granted;
+- determining whether a runtime request is required;
+- exposing the permission string list the UI/platform layer may request;
+- reflecting denied / permanently-denied / “don’t ask again” **when the UI layer can detect it** (manager does not auto-loop requests).
+Manager does **not** present system permission UI itself — request launcher/dialogs belong to a later UI integration (first consumer likely BT-002/BT-006).
+
+#### Domain boundary
+- Android permission details stay **outside** domain.
+- Existing `PrinterError.PermissionDenied` remains the typed surface for missing/denied required permission when a later Bluetooth driver/service path maps it.
+- BT-001 does **not** modify `PrinterService`, `PrinterDriver`, or invent a parallel error hierarchy.
+- `PrinterError.BluetoothDisabled` stays **separate** from permission denial.
+
+#### Adapter enabled / BluetoothDisabled
+- **OUT OF BT-001.** Adapter on/off observation and `BluetoothDisabled` mapping are deferred to **BT-004 / BT-005** (and PRINT-T021 full scenario).
+
+#### Denial cases (frozen)
+Support deterministic evaluation for: already granted; missing/required; denied; permanently denied / don’t-ask-again if detectable by UI/platform APIs. No automatic request loops. No inventing Settings-redirect UX unless/until a docs task owns it.
+
+#### Tests (BT-001 owned; no NETUM / no Samsung required)
+Unit (injected SDK/permission checker preferred):
+- API 31+: CONNECT required; granted; denied;
+- API < 31: no CONNECT runtime requirement;
+- bonded-only → permission list never includes `BLUETOOTH_SCAN`;
+- no location permission introduced;
+- deterministic required-permission list;
+- no domain/Compose leakage in the manager.
+Instrumented (optional/partial): only if Android permission APIs cannot be faked sufficiently — still **no NETUM**, no Samsung mandate.
+**PRINT-T021** (“Bluetooth disabled”) = **NOT fully owned** by BT-001 (adapter-disabled path → BT-004/005). BT-001 owns only the **permission denied/missing** deterministic path that later maps to `PermissionDenied`.
+
+#### Out of scope
+Bonded list (BT-002); persistence (BT-003); RFCOMM/socket/timeout/reconnect (BT-004/005); settings/testPrint UI (BT-006/007); STAMPA enable / PRINT-020+; PrinterProfileProvider; NETUM; discovery; schema/`print_jobs`.
+
+**Open questions blocking BT-001:**
+NONE.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness

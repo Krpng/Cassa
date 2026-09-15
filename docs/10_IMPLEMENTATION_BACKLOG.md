@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001..006 **COMPLETE** (`0a98b0f` tip). Next authorized task: **PRINT-007** PrinterService + Mutex — **READY** (D-054). Do not start M9 until PRINT-007 is COMPLETE and authorized.
+> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. Next: **M9 / BT-001** (D-055 READY). Do not start BT-002+ until BT-001 is COMPLETE and authorized.
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -526,33 +526,31 @@ Demo M7 (COMPLETE):
 ### PRINT-006 [P0] FakePrinterDriver — COMPLETE (D-053)
 > Complete on `0a98b0f`. Pure-Kotlin `FakePrinterDriver` + PRINT-T026.
 
-### PRINT-007 [P0] PrinterService + Mutex — READY FOR IMPLEMENTATION (D-054)
-> Production `PrinterService` + per-instance Mutex (whole job). `PrinterProfileProvider` abstraction; Fake + static test profile. No Bluetooth/NETUM/UI/schema; no invented NETUM defaults.
+### PRINT-007 [P0] PrinterService + Mutex — COMPLETE (D-054)
+> Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
+## M9 — Bluetooth NETUM — IN PROGRESS
 
-**Depends on:** PRINT-006 COMPLETE (`0a98b0f`). Contract: **D-054**.
+> M8 COMPLETE (`cee8162`). Next authorized task: **BT-001** Runtime permission manager — **READY** (D-055). Do not start BT-002+ / NETUM until BT-001 is COMPLETE and authorized. No hardware required for BT-001.
 
-**Owns (AC):** see **D-054**. Summary:
-1. Implement existing `printDraft` / `printAccepted` / `testPrint` without signature changes.
-2. Obtain profile only via `PrinterProfileProvider` (not configured → `PrinterNotConfigured`); real provider = M9.
-3. Draft→DRAFT compose; Accepted/reprint→FINAL; testPrint = synthetic lines (TEST STAMPANTE / Cassa / accents+€); no Order access on testPrint.
-4. EncodeError one-to-one → `UnsupportedEncoding` / `UnencodableCharacter` / `InvalidPrinterProfile`; driver errors propagate unchanged.
-5. Eligibility: missing → `OrderNotFound`; wrong status → `InvalidOrderState`.
-6. Whole job in `mutex.withLock`; connect only after successful encode; `disconnect()` in `finally` after connect attempt; no retry/reconnect.
-7. **disconnect() exception precedence (D-054 Q6b):** typed primary Failure preserved if disconnect throws; Success+disconnect throw → `Failure(Unknown)`; unexpected+disconnect throw → `Failure(Unknown)`; no raw cleanup exception; no new cleanup error type.
-8. Never call `AcceptOrder`; no Room/numbering mutations; schema v2 unchanged; no STAMPA enable.
+### BT-001 [P1] Runtime permission manager — READY FOR IMPLEMENTATION (D-055)
+> Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
 
-**Owned tests:** PRINT-T009, T020, T022, T024, T027 + service invariants of T023/T025 + **disconnect-throw precedence cases (Q6b)**.
-**Not owned / M9:** T021; UI retry; STAMPA enable; concrete profile provider; Accept+print wiring.
-**Already PASS:** PRINT-T026 (PRINT-006).
+**Depends on:** M8 COMPLETE (`cee8162`). Contract: **D-055**.
 
-**Blocking open questions:** NONE (cleanup precedence FROZEN — Q6b).
+**Owns (AC):** see **D-055**. Summary:
+1. `BluetoothPermissionManager` (or equivalent) — granted / required / denied evaluation + permission list for UI request.
+2. API 31+: runtime `BLUETOOTH_CONNECT`; API <31: no CONNECT runtime prompt; legacy manifest `BLUETOOTH` maxSdk 30.
+3. No `BLUETOOTH_SCAN`; no location permissions; discovery out of scope.
+4. No Activity/Compose in domain; no PrinterService changes; `PermissionDenied` mapping later via driver/service.
+5. Adapter on/off / `BluetoothDisabled` / full PRINT-T021 → BT-004/005.
+6. Schema v2 unchanged; migration NONE.
 
-**Demo M8:** fake print completo senza hardware (static/fake profile provider + FakePrinterDriver).
-**Gate after impl:** add Q6b disconnect-throw tests if not already present; production behavior already matches Q6b (read-only check 2026-09-15).
-## M9 — Bluetooth NETUM
+**Owned tests:** unit permission/version matrix in D-055 (permission path only).
+**Not owned:** PRINT-T021 full (Bluetooth disabled); bonded list; hardware.
 
-> Physical printer / Bluetooth / NETUM. **NOT STARTED.** Must not begin in PRINT-002.
-### BT-001 [P1] Runtime permission manager
+**Blocking open questions:** NONE.
+
+**Demo:** none (permissions/unit). Hardware: **NO**; Samsung: **NO**; NETUM: **NO**.
 
 ### BT-002 [P1] List bonded devices
 
