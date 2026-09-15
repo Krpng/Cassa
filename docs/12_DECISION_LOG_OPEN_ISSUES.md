@@ -664,6 +664,19 @@ Per job order:
 - No retry / reconnect / second print attempt in PRINT-007 (M9/UI).
 - Unexpected non-typed exception → `PrintResult.Failure(PrinterError.Unknown)` with disconnect still guaranteed after connect attempt.
 
+#### Q6b — disconnect() exception precedence (FROZEN 2026-09-15)
+`PrinterDriver.disconnect(): Unit` may technically throw. `disconnect()` is **secondary cleanup** and must **not** erase a more specific primary job failure. No raw cleanup exception escapes `PrinterService`. No new M8 error type (`DisconnectFailed` / `CleanupFailed`); reconsider in M9 only if hardware evidence requires it.
+
+| Case | Primary outcome | disconnect() throws | Final `PrintResult` |
+|---|---|---|---|
+| **A** | typed `Failure(primaryError)` from connect/print (e.g. ConnectionFailed, ConnectionLost, Timeout, PrintFailed, PrinterNotConfigured, BluetoothDisabled, PermissionDenied, …) | yes | **`Failure(primaryError)`** — cleanup does not replace |
+| **B** | connect Success + print Success | yes | **`Failure(Unknown)`** — do not return Success; job lifecycle did not complete cleanly |
+| **C** | unexpected main-path exception after connect attempt → `Failure(Unknown)` | yes | **`Failure(Unknown)`** — still no raw exception |
+| **D** | connect returns typed `Failure` (still requires finally disconnect) | yes | **same as A** — preserve connect typed failure |
+| **E** | failure before connect attempt | n/a | no disconnect; cleanup policy does not apply |
+
+**Required PRINT-007 tests (not PASS until implemented):** typed print Failure + disconnect throws → primary preserved; typed connect Failure + disconnect throws → primary preserved; successful print + disconnect throws → `Failure(Unknown)`; unexpected main-path exception + disconnect throws → `Failure(Unknown)`; no raw exception escapes.
+
 #### Pipelines (frozen)
 **printDraft:** Mutex → load persisted DRAFT snapshot → profile → `ReceiptComposer(kind=DRAFT, pricePrintMode=profile.pricePrintMode, charsPerLine=profile.charsPerLine)` → encode → connect → print → disconnect finally.
 **printAccepted / reprint:** same with `kind=FINAL`; never `RISTAMPA`; no reprice/renumber.

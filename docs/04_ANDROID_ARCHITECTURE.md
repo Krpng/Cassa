@@ -417,6 +417,8 @@ Implementazioni (later tasks):
 
 `PrinterService` deve serializzare le stampe con `Mutex` (D-054: **one Mutex per service instance**; entire print job inside `withLock`, including compose/encode/driver lifecycle).
 
+Dopo `connect()` tentato: `disconnect()` in `finally`. Se `disconnect()` lancia: **non** sostituisce un `PrintResult.Failure` tipizzato già prodotto; se print era Success → `Failure(Unknown)` (D-054 Q6b). Nessuna raw exception esce dal service.
+
 La UI disabilita i pulsanti mentre stampa, ma la protezione reale è anche nel servizio.
 
 ## 22. Bluetooth MVP

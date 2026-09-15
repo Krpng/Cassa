@@ -1255,20 +1255,23 @@ owns:
   - OrderNotFound / InvalidOrderState eligibility
   - synthetic deterministic testPrint document
   - connect after encode; disconnect finally after connect attempt
-  - PRINT-T009 T020 T022 T024 T027 + service T023/T025
+  - disconnect throw precedence (Q6b): primary typed Failure wins; Success+throw→Unknown
+  - PRINT-T009 T020 T022 T024 T027 + service T023/T025 + Q6b disconnect-throw tests
 excludes:
   - concrete DataStore/hardware profile provider (M9)
   - invented NETUM charsPerLine/codePage/feed defaults
   - STAMPA enable / retry UI / settings UI
   - Bluetooth / NETUM / permissions / reconnect
   - AcceptOrder mutation / print_jobs / schema
+  - DisconnectFailed/CleanupFailed error types (M8)
 blocking_open_questions: NONE
 schema: DB_v2 UNCHANGED
 migration: NONE
 M9: NOT STARTED
 ```
 
-**FINAL REFINEMENT:** Q1–Q6 resolved. Open questions blocking PRINT-007: **NONE**.
+**FINAL REFINEMENT:** Q1–Q6 + **Q6b disconnect exception precedence** resolved. Open questions blocking PRINT-007: **NONE**.
 
-Do **not** implement PRINT-007 until explicitly authorized.
+Uncommitted PRINT-007 production already matches Q6b (read-only): keep typed Failure on disconnect throw; Success+disconnect throw → Unknown. **Missing only:** dedicated Q6b unit tests.
+
 Do **not** start M9 in PRINT-007.

@@ -538,15 +538,17 @@ Demo M7 (COMPLETE):
 4. EncodeError one-to-one → `UnsupportedEncoding` / `UnencodableCharacter` / `InvalidPrinterProfile`; driver errors propagate unchanged.
 5. Eligibility: missing → `OrderNotFound`; wrong status → `InvalidOrderState`.
 6. Whole job in `mutex.withLock`; connect only after successful encode; `disconnect()` in `finally` after connect attempt; no retry/reconnect.
-7. Never call `AcceptOrder`; no Room/numbering mutations; schema v2 unchanged; no STAMPA enable.
+7. **disconnect() exception precedence (D-054 Q6b):** typed primary Failure preserved if disconnect throws; Success+disconnect throw → `Failure(Unknown)`; unexpected+disconnect throw → `Failure(Unknown)`; no raw cleanup exception; no new cleanup error type.
+8. Never call `AcceptOrder`; no Room/numbering mutations; schema v2 unchanged; no STAMPA enable.
 
-**Owned tests:** PRINT-T009, T020, T022, T024, T027 + service invariants of T023/T025.
+**Owned tests:** PRINT-T009, T020, T022, T024, T027 + service invariants of T023/T025 + **disconnect-throw precedence cases (Q6b)**.
 **Not owned / M9:** T021; UI retry; STAMPA enable; concrete profile provider; Accept+print wiring.
 **Already PASS:** PRINT-T026 (PRINT-006).
 
-**Blocking open questions:** NONE.
+**Blocking open questions:** NONE (cleanup precedence FROZEN — Q6b).
 
 **Demo M8:** fake print completo senza hardware (static/fake profile provider + FakePrinterDriver).
+**Gate after impl:** add Q6b disconnect-throw tests if not already present; production behavior already matches Q6b (read-only check 2026-09-15).
 ## M9 — Bluetooth NETUM
 
 > Physical printer / Bluetooth / NETUM. **NOT STARTED.** Must not begin in PRINT-002.
