@@ -1,5 +1,6 @@
 package it.krpng.cassa.feature.todayorders
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,11 +32,13 @@ import it.krpng.cassa.feature.common.CassaBackButton
 @Composable
 fun TodayOrdersRoute(
     onBack: () -> Unit,
+    onOrderSelected: (String) -> Unit,
     viewModel: TodayOrdersViewModel = hiltViewModel(),
 ) {
     TodayOrdersScreen(
         state = viewModel.uiState.collectAsStateWithLifecycle().value,
         onBack = onBack,
+        onOrderSelected = onOrderSelected,
         onRetry = viewModel::retry,
     )
 }
@@ -44,6 +47,7 @@ fun TodayOrdersRoute(
 fun TodayOrdersScreen(
     state: TodayOrdersUiState,
     onBack: () -> Unit,
+    onOrderSelected: (String) -> Unit = {},
     onRetry: () -> Unit = {},
 ) {
     Column(
@@ -100,7 +104,10 @@ fun TodayOrdersScreen(
                     verticalArrangement = Arrangement.spacedBy(0.dp),
                 ) {
                     items(state.rows, key = { it.orderId }) { row ->
-                        TodayOrderRow(row = row)
+                        TodayOrderRow(
+                            row = row,
+                            onClick = { onOrderSelected(row.orderId) },
+                        )
                         HorizontalDivider()
                     }
                 }
@@ -127,11 +134,14 @@ fun TodayOrdersScreen(
 }
 
 @Composable
-private fun TodayOrderRow(row: TodayOrderRowUi) {
-    // ARCH-004 owns Accepted detail navigation — no click affordance in ARCH-001.
+private fun TodayOrderRow(
+    row: TodayOrderRowUi,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(vertical = 14.dp)
             .semantics {
                 contentDescription =

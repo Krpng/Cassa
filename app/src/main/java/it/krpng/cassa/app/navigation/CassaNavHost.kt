@@ -8,6 +8,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import it.krpng.cassa.feature.acceptance.AcceptancePreviewRoute
 import it.krpng.cassa.feature.acceptance.AcceptancePreviewViewModel
+import it.krpng.cassa.feature.accepteddetail.AcceptedOrderDetailRoute
+import it.krpng.cassa.feature.accepteddetail.AcceptedOrderDetailViewModel
 import it.krpng.cassa.feature.home.DraftRecoveryRoute
 import it.krpng.cassa.feature.home.HomeRoute
 import it.krpng.cassa.feature.importmenu.ImportPreviewRoute
@@ -128,7 +130,32 @@ fun CassaNavHost() {
             )
         }
         composable(CassaDestination.TODAY_ORDERS.route) {
-            TodayOrdersRoute(onBack = navController::navigateUp)
+            TodayOrdersRoute(
+                onBack = navController::navigateUp,
+                onOrderSelected = { orderId ->
+                    navController.navigate(AcceptedOrderDetailDestination.createRoute(orderId))
+                },
+            )
+        }
+        composable(
+            route = AcceptedOrderDetailDestination.routePattern,
+            arguments = listOf(
+                navArgument(AcceptedOrderDetailViewModel.ORDER_ID_ARGUMENT) {
+                    type = NavType.StringType
+                },
+            ),
+        ) {
+            AcceptedOrderDetailRoute(
+                onBackToToday = navController::navigateUp,
+                onHome = {
+                    navController.navigate(CassaDestination.HOME.route) {
+                        popUpTo(CassaDestination.HOME.route) {
+                            inclusive = false
+                        }
+                        launchSingleTop = true
+                    }
+                },
+            )
         }
         composable(CassaDestination.MENU.route) {
             MenuRoute(

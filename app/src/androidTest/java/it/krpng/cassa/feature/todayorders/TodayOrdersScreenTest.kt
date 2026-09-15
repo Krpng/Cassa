@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import java.time.LocalDate
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -16,6 +17,35 @@ import org.junit.Test
 class TodayOrdersScreenTest {
     @get:Rule
     val composeRule = createAndroidComposeRule<ComponentActivity>()
+
+    @Test
+    fun archT010RowTapInvokesOrderSelected() {
+        var selected: String? = null
+        composeRule.setContent {
+            MaterialTheme {
+                TodayOrdersScreen(
+                    state = TodayOrdersUiState.Content(
+                        businessDate = LocalDate.parse("2026-09-15"),
+                        rows = listOf(
+                            TodayOrderRowUi(
+                                orderId = "order-42",
+                                displayNumber = "042",
+                                acceptedAtLabel = "12:00",
+                                totalLabel = "7,00 €",
+                            ),
+                        ),
+                    ),
+                    onBack = {},
+                    onOrderSelected = { selected = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("042").performClick()
+        composeRule.runOnIdle {
+            assertEquals("order-42", selected)
+        }
+    }
 
     @Test
     fun emptyStateShowsDocumentedMessage() {
