@@ -49,7 +49,7 @@
 - [ ] DRAFT preserved across 05:00
 - [ ] current-day Accepted detail
 - [ ] reprint (when PRINT ready)
-- [ ] duplicate current-day Accepted → DRAFT (D-046 / ARCH-006; conflict UX ARCH-007)
+- [ ] duplicate current-day Accepted → DRAFT (D-046 / ARCH-006 COMPLETE; conflict UX D-047 / ARCH-007)
 
 ## Menu
 - [ ] manual products

@@ -34,7 +34,7 @@ Questa matrice collega requisiti, backlog e test.
 | Current-day Accepted detail | ARCH-004 COMPLETE (D-045) | ARCH-T010..026; SNAP-001..004 (immutability retained) |
 | Archive date filters / cross-day search / historical archive | ARCH-002/003/005 **OBSOLETE** | ARCH-T004/T005 **OBSOLETE** |
 | Historical snapshots as archive feature | ARCH-005 **OBSOLETE** | SNAP-* for multi-day archive **OBSOLETE**; snapshots remain for current-day immutability/reprint |
-| Duplicate current-day Accepted → DRAFT | ARCH-006 **READY** (D-046); ARCH-007 ACTIVE/NOT IMPLEMENTED | DUP-001..005; ARCH-T027..033 |
+| Duplicate current-day Accepted → DRAFT | ARCH-006 **COMPLETE** (D-046; 67be68b); ARCH-007 **READY** (D-047; code NOT STARTED) | DUP-001..005; ARCH-T027..033; ARCH7-T001..T015 |
 | ODS parse | ODS-001..006 | ODS-001..007/011/012/021 |
 | ODS validate | ODS-007 | ODS-004..007/013/014 |
 | ODS reimport | ODS-008/010/011 | ODS-008..010/017..020 |

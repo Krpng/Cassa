@@ -404,14 +404,29 @@ Test: ARCH-T010..ARCH-T026.
 > **CANCELLED BY PRODUCT SCOPE CHANGE** come requisito di archivio storico.
 > Gli snapshot restano obbligatori per immutabilità/ristampa degli Accepted **ancora presenti** (giornata corrente).
 
-### ARCH-006 [P1] Duplicate transaction — READY FOR IMPLEMENTATION (D-046)
+### ARCH-006 [P1] Duplicate transaction — COMPLETE (D-046; 67be68b)
 Current-day ACCEPTED only from Accepted Order Detail → new independent DRAFT (faithful snapshot copy, no catalog reprice).
-AC: source guard; atomic txn; field map D-046; CTA VISIBLE+ENABLED; success → NewOrder; existing DRAFT → typed conflict + zero writes (no ARCH-007 UX yet).
+AC met: source guard; atomic txn; field map D-046; CTA VISIBLE+ENABLED; success → NewOrder; existing DRAFT → typed conflict + zero writes.
 Schema: v2 unchanged / migration NONE.
-Test: DUP-001..005, ARCH-T027..ARCH-T033.
+Test: DUP-001..005, ARCH-T027..ARCH-T033 — PASS.
 
-### ARCH-007 [P1] Draft conflict on duplicate — ACTIVE / NOT IMPLEMENTED
-> Dipende da ARCH-006. Owns RIPRENDI / ELIMINA E DUPLICA / ANNULLA. Non implementare in ARCH-006.
+### ARCH-007 [P1] Draft conflict on duplicate — READY FOR IMPLEMENTATION (D-047)
+> Dipende da ARCH-006 COMPLETE. Docs freeze D-047. Code NOT STARTED.
+
+Owns:
+- conflict dialog (`C'È GIÀ UN ORDINE IN CORSO` + RIPRENDI / ELIMINA DRAFT E DUPLICA / ANNULLA);
+- RIPRENDI → NewOrder(existingDraftId), zero writes (incl. empty persisted DRAFT);
+- ANNULLA → stay on detail, zero writes;
+- ELIMINA DRAFT E DUPLICA → ONE Room transaction replace (never dual-txn delete+duplicate);
+- typed outcomes (`Success` / `SourceUnavailable` / `DraftMissing` / `DraftChanged` / `PersistenceFailure`);
+- success nav → NewOrder(newDraftId);
+- ARCH-006 no-active-DRAFT path unchanged; D-046 duplication semantics preserved.
+
+Recommended API: `ReplaceDraftWithAcceptedOrderDuplicate` (or equivalent).
+Schema: v2 unchanged / migration NONE.
+Test: ARCH7-T001..ARCH7-T015.
+
+Out of scope: printing; archive; merge DRAFT+duplicate; schema/migration; catalog reprice; multi-DRAFT.
 
 ### RET-001 [P0] Daily accepted-order purge — COMPLETE
 Hard delete `ACCEPTED` where `businessDate < currentBusinessDate`.

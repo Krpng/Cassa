@@ -40,7 +40,7 @@ La composizione manuale di ordini con quantità, aggiunte, rimozioni e note è s
 6. Accettare l'ordine una sola volta.
 7. Assegnare numerazione corretta per giornata operativa.
 8. Consultare gli ordini accettati della giornata operativa corrente.
-9. Duplicare un ordine Accepted della **giornata operativa corrente** (`NUOVO ORDINE DA QUESTO`, D-046 / ARCH-006).
+9. Duplicare un ordine Accepted della **giornata operativa corrente** (`NUOVO ORDINE DA QUESTO`, D-046 / ARCH-006 COMPLETE; conflitto DRAFT = D-047 / ARCH-007).
 10. Importare/aggiornare il menu da ODS.
 11. Stampare bozza/finale/ristampa su 80 mm.
 12. Cambiare stampante in futuro senza riscrivere il dominio.
@@ -86,7 +86,7 @@ La composizione manuale di ordini con quantità, aggiunte, rimozioni e note è s
 - solo `ACCEPTED` della `currentBusinessDate`;
 - hard delete automatico degli Accepted dei giorni precedenti (RET-001);
 - dettaglio Accepted giornata corrente;
-- duplicazione Accepted giornata corrente → nuovo DRAFT (`NUOVO ORDINE DA QUESTO`, D-046 / ARCH-006; conflitto DRAFT = ARCH-007);
+- duplicazione Accepted giornata corrente → nuovo DRAFT (`NUOVO ORDINE DA QUESTO`, D-046 / ARCH-006 COMPLETE; conflitto DRAFT = D-047 / ARCH-007 READY);
 - ristampa (quando PRINT in scope);
 - ~~archivio per data / ricerca numero cross-day~~ — **OBSOLETE** (M7 freeze).
 

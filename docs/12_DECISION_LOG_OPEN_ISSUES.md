@@ -123,7 +123,7 @@ Congelato per dettaglio Accepted current-day (ARCH-004):
 - ordering = stesso preview Acceptance (`AcceptancePreviewOrdering`: PIZZE → FRITTURA → BIBITE; `createdSequence ASC`);
 - label stampa UI = **`STAMPA`** (mai `RISTAMPA`); in ARCH-004 `STAMPA` = VISIBLE + DISABLED fino a PRINT (M8/M9);
 - navigation: Today tap → detail; `INDIETRO`/System Back → Today; `HOME` → Home (no reopen preview/edit);
-- `NUOVO ORDINE DA QUESTO` = NOT VISIBLE **in ARCH-004 alone** (activated by ARCH-006 / D-046; conflitto DRAFT = ARCH-007);
+- `NUOVO ORDINE DA QUESTO` = NOT VISIBLE **in ARCH-004 alone** (activated by ARCH-006 / D-046; conflitto DRAFT = ARCH-007 / D-047);
 - test dedicati ARCH-T010..ARCH-T026 (non riusare ARCH-T001..003).
 
 ### D-046 ARCH-006/007 current-day duplication contract freeze (2026-09-15)
@@ -131,8 +131,8 @@ Product decision: `NUOVO ORDINE DA QUESTO` = **REQUIRED** for current-business-d
 
 **Principle:** DUPLICAZIONE FEDELE MA INDIPENDENTE — nuovo DRAFT, nuovi UUID, contenuto/personalizzazioni/prezzi = snapshot origine; no catalog reread; no reprice; source ACCEPTED unchanged.
 
-**ARCH-006 = READY FOR IMPLEMENTATION** (transaction + CTA + success nav; conflict = typed reject only).
-**ARCH-007 = ACTIVE / NOT IMPLEMENTED** (RIPRENDI / ELIMINA E DUPLICA / ANNULLA UX).
+**ARCH-006 = COMPLETE** (67be68b; transaction + CTA + success nav; conflict = typed reject only until ARCH-007 UX).
+**ARCH-007 conflict UX = frozen separately in D-047** (READY FOR IMPLEMENTATION; code NOT STARTED).
 
 Frozen field map:
 - `productId` / `additionId` / `ingredientId` = **COPY** exact source (null stays null; no name lookup / catalog resolve);
@@ -152,15 +152,89 @@ Source guard: `ACCEPTED` AND `businessDate == currentBusinessDate` (`ClockProvid
 
 Atomicity: one Room transaction (validate source/date → no active DRAFT → create DRAFT → insert items/additions/removals). Failure → full rollback.
 
-Existing active DRAFT (ARCH-006 without ARCH-007): typed conflict + zero writes; no delete/replace/merge.
+Existing active DRAFT (ARCH-006 without ARCH-007 UX): typed conflict + zero writes; no delete/replace/merge in ARCH-006.
+With ARCH-007 (D-047): same typed conflict from repository becomes conflict **dialog** (RIPRENDI / ELIMINA DRAFT E DUPLICA / ANNULLA); replace = dedicated ONE Room transaction.
 
 CTA (valid current-day detail): `NUOVO ORDINE DA QUESTO` VISIBLE+ENABLED; `STAMPA` remains VISIBLE+DISABLED.
 
-Success: open new DRAFT in standard NewOrder UI (not stay on detail; not Home).
+Success (no active DRAFT): open new DRAFT in standard NewOrder UI (not stay on detail; not Home).
 
 Schema: DB v2 unchanged; `sourceOrderId` already present; migration NONE.
 
-Tests: DUP-001..005 ACTIVE (mapped ARCH-006/007); ARCH-T027..ARCH-T033 for guard/note/sequence/refs/rollback/nav/CTA.
+Tests: DUP-001..005 ACTIVE (ARCH-006); ARCH-T027..ARCH-T033 for guard/note/sequence/refs/rollback/nav/CTA. ARCH-007 tests = ARCH7-T001..T015 (D-047).
+
+### D-047 ARCH-007 active-DRAFT conflict UX freeze (2026-09-15)
+Product decision: when `NUOVO ORDINE DA QUESTO` hits an **active DRAFT** (including persisted empty DRAFT), show conflict dialog — not a terminal error-only UX.
+
+**Depends on:** ARCH-006 COMPLETE (67be68b). ARCH-006 no-active-DRAFT path **unchanged**.
+
+**ARCH-007 = READY FOR IMPLEMENTATION** (docs freeze only; code NOT STARTED).
+
+#### Dialog (frozen copy)
+- Title: `C'È GIÀ UN ORDINE IN CORSO`
+- Body: `Puoi riprendere l'ordine in corso oppure eliminarlo e creare un nuovo ordine da questo.`
+- Actions:
+  - `RIPRENDI ORDINE IN CORSO`
+  - `ELIMINA DRAFT E DUPLICA`
+  - `ANNULLA`
+- No second confirmation for `ELIMINA DRAFT E DUPLICA` (destructive meaning is explicit in the button).
+
+#### RIPRENDI ORDINE IN CORSO
+- Zero writes: do not modify existing DRAFT, do not modify source ACCEPTED, do not create/duplicate.
+- Navigate → standard NewOrder workspace with **existingDraftId**.
+- Works for DRAFT with items **and** persisted empty DRAFT (`draftSlot=1`).
+
+#### ANNULLA
+- Close dialog; stay on Accepted detail; **zero writes**.
+
+#### ELIMINA DRAFT E DUPLICA (critical — atomic)
+ONE Room transaction only. Forbidden: `deleteDraft()` then `duplicateAcceptedOrder()` in two transactions (risk of lost DRAFT if duplicate fails).
+
+Inside the same transaction:
+1. reread source order;
+2. validate source = current-day ACCEPTED;
+3. reread current active DRAFT;
+4. verify active DRAFT expected (present / identity match as designed);
+5. delete existing DRAFT + children (empty DRAFT: delete the DRAFT **row**, not only items);
+6. create new DRAFT;
+7. `sourceOrderId` = source ACCEPTED id;
+8. copy `generalNote`;
+9. copy items;
+10. copy additions;
+11. copy removals;
+12. commit.
+
+Duplication semantics = **ARCH-006 / D-046 preserved** (FAITHFUL + INDEPENDENT; new UUIDs; snapshots/qty/`createdSequence`/manual incl. €0/refs COPY; no catalog reread; no reprice; DRAFT total ORD-022 live; source ACCEPTED immutable).
+
+Failure any step → **full rollback**: old DRAFT intact; source intact; no partial new DRAFT.
+
+#### Empty persisted DRAFT
+`status=DRAFT AND draftSlot=1` with zero items = **active DRAFT** → same dialog. Replace must delete DRAFT row and insert new duplicated DRAFT.
+
+#### Concurrency / typed outcomes (no silent success)
+Dialog may originate from ARCH-006 `DraftConflict`, but destructive action **must revalidate inside Room** (not trust UI cache alone).
+
+Minimum typed outcomes/errors:
+- `Success(newDraftId)`
+- `SourceUnavailable` (missing / not ACCEPTED / not current-day)
+- `DraftMissing` (active DRAFT no longer present)
+- `DraftChanged` (active DRAFT identity ≠ expected)
+- `PersistenceFailure`
+
+#### Success navigation (replace)
+→ standard NewOrder with **exactly** the new duplicated `draftId`. Old DRAFT must not exist.
+
+#### Architecture recommendation (document only — do not implement here)
+Dedicated repository API + use case, e.g. `ReplaceDraftWithAcceptedOrderDuplicate` (or equivalent), owning the single Room transaction. Do **not** chain separate `deleteDraft` + `duplicateAcceptedOrder` transactions.
+
+#### Schema
+DB v2 unchanged; migration NONE; no new DAO required beyond existing draft/order APIs used inside one txn.
+
+#### Tests
+ARCH7-T001..ARCH7-T015 (see `docs/09_TEST_PLAN.md`).
+
+#### Out of scope for ARCH-007
+Printing; historical archive; schema/migration; catalog reprice; multiple simultaneous DRAFTs; merge current DRAFT with duplicated content.
 
 ## Reconciliation decisions made in final pack
 

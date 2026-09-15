@@ -353,7 +353,7 @@ Se fallisce:
 Una sola Room transaction. Sequenza semantica:
 
 1. verifica source `ACCEPTED` + `businessDate == currentBusinessDate`;
-2. verifica assenza active DRAFT (se presente → typed conflict, **zero writes**; risoluzione UX = ARCH-007);
+2. verifica assenza active DRAFT (se presente → typed conflict, **zero writes**; UX dialog = ARCH-007 / D-047);
 3. crea order DRAFT (`draftSlot=1`, `sourceOrderId=source.id`, no display/businessDate/acceptedAt);
 4. copia items con **nuovi** UUID, snapshot/prezzi/`createdSequence` exact, `productId` COPY;
 5. copia additions/removals con **nuovi** child UUID, snapshot + `additionId`/`ingredientId` COPY;
@@ -361,6 +361,30 @@ Una sola Room transaction. Sequenza semantica:
 
 Se fallisce: rollback completo (nessun DRAFT parziale).
 Schema: DB version = 2 unchanged; `sourceOrderId` già presente; migration NONE.
+
+## 18b. Transazione replace-draft-and-duplicate (ARCH-007 / D-047)
+
+ONE Room transaction dedicata (API raccomandata: `ReplaceDraftWithAcceptedOrderDuplicate` o equivalente).
+
+**Vietato** eseguire `deleteDraft` e `duplicateAcceptedOrder` in due transaction separate.
+
+Sequenza semantica nella stessa transaction:
+
+1. reread source order;
+2. validate source = current-day ACCEPTED;
+3. reread current active DRAFT (`status=DRAFT AND draftSlot=1`);
+4. verify active DRAFT expected (present + identity match);
+5. delete existing DRAFT + children (DRAFT vuoto: eliminare la **row** `orders`, non solo items);
+6. create new DRAFT (`draftSlot=1`, `sourceOrderId=source.id`);
+7–11. copy `generalNote` + items + additions + removals con semantiche ARCH-006 / D-046;
+12. commit.
+
+Failure qualsiasi passo → full rollback:
+- existing DRAFT intact (inclusi children);
+- source ACCEPTED intact;
+- no partial new DRAFT.
+
+Schema: DB v2 unchanged; migration NONE; nessuna nuova tabella.
 
 ## 19. Import transaction
 

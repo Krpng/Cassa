@@ -25,7 +25,7 @@ Dopo `ACCEPTED`:
 - non ricalcolare da menu corrente;
 - consentire lettura;
 - stampa / ristampa funzionale con label UI **`STAMPA`** (mai `RISTAMPA`) quando PRINT in scope;
-- duplicazione current-day = **ACTIVE** (ARCH-006/007, D-046), non parte del solo ARCH-004 (che non mostrava ancora la CTA).
+- duplicazione current-day = **ACTIVE** (ARCH-006 COMPLETE / ARCH-007 READY, D-046 + D-047), non parte del solo ARCH-004 (che non mostrava ancora la CTA).
 
 La regola deve essere enforced nel dominio/repository, non solo nascondendo pulsanti.
 
@@ -814,11 +814,11 @@ Dettaglio Accepted (**ARCH-004 FREEZE** — D-045):
 - **non** mostrare `RISTAMPA`, `NUOVO ORDINE DA QUESTO`, controlli edit / `ACCETTA` / `COMPLETA`;
 - missing / DRAFT / old-or-purged → Unavailable (observe; no crash).
 
-Duplicazione (ARCH-006/007, **D-046**): ACTIVE — `NUOVO ORDINE DA QUESTO` required da Accepted detail giornata corrente. ARCH-004 da solo non la mostrava; ARCH-006 attiva CTA + transaction. ARCH-007 = conflict UX (NOT IMPLEMENTED).
+Duplicazione (ARCH-006/007, **D-046** + **D-047**): ACTIVE — `NUOVO ORDINE DA QUESTO` required da Accepted detail giornata corrente. ARCH-006 = COMPLETE (duplicate txn + CTA). ARCH-007 = conflict UX READY FOR IMPLEMENTATION (D-047; code NOT STARTED).
 
-## 23. Duplicazione — READY (D-046)
+## 23. Duplicazione — READY (D-046 + D-047)
 
-> **ACTIVE PRODUCT REQUIREMENT.** Congelato in D-046. Scope: solo `ACCEPTED` con `businessDate = currentBusinessDate` da Accepted Order Detail. Principio: **DUPLICAZIONE FEDELE MA INDIPENDENTE**.
+> **ACTIVE PRODUCT REQUIREMENT.** Congelato in D-046 (duplicate) + D-047 (conflict UX). Scope: solo `ACCEPTED` con `businessDate = currentBusinessDate` da Accepted Order Detail. Principio: **DUPLICAZIONE FEDELE MA INDIPENDENTE**.
 
 ### Guard sorgente
 Ammesso solo se `status == ACCEPTED` AND `businessDate == currentBusinessDate`.
@@ -863,7 +863,7 @@ Il DRAFT segue **ORD-022**: live total derivato dalle `order_items` persistite (
 `orders.totalCents` in DRAFT = comportamento normale createDraft / mutazioni DRAFT.
 Alla futura Acceptance: AcceptOrder calcola checked total e lo persiste sull’ACCEPTED (no catalog reprice).
 
-### Atomicità
+### Atomicità (ARCH-006 — no active DRAFT)
 Una sola Room transaction:
 1. validate source + currentBusinessDate;
 2. verify no active DRAFT;
@@ -873,15 +873,54 @@ Una sola Room transaction:
 6. insert copied removals.
 Failure → rollback completo (nessun DRAFT parziale).
 
-### Active DRAFT esistente (senza ARCH-007)
-Typed conflict + zero writes; source e DRAFT esistente invariati.
-**Non** delete/replace/merge; **non** UX RIPRENDI / ELIMINA E DUPLICA (owner **ARCH-007**).
+### Active DRAFT esistente — ARCH-006 detection
+Repository: typed `DraftConflict` + **zero writes**; source e DRAFT esistente invariati.
+**Non** delete/replace/merge dentro ARCH-006.
+
+### Active DRAFT esistente — ARCH-007 conflict UX (D-047)
+UI: **non** errore terminale solo. Aprire conflict dialog (copy congelata in UX §16).
+
+Azioni:
+- **RIPRENDI ORDINE IN CORSO** — zero writes; apri NewOrder con `existingDraftId` (anche DRAFT vuoto persistito);
+- **ANNULLA** — chiudi dialog; resta sul detail ACCEPTED; zero writes;
+- **ELIMINA DRAFT E DUPLICA** — sostituzione **atomica** (sotto); nessuna seconda confirmation dialog.
+
+Empty persisted DRAFT (`draftSlot=1`, zero items) = **active DRAFT** → stesso dialog. Deleted/nonexistent DRAFT non blocca (path ARCH-006).
+
+### Atomic replace (ARCH-007 — ELIMINA DRAFT E DUPLICA)
+ONE Room transaction. **Vietato** `deleteDraft` + `duplicateAcceptedOrder` in due transaction separate.
+
+Nella stessa transaction:
+1. reread source;
+2. validate current-day ACCEPTED;
+3. reread active DRAFT;
+4. verify active DRAFT expected;
+5. delete existing DRAFT + children (anche row DRAFT vuota);
+6. create new DRAFT;
+7. `sourceOrderId` = source ACCEPTED id;
+8. copy `generalNote`;
+9–11. copy items / additions / removals (semantiche D-046);
+12. commit.
+
+Failure → **full rollback**: old DRAFT preservato; source immutata; nessun nuovo DRAFT parziale.
+
+Typed outcomes (no silent success; revalidate in Room, non solo UI cache):
+- `Success(newDraftId)`
+- `SourceUnavailable`
+- `DraftMissing`
+- `DraftChanged`
+- `PersistenceFailure`
+
+API raccomandata (document only): use case/repository dedicato tipo `ReplaceDraftWithAcceptedOrderDuplicate`.
 
 ### Source immutability
-Dopo duplicate: source ACCEPTED invariata (snapshot/children/`updatedAt`).
+Dopo duplicate o replace: source ACCEPTED invariata (snapshot/children/`updatedAt`).
 
 ### CTA / success (UI — vedi anche UX)
-`NUOVO ORDINE DA QUESTO` VISIBLE+ENABLED sul detail valido; success → apri nuovo DRAFT in NewOrder standard.
+`NUOVO ORDINE DA QUESTO` VISIBLE+ENABLED sul detail valido.
+- No active DRAFT success → NewOrder(`newDraftId`) [ARCH-006].
+- Replace success → NewOrder(`newDraftId`) [ARCH-007]; old DRAFT assente.
+- RIPRENDI → NewOrder(`existingDraftId`) [ARCH-007].
 
 ## 24. Menu attivo/inattivo
 

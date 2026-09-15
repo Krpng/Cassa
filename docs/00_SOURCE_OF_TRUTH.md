@@ -118,7 +118,7 @@ Questo evita che `AcceptOrder` dipenda da una preferenza non transazionale.
 - ordini Accepted della sola giornata operativa corrente (`ORDINI DI OGGI`).
 - hard delete Accepted dei giorni precedenti (RET-001).
 - ~~archivio storico~~ — superseded (M7 D-044).
-- duplicazione Accepted giornata corrente (`NUOVO ORDINE DA QUESTO`) — **ACTIVE** (D-046 / ARCH-006 READY; ARCH-007 NOT IMPLEMENTED).
+- duplicazione Accepted giornata corrente (`NUOVO ORDINE DA QUESTO`) — **ACTIVE** (D-046 / ARCH-006 COMPLETE; D-047 / ARCH-007 READY FOR IMPLEMENTATION).
 - stampa 80 mm non fiscale.
 - ESC/POS/Bluetooth.
 - una copia automatica.

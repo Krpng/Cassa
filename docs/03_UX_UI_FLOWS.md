@@ -664,11 +664,11 @@ Nessun controllo di modifica:
 - edit note / additions / removals / manual price;
 - `ACCETTA`, `COMPLETA`.
 
-## 16. Duplicazione — READY (D-046 / ARCH-006)
+## 16. Duplicazione — READY (D-046 / ARCH-006 + D-047 / ARCH-007)
 
-> **ACTIVE.** `NUOVO ORDINE DA QUESTO` = REQUIRED da Accepted Order Detail (solo current-day ACCEPTED). Contratto campo/transazione: `docs/02_BUSINESS_RULES.md` §23 + D-046.
+> **ACTIVE.** `NUOVO ORDINE DA QUESTO` = REQUIRED da Accepted Order Detail (solo current-day ACCEPTED). Contratto campo/transazione: `docs/02_BUSINESS_RULES.md` §23 + D-046 + D-047.
 
-### CTA (ARCH-006)
+### CTA (ARCH-006 — COMPLETE)
 
 Sul detail valido (`ACCEPTED` + currentBusinessDate):
 
@@ -676,15 +676,43 @@ Sul detail valido (`ACCEPTED` + currentBusinessDate):
 - `[ STAMPA ]` — resta **VISIBLE + DISABLED** (fino a PRINT);
 - `[ INDIETRO ]` / `[ HOME ]` — invariati.
 
-### Success navigation (congelata)
+### Success navigation — no active DRAFT (ARCH-006, invariato)
 
 Duplicate success → apri **direttamente** il nuovo DRAFT nella **NewOrder** UI standard.
 Non restare sul detail. Non andare Home. Non creare un secondo editor.
 
-### Conflitto DRAFT (ARCH-006 vs ARCH-007)
+### Conflitto DRAFT — dialog (ARCH-007 / D-047)
 
-Se esiste active DRAFT: ARCH-006 → typed conflict + zero writes (nessuna UX RIPRENDI/ELIMINA E DUPLICA).
-**ARCH-007** (ACTIVE / NOT IMPLEMENTED) owns: RIPRENDI / ELIMINA E DUPLICA / ANNULLA.
+Se esiste **active DRAFT** (incluso DRAFT vuoto persistito `draftSlot=1`):
+
+1. ARCH-006 repository → typed `DraftConflict` + zero writes (invariato);
+2. ARCH-007 UI → **conflict dialog** (non solo errore terminale).
+
+#### Dialog copy (frozen)
+
+- Titolo: `C'È GIÀ UN ORDINE IN CORSO`
+- Testo: `Puoi riprendere l'ordine in corso oppure eliminarlo e creare un nuovo ordine da questo.`
+- Azioni:
+  - `[ RIPRENDI ORDINE IN CORSO ]`
+  - `[ ELIMINA DRAFT E DUPLICA ]`
+  - `[ ANNULLA ]`
+- Nessuna seconda confirmation su `ELIMINA DRAFT E DUPLICA`.
+
+#### RIPRENDI ORDINE IN CORSO
+
+- Zero writes (DRAFT e source ACCEPTED invariati; nessuna duplicazione).
+- Navigazione → NewOrder standard con `existingDraftId`.
+- Valido con items **o** DRAFT vuoto persistito.
+
+#### ANNULLA
+
+- Chiude dialog; resta sul dettaglio ACCEPTED; zero writes.
+
+#### ELIMINA DRAFT E DUPLICA
+
+- Operazione atomica ONE Room transaction (vedi BUSINESS_RULES §23 / SCHEMA §18b).
+- Success → NewOrder standard con **esattamente** `newDraftId`; old DRAFT assente.
+- Failure → rollback; old DRAFT preservato; messaggio errore tipizzato (no silent).
 
 ## 17. Gestione menu
 

@@ -776,7 +776,7 @@ M5 does **not** implement or validate:
 - acceptance
 - order numbering
 - accepted-order archive (**CANCELLED** by M7 D-044; superseded by current-day only + RET-001)
-- duplication of accepted order (**ACTIVE** D-046 / ARCH-006 READY; ARCH-007 NOT IMPLEMENTED)
+- duplication of accepted order (**ACTIVE** D-046 / ARCH-006 COMPLETE; D-047 / ARCH-007 READY FOR IMPLEMENTATION)
 - fake printing
 - physical NETUM printing
 
@@ -890,14 +890,14 @@ Tests: ACCEPT-T008/T009/T020 PASS cover ACCEPT-002; ACCEPT-T010..012 remain prev
 
 ```yaml
 branch: main
-HEAD_at_freeze_docs: c9f8446a12d4c18317fa99354fa3a4ca88022631
+HEAD_at_freeze_docs: 67be68b
 ARCH-001: COMPLETE / PRESERVED (Today = currentBusinessDate ACCEPTED only)
 ARCH-002: OBSOLETE (IERI / date picker)
 ARCH-003: OBSOLETE (cross-day number search)
 ARCH-004: COMPLETE (D-045 + edc3e9a)
 ARCH-005: OBSOLETE as historical archive
-ARCH-006: READY FOR IMPLEMENTATION (D-046 docs freeze; code NOT STARTED)
-ARCH-007: ACTIVE / NOT IMPLEMENTED (draft-conflict UX on duplicate)
+ARCH-006: COMPLETE (D-046 + 67be68b)
+ARCH-007: READY FOR IMPLEMENTATION (D-047 docs freeze; code NOT STARTED)
 RET-001: COMPLETE
 Home ARCHIVIO: REMOVED (M7 UX cleanup)
 ORDINI DI OGGI: PRESERVED
@@ -907,13 +907,13 @@ Draft accepted after 05:00: NEW businessDate at AcceptOrder
 numbering_state historical rows: NOT purged by RET-001
 Exact Android 05:00 job: NOT REQUIRED
 Schema: DB v2 UNCHANGED / migration NONE for RET-001 MVP
-Normative decision: D-044; ARCH-004 CTA freeze: D-045; duplication freeze: D-046
+Normative decision: D-044; ARCH-004 CTA freeze: D-045; duplication: D-046; conflict UX: D-047
 ```
 
 Do **not** resurrect ARCH-002/003/005.
 Do **not** implement PRINT real until authorized.
-Do **not** implement ARCH-006 until explicitly authorized after D-046 (docs READY).
-Do **not** implement ARCH-007 until authorized after ARCH-006.
+Do **not** re-open ARCH-006 contract (COMPLETE).
+Do **not** implement ARCH-007 until explicitly authorized after D-047 (docs READY).
 
 ## 27. ARCH-004 CTA / NAVIGATION CONTRACT FREEZE (2026-09-15)
 
@@ -942,12 +942,13 @@ M7_UX_CLEANUP: COMPLETE
 ```yaml
 decision: D-046
 HEAD_at_freeze_docs: edc3e9a
+implementation_COMPLETE: 67be68b
 closes: D-019 (SUPERSEDED)
 product: NUOVO_ORDINE_DA_QUESTO = REQUIRED
 principle: FAITHFUL_BUT_INDEPENDENT
 source_guard: CURRENT_DAY_ACCEPTED_ONLY
-ARCH-006: READY FOR IMPLEMENTATION (code NOT STARTED)
-ARCH-007: ACTIVE / NOT IMPLEMENTED
+ARCH-006: COMPLETE
+ARCH-007_conflict_UX: see D-047 / section 29
 sourceOrderId: source ACCEPTED id
 references_COPY: productId / additionId / ingredientId
 snapshots_COPY: product / prices / notes / additions / removals
@@ -965,5 +966,41 @@ migration: NONE
 tests: DUP-001..005 + ARCH-T027..033
 ```
 
-Do **not** implement ARCH-006/007 until explicitly authorized after this freeze.
-Do **not** implement ARCH-007 conflict UX inside ARCH-006.
+ARCH-006 no-active-DRAFT path is COMPLETE and must remain unchanged by ARCH-007.
+
+## 29. ARCH-007 ACTIVE-DRAFT CONFLICT UX FREEZE (2026-09-15)
+
+```yaml
+decision: D-047
+HEAD_at_freeze_docs: 67be68b
+depends_on: ARCH-006 COMPLETE
+ARCH-007: READY FOR IMPLEMENTATION (code NOT STARTED)
+trigger: NUOVO_ORDINE_DA_QUESTO + active DRAFT (incl. empty persisted)
+dialog_title: C'È GIÀ UN ORDINE IN CORSO
+actions:
+  - RIPRENDI ORDINE IN CORSO -> NewOrder(existingDraftId) / ZERO_WRITES
+  - ELIMINA DRAFT E DUPLICA -> ONE_ROOM_TXN replace / NewOrder(newDraftId)
+  - ANNULLA -> close dialog / stay on detail / ZERO_WRITES
+second_confirm_on_delete: NONE
+empty_persisted_DRAFT: SAME_DIALOG
+replace_forbidden_pattern: deleteDraft_then_duplicateAcceptedOrder_two_txns
+duplication_semantics: ARCH-006 / D-046 PRESERVED
+catalog_reread: NONE
+reprice: NONE
+source_ACCEPTED: IMMUTABLE
+rollback: OLD_DRAFT_PRESERVED
+typed_outcomes:
+  - Success(newDraftId)
+  - SourceUnavailable
+  - DraftMissing
+  - DraftChanged
+  - PersistenceFailure
+recommended_api: ReplaceDraftWithAcceptedOrderDuplicate
+schema: DB_v2 UNCHANGED
+migration: NONE
+tests: ARCH7-T001..T015
+out_of_scope: printing / archive / merge / multi-DRAFT / schema
+```
+
+Do **not** implement ARCH-007 until explicitly authorized after this freeze.
+Do **not** change ARCH-006 duplicate semantics or no-active-DRAFT success path.

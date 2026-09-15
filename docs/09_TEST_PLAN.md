@@ -539,9 +539,9 @@ Addition price changes -> historical reprint old price.
 ### SNAP-004
 Deactivate product -> historical order readable.
 
-## 12. Duplicate (ARCH-006 / D-046 — ACTIVE)
+## 12. Duplicate (ARCH-006 / D-046 COMPLETE + ARCH-007 / D-047 READY)
 
-> Riattivati formalmente. Scope: current-day ACCEPTED → new DRAFT. Conflict resolution UX = ARCH-007 (DUP-005 reject path is ARCH-006).
+> Scope: current-day ACCEPTED → new DRAFT. ARCH-006 path (no active DRAFT) COMPLETE. Conflict resolution UX = ARCH-007 (D-047 READY; code NOT STARTED). DUP-005 reject path remains ARCH-006 repository contract.
 
 ### DUP-001 [ARCH-006]
 Exact lines / product snapshots / qty / additions / removals / item notes / `createdSequence` exact copy; new item+child UUIDs.
@@ -555,8 +555,8 @@ New order identity (DRAFT, null display/acceptedAt/businessDate) + `sourceOrderI
 ### DUP-004 [ARCH-006]
 Source ACCEPTED unchanged (snapshots/children/`updatedAt`).
 
-### DUP-005 [ARCH-006; resolution UX = ARCH-007]
-Existing active DRAFT → typed conflict + zero writes (no partial DRAFT; no delete/replace in ARCH-006).
+### DUP-005 [ARCH-006; UI resolution = ARCH-007]
+Existing active DRAFT (incl. empty persisted) → typed conflict + zero writes (no partial DRAFT; no delete/replace in ARCH-006).
 
 ### ARCH-T027 [ARCH-006]
 Source guard: only current-day ACCEPTED; DRAFT / missing / old ACCEPTED → reject + zero writes.
@@ -578,6 +578,51 @@ Success → open new DRAFT in standard NewOrder UI (not detail, not Home).
 
 ### ARCH-T033 [ARCH-006]
 On valid detail: `NUOVO ORDINE DA QUESTO` VISIBLE+ENABLED; `STAMPA` remains VISIBLE+DISABLED.
+
+### ARCH7-T001 [ARCH-007]
+Active DRAFT → conflict dialog visible (title/actions frozen).
+
+### ARCH7-T002 [ARCH-007]
+ANNULLA → zero writes + stay on accepted detail.
+
+### ARCH7-T003 [ARCH-007]
+RIPRENDI → existing DRAFT opened in NewOrder; zero writes.
+
+### ARCH7-T004 [ARCH-007]
+RIPRENDI works with empty persisted DRAFT.
+
+### ARCH7-T005 [ARCH-007]
+ELIMINA DRAFT E DUPLICA → old DRAFT deleted + new duplicated DRAFT created (ONE Room txn).
+
+### ARCH7-T006 [ARCH-007]
+Source ACCEPTED remains immutable after replace.
+
+### ARCH7-T007 [ARCH-007]
+New DRAFT `sourceOrderId` = source Accepted id.
+
+### ARCH7-T008 [ARCH-007]
+Faithful snapshot/pricing copy incl. manual €0 (ARCH-006 semantics preserved).
+
+### ARCH7-T009 [ARCH-007]
+Old DRAFT with items fully removed including child rows.
+
+### ARCH7-T010 [ARCH-007]
+Empty old DRAFT replaced correctly (DRAFT row deleted; new DRAFT inserted).
+
+### ARCH7-T011 [ARCH-007]
+Failure during duplication → full rollback; old DRAFT preserved intact.
+
+### ARCH7-T012 [ARCH-007]
+No partial new DRAFT after failure.
+
+### ARCH7-T013 [ARCH-007]
+Stale/invalid source (or DraftMissing / DraftChanged) → typed error + no writes that drop the old DRAFT.
+
+### ARCH7-T014 [ARCH-007]
+Replace success → navigate to standard NewOrder(`newDraftId`).
+
+### ARCH7-T015 [ARCH-007]
+No catalog reread / no reprice on replace path.
 
 ## 13. Today / Accepted list (current business day only)
 
@@ -833,7 +878,7 @@ Restart -> recover draft.
 
 ### UI-006
 Ordini di oggi → dettaglio Accepted giornata corrente (ARCH-004 / ARCH-T010..026).
-Duplicazione da detail: ARCH-006 / D-046 (DUP-001..005, ARCH-T027..033). Ex “Archive → detail → duplicate”: **OBSOLETE**.
+Duplicazione da detail: ARCH-006 / D-046 COMPLETE (DUP-001..005, ARCH-T027..033) + ARCH-007 / D-047 READY (ARCH7-T001..T015). Ex “Archive → detail → duplicate”: **OBSOLETE**.
 
 ### UI-007
 Import -> preview -> confirm.

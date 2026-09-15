@@ -258,7 +258,8 @@ Responsabilità:
 - today query (current businessDate);
 - daily purge (RET-001);
 - current-day Accepted detail;
-- duplicate current-day Accepted → new DRAFT (ARCH-006 / D-046; conflict reject until ARCH-007).
+- duplicate current-day Accepted → new DRAFT (ARCH-006 / D-046 COMPLETE);
+- active-DRAFT conflict UX + atomic replace-and-duplicate (ARCH-007 / D-047 READY; code NOT STARTED).
 
 Non esporre Entity Room alla UI.
 
@@ -277,6 +278,7 @@ Core:
 - CalculateOrderTotal
 - AcceptOrder
 - DuplicateAcceptedOrder
+- ReplaceDraftWithAcceptedOrderDuplicate *(ARCH-007 recommended; NOT IMPLEMENTED — dedicated ONE Room txn; do not chain deleteDraft + duplicateAcceptedOrder)*
 - GetTodayOrders
 - SearchArchive
 - AnalyzeMenuImport
@@ -306,7 +308,8 @@ Non aggiornare il carrello UI in modo ottimistico se non necessario.
 - AcceptOrder.
 - Split una/tutte.
 - Delete/recreate draft.
-- Duplicate accepted order.
+- Duplicate accepted order (ARCH-006).
+- Replace draft with accepted-order duplicate (ARCH-007 — ONE txn; never split delete+duplicate).
 - Commit import ODS.
 - Modifiche item + children quando devono essere coerenti.
 
