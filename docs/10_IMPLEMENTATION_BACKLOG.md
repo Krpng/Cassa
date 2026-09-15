@@ -448,46 +448,49 @@ Demo M7 (COMPLETE):
 - dettaglio Accepted giornata corrente (ARCH-004);
 - duplicazione + conflict UX (ARCH-006/007).
 
-## M8 — Printing foundation — NEXT
+## M8 — Printing foundation — IN PROGRESS
 
-> **NEXT milestone** after M7 COMPLETE. First authorized task when M8 starts: **PRINT-001** (contracts/models). Do not start PRINT-002+ until PRINT-001 is COMPLETE and authorized.
+> PRINT-001 **COMPLETE** (`581f27d`). Next authorized task: **PRINT-002** (D-049). Do not start PRINT-003+ until PRINT-002 is COMPLETE and authorized.
 
-### PRINT-001 [P0] Printer contracts/models — READY FOR IMPLEMENTATION (D-048)
-> Pure contracts / domain models only. No Fake implementation, no ESC/POS bytes, no Bluetooth, no UI wiring, no schema/migration.
+### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
+> Complete on `581f27d`. Pure contracts/models only.
 
-**Depends on:** M7 COMPLETE (`a513b3b`). Architecture sketch: `docs/04_ANDROID_ARCHITECTURE.md` §20–23; content rules live in `docs/07_PRINTING_SPEC.md` but **layout/content composition is NOT PRINT-001**.
+### PRINT-002 [P0] PrintableDocument/ReceiptComposer — READY FOR IMPLEMENTATION (D-049)
+> Composition **contracts/models only** (parallel to PRINT-001). No full receipt text layout implementation, no ESC/POS bytes, no FakePrinter, no Bluetooth, no UI, no schema/migration.
+
+**Depends on:** PRINT-001 COMPLETE (`581f27d`). Pipeline: `docs/04_ANDROID_ARCHITECTURE.md` §20; content rules normative in `docs/07_PRINTING_SPEC.md` §§4–15 (layout **implementation** owned by **PRINT-004**).
 
 **Owns (AC):**
-1. `PrinterProfile` model (fields from printing spec §3: id/name, paperWidthMm=80 default, charsPerLine, codePage, feedLines, supportsCut, optional cutCommandVariant, pricePrintMode).
-2. `PricePrintMode` (`DETAILED` default, `TOTAL_ONLY` supported) — enum/contract only; no UI required in PRINT-001.
-3. `PrinterDriver` interface:
-   - `suspend fun connect(profile: PrinterProfile): PrinterResult`
-   - `suspend fun print(data: ByteArray): PrinterResult`
-   - `suspend fun disconnect()`
-4. `PrinterService` interface (signatures only):
-   - `suspend fun printDraft(orderId: String): PrintResult`
-   - `suspend fun printAccepted(orderId: String): PrintResult`
-   - `suspend fun testPrint(): PrintResult`
-5. Typed `PrinterResult` / `PrintResult` / printer error model aligned with architecture §23 + printing spec §17 (at least: Success path + BluetoothDisabled, PermissionDenied, PrinterNotConfigured, ConnectionFailed, ConnectionLost, Timeout, PrintFailed, Unknown). Domain must not throw raw exceptions as normal business flow.
-6. Domain/print contracts must **not** depend on Android Bluetooth APIs, NETUM/vendor SDK, Compose, or Room entities.
-7. Schema: **DB v2 unchanged**; migration **NONE**. No `print_jobs` table (SoT: not required in v1).
-8. No production FakePrinterDriver body (owner **PRINT-006**). No EscPosEncoder (PRINT-005). No ReceiptComposer/PrintableDocument layout (PRINT-002/004). No Mutex service impl (PRINT-007). No Settings/BT UI (M9).
+1. `PrintKind` (`DRAFT`, `FINAL`). Reprint uses the same FINAL document content; never emit label/content `RISTAMPA` (business rules / printing spec already frozen).
+2. `PrintableDocument` pure-Kotlin model: intermediate **pre-EscPosEncoder** representation of one receipt/ticket (not `ByteArray`, not ESC/POS commands).
+3. Minimal document shape frozen for encoder handoff later:
+   - ordered `PrintableLine` values with `text: String` and optional emphasis hint for header sizing (`NORMAL` / `EMPHASIZED` only — semantic hint, not ESC/POS);
+   - `kind: PrintKind` on the document.
+4. `ReceiptComposer` interface only, pure Kotlin, e.g.:
+   - `fun compose(order: Order, kind: PrintKind, pricePrintMode: PricePrintMode, charsPerLine: Int): PrintableDocument`
+   - Inputs are domain `Order` snapshot + PRINT-001 `PricePrintMode` + `charsPerLine` (needed by printing spec §7 separator adaptation when formatter runs).
+5. No Android / Room entity / Compose / Bluetooth / NETUM dependencies in these types.
+6. Schema: **DB v2 unchanged**; migration **NONE**; no `print_jobs`.
 
-**Explicitly deferred:**
-- PRINT-002..007 (composer, PricePrintMode UX, formatter, ESC/POS encoder, FakePrinterDriver, PrinterService+Mutex).
-- PRINT-020..024 / BT-* / HW-* (M9 physical Bluetooth/NETUM, accept+print wiring, permissions, bonded devices, MAC/pairing).
-- Enabling Accepted-detail `STAMPA` CTA (remains VISIBLE+DISABLED until print integration authorized).
+**Explicitly deferred (NOT PRINT-002):**
+- Full layout/formatting implementation (headers/sections/wrap/prices/notes/total text) → **PRINT-004** (owns PRINT-T001..T008, T010..T014 as implementation gates).
+- `PricePrintMode` settings/UX → **PRINT-003**.
+- EscPosEncoder / code page / cut commands → **PRINT-005**.
+- FakePrinterDriver → **PRINT-006**.
+- PrinterService Mutex / wiring → **PRINT-007**.
+- Accept+print / STAMPA CTA enable / BT / NETUM → **M9** (PRINT-020+ / BT-*).
+- Hardware calibration of `charsPerLine` / `codePage` / feed / cutter.
+- Inventing definitive code pages, margins, density, MAC, pairing, vendor protocol.
 
-**Tests:** contract/compile unit coverage for models/interfaces + sealed error exhaustiveness as practical. Formatter/service PRINT-T001..027 remain owners of later PRINT tasks (not acceptance gate for PRINT-001 alone).
+**Tests:** small contract/unit coverage for `PrintKind` / `PrintableDocument` / `ReceiptComposer` compile stubs. Do **not** mark PRINT-T001..027 PASS in PRINT-002 alone.
 
 **Demo:** none (contracts only).
 
-### PRINT-002 [P0] PrintableDocument/ReceiptComposer
-
 ### PRINT-003 [P0] PricePrintMode
+> Settings/UX / preference wiring for `PricePrintMode` (enum already in PRINT-001). **NOT STARTED.**
 
 ### PRINT-004 [P0] Formatter draft/final
-Sections, total, notes.
+> Implements receipt text layout from `docs/07_PRINTING_SPEC.md` §§4–15 via `ReceiptComposer` (sections, total, notes, wrap, DETAILED/TOTAL_ONLY). Primary owner of PRINT-T001..T008, T010..T014. **NOT STARTED.**
 
 ### PRINT-005 [P0] ESC/POS encoder
 
@@ -495,14 +498,13 @@ Sections, total, notes.
 
 ### PRINT-007 [P0] PrinterService + Mutex
 
-Test PRINT-T001..014, 024..027 (owned by PRINT-002+ / PRINT-006/007 — not PRINT-001 gate).
+Test PRINT-T001..014, 024..027 (owned by PRINT-004 / PRINT-006/007 / M9 — not PRINT-002 gate).
 
 Demo M8:
 - fake print completo senza hardware (after PRINT-006/007).
-
 ## M9 — Bluetooth NETUM
 
-> Physical printer / Bluetooth / NETUM. **NOT STARTED.** Must not begin in PRINT-001.
+> Physical printer / Bluetooth / NETUM. **NOT STARTED.** Must not begin in PRINT-002.
 ### BT-001 [P1] Runtime permission manager
 
 ### BT-002 [P1] List bonded devices

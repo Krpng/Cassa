@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M8 — PRINT CORE / FAKE PRINTER (first task PRINT-001 READY — D-048)
+NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001 COMPLETE; PRINT-002 READY — D-049)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1039,7 +1039,8 @@ schema: v2 UNCHANGED
 migration: NONE
 historical_archive: OUT_OF_SCOPE
 NEXT: M8 — PRINT CORE / FAKE PRINTER
-first_M8_task: PRINT-001 READY (D-048)
+PRINT-001: COMPLETE (581f27d / D-048)
+first_M8_task_next: PRINT-002 READY (D-049)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1050,7 +1051,7 @@ Do **not** start M9 Bluetooth/NETUM in PRINT-001.
 ```yaml
 decision: D-048
 HEAD_at_freeze_docs: a513b3b
-PRINT-001: READY FOR IMPLEMENTATION
+PRINT-001: COMPLETE
 title: Printer contracts/models
 owns:
   - PrinterProfile
@@ -1069,8 +1070,37 @@ excludes:
 schema: DB_v2 UNCHANGED
 migration: NONE
 domain_deps_forbidden: Android Bluetooth, NETUM SDK, Compose, Room entities
-PRINT-002+: NOT STARTED
+PRINT-002: READY (D-049); PRINT-003+: NOT STARTED
 M9: NOT STARTED
 ```
 
 Do **not** invent missing layout/receipt rules inside PRINT-001 — those remain in `docs/07_PRINTING_SPEC.md` for PRINT-002+.
+
+## 32. PRINT-002 CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-049
+HEAD_at_freeze_docs: 581f27d
+PRINT-001: COMPLETE
+PRINT-002: READY FOR IMPLEMENTATION
+title: PrintableDocument/ReceiptComposer
+owns:
+  - PrintKind (DRAFT | FINAL; reprint = FINAL content, never RISTAMPA)
+  - PrintableDocument / PrintableLine (text + NORMAL|EMPHASIZED hint)
+  - ReceiptComposer interface only
+excludes:
+  - full receipt layout/formatter body (PRINT-004; PRINT-T001..T008,T010..T014)
+  - PricePrintMode UX (PRINT-003)
+  - EscPosEncoder (PRINT-005)
+  - FakePrinterDriver (PRINT-006)
+  - PrinterService Mutex (PRINT-007)
+  - Bluetooth / NETUM / STAMPA CTA enable (M9)
+  - schema / print_jobs / migration
+schema: DB_v2 UNCHANGED
+migration: NONE
+PRINT-003+: NOT STARTED
+M9: NOT STARTED
+```
+
+Do **not** implement PRINT-002 until explicitly authorized.
+Do **not** start PRINT-003+ / M9 in PRINT-002.

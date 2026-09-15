@@ -267,6 +267,40 @@ M8 first task: **PRINT-001 = READY FOR IMPLEMENTATION**.
 - whether `UnsupportedEncoding` is a first-class printer error (listed in printing spec §17, not in architecture §23) — defer until encoder/task that needs it;
 - PRINT-T001..027 remain later-task gates, not PRINT-001 AC.
 
+### D-049 PRINT-002 PrintableDocument/ReceiptComposer freeze (2026-09-15)
+M8 next after PRINT-001 COMPLETE (`581f27d`): **PRINT-002 = READY FOR IMPLEMENTATION**.
+
+**Owns only (contracts/models):**
+- `PrintKind` = `DRAFT` | `FINAL` (reprint = FINAL content; never `RISTAMPA`);
+- `PrintableDocument` + `PrintableLine` (`text`, emphasis hint `NORMAL`/`EMPHASIZED` only);
+- `ReceiptComposer` **interface** composing domain `Order` snapshot → `PrintableDocument`
+  with `PrintKind`, `PricePrintMode`, `charsPerLine`.
+
+**Normative content rules (already in docs — not reopened):**
+- `docs/07_PRINTING_SPEC.md` §§4–15 (headers, section order P/F/B, empty omitted, `createdSequence`, printed names, additions/removals, notes, total, DETAILED/TOTAL_ONLY, wrap);
+- snapshot-only totals/names (no catalog reprice);
+- 80 mm non-fiscal; no date/time/fiscal/`RISTAMPA` on ticket.
+
+**Split with later PRINT tasks:**
+- **PRINT-002** = composition contracts/models only (this decision);
+- **PRINT-004** = formatter **implementation** of those content rules (PRINT-T001..T008, T010..T014);
+- **PRINT-003** = PricePrintMode preference/UX (enum already PRINT-001);
+- **PRINT-005** = EscPosEncoder;
+- **PRINT-006** = FakePrinterDriver;
+- **PRINT-007** = PrinterService + Mutex;
+- **M9** = Bluetooth/NETUM / STAMPA enable / accept+print wiring.
+
+**Hard exclusions:**
+- no ESC/POS bytes / code-page calibration / cut commands;
+- no FakePrinter / Mutex service / UI / schema / `print_jobs`;
+- no `Bluetooth*` Android types / NETUM SDK / MAC / pairing;
+- no inventing hardware margins, density, baud, definitive code pages.
+
+**Open (do not invent in PRINT-002):**
+- exact package path (`domain.printer` vs `data.printer` sketch) — follow existing printer package conventions from PRINT-001;
+- whether additional emphasis levels beyond NORMAL/EMPHASIZED are needed — defer until encoder/formatter proves need;
+- PrinterState machine (printing spec §17) — not PRINT-002.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness

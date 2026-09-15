@@ -352,7 +352,9 @@ Parser non scrive DB.
 
 ## 20. Printer architecture
 
-> M8 PRINT-001 (D-048) freezes **contracts/models only**. Implementations: Fake = PRINT-006; Bluetooth transport = M9.
+> M8 PRINT-001 (D-048) = driver/service/profile contracts **COMPLETE**.
+> M8 PRINT-002 (D-049) freezes **PrintableDocument / ReceiptComposer contracts/models only**.
+> Formatter implementation = PRINT-004; EscPosEncoder = PRINT-005; Fake = PRINT-006; Bluetooth transport = M9.
 
 ```text
 Order snapshot
@@ -377,12 +379,36 @@ interface PrinterService {
     suspend fun printAccepted(orderId: String): PrintResult
     suspend fun testPrint(): PrintResult
 }
+
+enum class PrintKind { DRAFT, FINAL }
+
+data class PrintableLine(
+    val text: String,
+    val emphasis: PrintEmphasis = PrintEmphasis.NORMAL,
+)
+
+enum class PrintEmphasis { NORMAL, EMPHASIZED }
+
+data class PrintableDocument(
+    val kind: PrintKind,
+    val lines: List<PrintableLine>,
+)
+
+interface ReceiptComposer {
+    fun compose(
+        order: Order,
+        kind: PrintKind,
+        pricePrintMode: PricePrintMode,
+        charsPerLine: Int,
+    ): PrintableDocument
+}
 ```
 
-Implementazioni (not PRINT-001):
-- `FakePrinterDriver` (PRINT-006);
-- `BluetoothEscPosPrinterDriver` (M9).
-
+Implementazioni (later tasks):
+- `ReceiptComposer` body / text layout = PRINT-004;
+- `EscPosEncoder` = PRINT-005;
+- `FakePrinterDriver` = PRINT-006;
+- `BluetoothEscPosPrinterDriver` = M9.
 ## 21. Concorrenza stampa
 
 `PrinterService` deve serializzare le stampe con `Mutex`.
