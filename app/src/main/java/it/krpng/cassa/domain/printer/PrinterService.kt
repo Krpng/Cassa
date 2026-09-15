@@ -1,8 +1,8 @@
 package it.krpng.cassa.domain.printer
 
 /**
- * Application print API (D-048 / architecture §20).
- * Signatures only — Mutex serialization and implementations are PRINT-007+.
+ * Application print API (D-048 / D-054 / architecture §20).
+ * Implementation: [DefaultPrinterService] (PRINT-007) — whole-job Mutex orchestration.
  */
 interface PrinterService {
     suspend fun printDraft(orderId: String): PrintResult

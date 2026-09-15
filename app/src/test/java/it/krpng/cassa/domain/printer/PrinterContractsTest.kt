@@ -8,7 +8,7 @@ import org.junit.Test
 
 class PrinterContractsTest {
     @Test
-    fun `printer errors match architecture section 23 without UnsupportedEncoding`() {
+    fun `printer errors match architecture section 23 plus D-054 extensions`() {
         val errors: List<PrinterError> =
             listOf(
                 PrinterError.BluetoothDisabled,
@@ -18,6 +18,11 @@ class PrinterContractsTest {
                 PrinterError.ConnectionLost,
                 PrinterError.Timeout,
                 PrinterError.PrintFailed,
+                PrinterError.UnsupportedEncoding,
+                PrinterError.UnencodableCharacter,
+                PrinterError.InvalidPrinterProfile,
+                PrinterError.OrderNotFound,
+                PrinterError.InvalidOrderState,
                 PrinterError.Unknown,
             )
 
@@ -30,6 +35,11 @@ class PrinterContractsTest {
                 "ConnectionLost",
                 "Timeout",
                 "PrintFailed",
+                "UnsupportedEncoding",
+                "UnencodableCharacter",
+                "InvalidPrinterProfile",
+                "OrderNotFound",
+                "InvalidOrderState",
                 "Unknown",
             ),
             errors.map { it::class.simpleName },
