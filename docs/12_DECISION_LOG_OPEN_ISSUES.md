@@ -301,6 +301,38 @@ M8 next after PRINT-001 COMPLETE (`581f27d`): **PRINT-002 = READY FOR IMPLEMENTA
 - whether additional emphasis levels beyond NORMAL/EMPHASIZED are needed — defer until encoder/formatter proves need;
 - PrinterState machine (printing spec §17) — not PRINT-002.
 
+
+### D-050 PRINT-003 PricePrintMode preference wiring freeze (2026-09-15)
+After PRINT-002 COMPLETE (`c0ce4e7`): **PRINT-003 = READY FOR IMPLEMENTATION**.
+
+**Owns:**
+- DataStore persistence of `pricePrintMode` (default **DETAILED**);
+- domain/data get/observe/update API;
+- wiring so assembled `PrinterProfile.pricePrintMode` reads this SoT.
+
+**Ownership / SoT (derived, not invented):**
+- Architecture §18 + schema §12 + SoT: device/printer prefs → **DataStore**;
+- field already on `PrinterProfile` (PRINT-001);
+- **not** Room `app_settings` (business-critical only: numbering/day/timezone);
+- **not** session-only; **not** per-print override UI in v1;
+- single SoT — do not duplicate into Room.
+
+**UX:**
+- Public UI **not mandatory** (printing spec §11);
+- no draft/accepted/print-dialog entry point;
+- printer settings UI remains M9/BT-006;
+- Italian user-facing labels: **OPEN** (glossary describes semantics only).
+
+**Defers:**
+- DETAILED/TOTAL_ONLY layout rendering → PRINT-004;
+- Bluetooth/NETUM/Fake/encoder → later PRINT/M9;
+- Room migration / `print_jobs` → none.
+
+**Open (do not invent in PRINT-003):**
+- exact DataStore key naming / Preferences file name (follow project conventions when DataStore is introduced);
+- Italian Settings copy for DETAILED/TOTAL_ONLY;
+- whether a Settings radio lands in PRINT-003 vs only M9 printer settings (public UI optional).
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness

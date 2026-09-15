@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001 COMPLETE; PRINT-002 READY — D-049)
+NEXT: M8 — PRINT CORE / FAKE PRINTER (PRINT-001/002 COMPLETE; PRINT-003 READY — D-050)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1040,7 +1040,8 @@ migration: NONE
 historical_archive: OUT_OF_SCOPE
 NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
-first_M8_task_next: PRINT-002 READY (D-049)
+PRINT-002: COMPLETE (c0ce4e7 / D-049)
+first_M8_task_next: PRINT-003 READY (D-050)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1104,3 +1105,32 @@ M9: NOT STARTED
 
 Do **not** implement PRINT-002 until explicitly authorized.
 Do **not** start PRINT-003+ / M9 in PRINT-002.
+
+## 33. PRINT-003 CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-050
+HEAD_at_freeze_docs: c0ce4e7
+PRINT-001: COMPLETE
+PRINT-002: COMPLETE
+PRINT-003: READY FOR IMPLEMENTATION
+title: PricePrintMode
+owns:
+  - DataStore SoT for pricePrintMode (default DETAILED)
+  - get/observe/update API
+  - wire into PrinterProfile.pricePrintMode assembly
+excludes:
+  - Room app_settings / schema migration
+  - mandatory public Settings UI (not required v1)
+  - draft/accepted/print-dialog entry points
+  - DETAILED/TOTAL_ONLY receipt rendering (PRINT-004)
+  - Bluetooth / NETUM / Fake / encoder
+schema: DB_v2 UNCHANGED
+migration: NONE
+persistence: DataStore (printer/device prefs)
+PRINT-004+: NOT STARTED
+M9: NOT STARTED
+```
+
+Do **not** implement PRINT-003 until explicitly authorized.
+Do **not** start PRINT-004+ / M9 in PRINT-003.

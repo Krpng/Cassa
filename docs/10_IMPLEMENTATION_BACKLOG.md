@@ -450,12 +450,12 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001 **COMPLETE** (`581f27d`). Next authorized task: **PRINT-002** (D-049). Do not start PRINT-003+ until PRINT-002 is COMPLETE and authorized.
+> PRINT-001 **COMPLETE** (`581f27d`). PRINT-002 **COMPLETE** (`c0ce4e7`). Next authorized task: **PRINT-003** (D-050). Do not start PRINT-004+ until PRINT-003 is COMPLETE and authorized.
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
 
-### PRINT-002 [P0] PrintableDocument/ReceiptComposer — READY FOR IMPLEMENTATION (D-049)
+### PRINT-002 [P0] PrintableDocument/ReceiptComposer — COMPLETE (D-049)
 > Composition **contracts/models only** (parallel to PRINT-001). No full receipt text layout implementation, no ESC/POS bytes, no FakePrinter, no Bluetooth, no UI, no schema/migration.
 
 **Depends on:** PRINT-001 COMPLETE (`581f27d`). Pipeline: `docs/04_ANDROID_ARCHITECTURE.md` §20; content rules normative in `docs/07_PRINTING_SPEC.md` §§4–15 (layout **implementation** owned by **PRINT-004**).
@@ -486,8 +486,36 @@ Demo M7 (COMPLETE):
 
 **Demo:** none (contracts only).
 
-### PRINT-003 [P0] PricePrintMode
-> Settings/UX / preference wiring for `PricePrintMode` (enum already in PRINT-001). **NOT STARTED.**
+### PRINT-003 [P0] PricePrintMode — READY FOR IMPLEMENTATION (D-050)
+> Preference **wiring/persistence** for `PricePrintMode` (enum already PRINT-001). No receipt rendering. No ESC/POS. No Bluetooth/NETUM. No Room schema change.
+
+**Depends on:** PRINT-001 COMPLETE (`581f27d`); PRINT-002 COMPLETE (`c0ce4e7`). Normative: `docs/00_SOURCE_OF_TRUTH.md` (device/printer prefs → DataStore); `docs/04_ANDROID_ARCHITECTURE.md` §18; `docs/05_DATABASE_SCHEMA.md` §12; `docs/07_PRINTING_SPEC.md` §3/§11.
+
+**Owns (AC):**
+1. Single source of truth for `pricePrintMode`: **DataStore** printer/device preferences (same conceptual field as `PrinterProfile.pricePrintMode`).
+2. Default persisted/read value: **`DETAILED`**.
+3. Domain/data API to get / observe / update `PricePrintMode` (pure Kotlin domain contract + DataStore impl). Invalid stored value → typed failure / safe re-default policy must not silently invent modes beyond DETAILED/TOTAL_ONLY.
+4. When a `PrinterProfile` is assembled for print, `pricePrintMode` comes from this DataStore SoT (no parallel Room `app_settings` copy).
+5. Schema: **DB v2 unchanged**; migration **NONE**. Do **not** add `pricePrintMode` to Room `app_settings`.
+6. No DETAILED/TOTAL_ONLY receipt layout implementation (owner **PRINT-004**).
+
+**Ownership model (frozen):**
+- **PROFILE preference** stored in DataStore with other printer prefs — not Room business settings, not session-only, not per-print dialog override in v1.
+
+**UX (frozen from docs):**
+- Public UI is **not mandatory** in v1 (`docs/07_PRINTING_SPEC.md` §11: may be printer/developer preference).
+- PRINT-003 does **not** require a new Compose screen.
+- Changing mode from draft/accepted detail/print dialog is **out of scope**.
+- Full printer settings UI remains **M9 / BT-006**.
+- If a Settings radio is added later, Italian user-facing labels are **OPEN** (do not invent in PRINT-003).
+
+**Explicitly deferred:**
+- Receipt price rendering DETAILED/TOTAL_ONLY → **PRINT-004** (PRINT-T012 etc.).
+- EscPos / Fake / Mutex / STAMPA enable / Bluetooth → PRINT-005..007 / M9.
+
+**Tests:** unit tests for DataStore default DETAILED, persist/load TOTAL_ONLY, reject/handle invalid values as specified. Do **not** mark PRINT-T001..027 PASS (T012 remains PRINT-004).
+
+**Demo:** none required (preference wiring).
 
 ### PRINT-004 [P0] Formatter draft/final
 > Implements receipt text layout from `docs/07_PRINTING_SPEC.md` §§4–15 via `ReceiptComposer` (sections, total, notes, wrap, DETAILED/TOTAL_ONLY). Primary owner of PRINT-T001..T008, T010..T014. **NOT STARTED.**

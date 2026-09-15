@@ -40,7 +40,8 @@ Questa matrice collega requisiti, backlog e test.
 | ODS reimport | ODS-008/010/011 | ODS-008..010/017..020 |
 | Printed name | DB-001/004, ODS, PRINT | ODS-015, SNAP-002, PRINT-T013 |
 | Printer contracts/models | PRINT-001 **COMPLETE** (D-048; `581f27d`) | contract/unit PASS |
-| PrintableDocument/ReceiptComposer contracts | PRINT-002 **READY** (D-049) | contract/unit for PrintKind/PrintableDocument/ReceiptComposer; PRINT-T001..014 deferred to PRINT-004 |
+| PrintableDocument/ReceiptComposer contracts | PRINT-002 **COMPLETE** (D-049; `c0ce4e7`) | contract/unit PASS |
+| PricePrintMode preference (DataStore) | PRINT-003 **READY** (D-050) | unit: default DETAILED, persist TOTAL_ONLY; PRINT-T012 rendering deferred to PRINT-004 |
 | Draft print | PRINT-004/020 | PRINT-T001/T025 |
 | Final print | PRINT-004/021 | PRINT-T002..014 |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |

@@ -331,8 +331,11 @@ Motivo:
 - codePage;
 - feed lines;
 - supportsCut;
-- PricePrintMode;
+- PricePrintMode (**PRINT-003 / D-050** SoT; default DETAILED; not Room `app_settings`);
 - eventuali preferenze UI.
+
+> PRINT-003 owns DataStore persistence + get/observe/update API for `pricePrintMode`.
+> Public Settings UI for this mode is **not mandatory** in v1 (printing spec §11). Rendering = PRINT-004.
 
 ## 19. ODS architecture
 
