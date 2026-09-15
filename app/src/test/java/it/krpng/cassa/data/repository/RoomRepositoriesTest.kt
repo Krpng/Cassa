@@ -269,6 +269,10 @@ class RoomRepositoriesTest {
             businessDate: String,
         ): Flow<List<OrderEntity>> = flowOf(emptyList())
 
+        override suspend fun deleteRemovalsForAcceptedBefore(businessDate: String): Int = 0
+
+        override suspend fun deleteAcceptedBefore(businessDate: String): Int = 0
+
         override suspend fun getActiveDraft(): FullOrder? = result
 
         override suspend fun insertDraft(order: OrderEntity): Long = 1

@@ -40,6 +40,7 @@ import it.krpng.cassa.domain.repository.DeleteDraftResult
 import it.krpng.cassa.domain.repository.NumberingModeLoadResult
 import it.krpng.cassa.domain.repository.NumberingRepository
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult
 import it.krpng.cassa.domain.repository.QuickAddStandardResult
 import it.krpng.cassa.domain.repository.RemoveOrderItemResult
 import it.krpng.cassa.domain.repository.ReplaceDraftResult
@@ -98,6 +99,21 @@ class RoomOrderRepository @Inject constructor(
         orderDao.observeAcceptedByBusinessDate(businessDate.toString()).map { rows ->
             rows.mapNotNull { entity -> entity.toAcceptedOrderSummaryOrNull() }
         }
+
+    override suspend fun purgeAcceptedBefore(
+        currentBusinessDate: LocalDate,
+    ): PurgeAcceptedBeforeResult = try {
+        transactionRunner.runInTransaction {
+            val cutoff = currentBusinessDate.toString()
+            orderDao.deleteRemovalsForAcceptedBefore(cutoff)
+            val deletedOrders = orderDao.deleteAcceptedBefore(cutoff)
+            PurgeAcceptedBeforeResult.Purged(deletedOrderCount = deletedOrders)
+        }
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: SQLiteException) {
+        PurgeAcceptedBeforeResult.PersistenceFailure
+    }
 
     override suspend fun getActiveDraft(): Order? =
         orderDao.getActiveDraft()?.toDomain()

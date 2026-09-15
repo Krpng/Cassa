@@ -449,6 +449,10 @@ class AcceptancePreviewViewModelTest {
         override fun observeAcceptedByBusinessDate(
             businessDate: java.time.LocalDate,
         ): Flow<List<it.krpng.cassa.domain.model.AcceptedOrderSummary>> = write()
+
+        override suspend fun purgeAcceptedBefore(
+            currentBusinessDate: java.time.LocalDate,
+        ): it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult = write()
     }
 
     private companion object {

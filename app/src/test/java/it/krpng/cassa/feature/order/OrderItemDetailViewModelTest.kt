@@ -1039,6 +1039,11 @@ class OrderItemDetailViewModelTest {
             businessDate: java.time.LocalDate,
         ): Flow<List<it.krpng.cassa.domain.model.AcceptedOrderSummary>> = flowOf(emptyList())
 
+        override suspend fun purgeAcceptedBefore(
+            currentBusinessDate: java.time.LocalDate,
+        ): it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult =
+            it.krpng.cassa.domain.repository.PurgeAcceptedBeforeResult.Purged(0)
+
         private fun Order?.orEmptyItems(): List<OrderItem> = this?.items.orEmpty()
     }
 

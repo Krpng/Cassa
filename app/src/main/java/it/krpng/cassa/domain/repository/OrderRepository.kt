@@ -69,6 +69,21 @@ interface OrderRepository {
      * List rows only — no item/modifier graph (avoids N+1 for Today/Archive lists).
      */
     fun observeAcceptedByBusinessDate(businessDate: LocalDate): Flow<List<AcceptedOrderSummary>>
+
+    /**
+     * Hard-delete ACCEPTED orders with [businessDate] strictly before [currentBusinessDate].
+     * Caller supplies the already-resolved current business date (RET-001).
+     * Does not touch DRAFT, numbering_state, or catalog.
+     */
+    suspend fun purgeAcceptedBefore(currentBusinessDate: LocalDate): PurgeAcceptedBeforeResult
+}
+
+sealed interface PurgeAcceptedBeforeResult {
+    data class Purged(
+        val deletedOrderCount: Int,
+    ) : PurgeAcceptedBeforeResult
+
+    data object PersistenceFailure : PurgeAcceptedBeforeResult
 }
 
 sealed interface AcceptOrderResult {

@@ -60,6 +60,31 @@ interface OrderDao {
     )
     fun observeAcceptedByBusinessDate(businessDate: String): Flow<List<OrderEntity>>
 
+    @Query(
+        """
+        DELETE FROM order_item_removals
+        WHERE orderItemId IN (
+            SELECT order_items.id
+            FROM order_items
+            INNER JOIN orders ON orders.id = order_items.orderId
+            WHERE orders.status = 'ACCEPTED'
+              AND orders.businessDate IS NOT NULL
+              AND orders.businessDate < :businessDate
+        )
+        """,
+    )
+    suspend fun deleteRemovalsForAcceptedBefore(businessDate: String): Int
+
+    @Query(
+        """
+        DELETE FROM orders
+        WHERE status = 'ACCEPTED'
+          AND businessDate IS NOT NULL
+          AND businessDate < :businessDate
+        """,
+    )
+    suspend fun deleteAcceptedBefore(businessDate: String): Int
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDraft(order: OrderEntity): Long
 
