@@ -2,7 +2,7 @@
 
 ## 1. Executive summary
 
-Cassa è un'app Android locale per una pizzeria, pensata per velocizzare la composizione degli ordini al banco/cassa, permettere personalizzazioni precise, salvare ogni ordine accettato in archivio e stampare una comanda non fiscale su stampante termica 80 mm via Bluetooth/ESC-POS.
+Cassa è un'app Android locale per una pizzeria, pensata per velocizzare la composizione degli ordini al banco/cassa, permettere personalizzazioni precise, consultare gli ordini accettati **della giornata operativa corrente**, eliminarli automaticamente al cambio giornata, e stampare una comanda non fiscale su stampante termica 80 mm via Bluetooth/ESC-POS.
 
 Il prodotto deve funzionare senza Internet e senza account. La priorità è la rapidità operativa, la chiarezza dei dati e la robustezza contro crash, doppi tap e problemi di stampa.
 
@@ -39,8 +39,8 @@ La composizione manuale di ordini con quantità, aggiunte, rimozioni e note è s
 5. Salvare il DRAFT dopo ogni modifica.
 6. Accettare l'ordine una sola volta.
 7. Assegnare numerazione corretta per giornata operativa.
-8. Consultare gli ordini accettati.
-9. Duplicare un ordine storico.
+8. Consultare gli ordini accettati della giornata operativa corrente.
+9. ~~Duplicare un ordine storico.~~ **PENDING PRODUCT DECISION** (duplicazione non attiva in M7).
 10. Importare/aggiornare il menu da ODS.
 11. Stampare bozza/finale/ristampa su 80 mm.
 12. Cambiare stampante in futuro senza riscrivere il dominio.
@@ -81,13 +81,13 @@ La composizione manuale di ordini con quantità, aggiunte, rimozioni e note è s
 - preview import;
 - rollback su errore.
 
-### Archivio
-- ordini di oggi;
-- archivio per data;
-- ricerca numero;
-- dettaglio;
-- ristampa;
-- duplicazione.
+### Ordini della giornata corrente
+- ordini di oggi (`ORDINI DI OGGI`);
+- solo `ACCEPTED` della `currentBusinessDate`;
+- hard delete automatico degli Accepted dei giorni precedenti (RET-001);
+- dettaglio Accepted giornata corrente;
+- ristampa (quando PRINT in scope);
+- ~~archivio per data / ricerca numero cross-day / duplicazione~~ — **OBSOLETE / PENDING** (M7 freeze).
 
 ### Numerazione
 - sequenziale;

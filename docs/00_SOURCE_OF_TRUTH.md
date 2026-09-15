@@ -115,8 +115,9 @@ Questo evita che `AcceptOrder` dipenda da una preferenza non transazionale.
 - Accettazione atomica.
 - business day 05:00.
 - numerazione sequenziale/casuale.
-- archivio ordini accettati.
-- duplicazione ordine.
+- ordini Accepted della sola giornata operativa corrente (`ORDINI DI OGGI`).
+- hard delete Accepted dei giorni precedenti (RET-001).
+- ~~archivio storico / duplicazione obbligatoria~~ — superseded (M7 D-044); duplicazione PENDING PRODUCT DECISION.
 - stampa 80 mm non fiscale.
 - ESC/POS/Bluetooth.
 - una copia automatica.

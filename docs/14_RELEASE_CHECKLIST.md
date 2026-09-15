@@ -42,14 +42,14 @@
 - [ ] Home/New order buttons
 - [ ] no edit Accepted
 
-## Archive
-- [ ] today businessDate
-- [ ] archive date
-- [ ] search number
-- [ ] same number multiple dates
-- [ ] detail
-- [ ] duplicate
-- [ ] reprint
+## Ordini di oggi / retention
+- [ ] today businessDate only
+- [ ] no historical archive UI requirement
+- [ ] RET-001 purge older ACCEPTED
+- [ ] DRAFT preserved across 05:00
+- [ ] current-day Accepted detail
+- [ ] reprint (when PRINT ready)
+- [ ] duplicate — only if product re-authorizes
 
 ## Menu
 - [ ] manual products

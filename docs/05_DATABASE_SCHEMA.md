@@ -5,9 +5,9 @@
 - Room/SQLite è source of truth.
 - Monetary values = `Long` cents.
 - Order IDs = UUID string.
-- Accepted storico tramite snapshot.
+- Accepted storico tramite snapshot **finché l'ordine esiste** (giornata corrente).
 - Foreign key e indici espliciti.
-- Nessuna cancellazione automatica di Accepted.
+- Accepted della giornata precedente: hard delete automatico (RET-001); **non** retention indefinita.
 - Migrazioni versionate, mai destructive fallback in release.
 
 ## 2. `products`
@@ -257,9 +257,9 @@ Quando viene accettata:
 
 ### Perché
 Una modifica menu futura non altera:
-- archivio;
-- ristampa;
-- duplicazione.
+- ordini Accepted ancora presenti (giornata corrente);
+- ristampa di quegli ordini;
+- eventuali future duplicazioni (se riattivate dal prodotto).
 
 ## 15. Vincoli applicativi
 
@@ -374,17 +374,23 @@ Dentro:
 ### Active draft
 `status=DRAFT AND draftSlot=1`.
 
-### Today
-`status=ACCEPTED AND businessDate=:date ORDER BY acceptedAt DESC`.
+### Today (only retained Accepted)
+`status=ACCEPTED AND businessDate=:currentBusinessDate ORDER BY acceptedAt DESC`.
 
-### Archive date
-same by selected businessDate.
-
-### Search number
-`status=ACCEPTED AND displayNumber LIKE ... ORDER BY acceptedAt DESC`.
+### Archive date / cross-day search — OBSOLETE
+> **CANCELLED BY PRODUCT SCOPE CHANGE (M7).** Nessuna query archivio multi-giorno né search `displayNumber` cross-day.
 
 ### Products
 active by category + all with ingredients.
+
+### Daily purge (RET-001)
+Hard delete `ACCEPTED` where `businessDate < :currentBusinessDate`.
+
+MVP delete order (no schema migration; DB version = 2):
+1. delete `order_item_removals` for items of target orders (FK `NO ACTION`);
+2. delete target `orders` (cascade items → additions).
+
+Non tocca: DRAFT, `numbering_state`, catalog.
 
 ## 21. Migrazioni
 
@@ -394,9 +400,15 @@ Regola:
 - test migration;
 - mai `fallbackToDestructiveMigration()` in release.
 
+RET-001: **migration = NONE** (DB version resta 2).
+
 ## 22. Retention
 
-Accepted non cancellabili nel v1.
-Retention: locale indefinita finché l'utente non disinstalla/resetta o viene aggiunta futura gestione archivio.
+> **SUPERSEDED (M7 freeze).** La retention indefinita Accepted è cancellata.
+
+Contratto vigente:
+- consultabili solo `ACCEPTED` della `currentBusinessDate`;
+- hard delete definitivo per `businessDate < currentBusinessDate` (RET-001);
+- nessuna retention nascosta / soft-delete.
 
 Questo comportamento va reso noto nelle note release.

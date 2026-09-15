@@ -16,8 +16,9 @@ Priorità:
 5. Accept atomic;
 6. draft recovery;
 7. ODS;
-8. snapshot/archive;
-9. stampa.
+8. snapshot (Accepted giornata corrente);
+9. stampa;
+10. daily purge / retention (RET-001).
 
 ## 2. Business date
 
@@ -555,22 +556,48 @@ Source unchanged.
 ### DUP-005
 Draft conflict prevents second draft until resolved.
 
-## 13. Archive
+## 13. Today / Accepted list (current business day only)
 
 ### ARCH-T001
 Today = current businessDate.
 
 ### ARCH-T002
-02:00 belongs previous day.
+02:00 belongs previous day (businessDate cutoff).
 
 ### ARCH-T003
 DESC acceptedAt.
 
-### ARCH-T004
-same displayNumber on different days both returned.
+### ARCH-T004 — OBSOLETE
+> **CANCELLED BY PRODUCT SCOPE CHANGE (M7).** same displayNumber on different days — archivio cross-day rimosso.
 
-### ARCH-T005
-random same code cycle 1/2 distinguish via ID/time.
+### ARCH-T005 — OBSOLETE
+> **CANCELLED BY PRODUCT SCOPE CHANGE (M7).** random same code cycle across retained multi-day archive — non applicabile senza archivio storico.
+
+## 13b. Daily purge / retention (RET-001)
+
+### RET-T001
+old ACCEPTED (`businessDate < currentBusinessDate`) is deleted.
+
+### RET-T002
+current-businessDate ACCEPTED is preserved.
+
+### RET-T003
+active DRAFT is preserved across purge / 05:00 boundary.
+
+### RET-T004
+removals/items/additions of deleted orders leave no orphan rows.
+
+### RET-T005
+`numbering_state` is unchanged by purge.
+
+### RET-T006
+repeated purge is idempotent.
+
+### RET-T007
+04:59 and 05:00 resolve different `currentBusinessDate` correctly for purge predicate.
+
+### RET-T008
+draft created before 05:00 and accepted after 05:00 receives the new businessDate.
 
 ## 14. ODS
 
@@ -727,7 +754,8 @@ Customize pizza -> addition/removal/note -> save.
 Restart -> recover draft.
 
 ### UI-006
-Archive -> detail -> duplicate.
+Ordini di oggi → dettaglio Accepted giornata corrente.
+> Ex “Archive → detail → duplicate”: **OBSOLETE / PENDING** (archivio rimosso; duplicazione non attiva).
 
 ### UI-007
 Import -> preview -> confirm.

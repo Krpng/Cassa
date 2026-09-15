@@ -22,7 +22,7 @@
 
 **normalizedName** — forma tecnica per matching/search; non sostituisce display text.
 
-**Order snapshot** — copie di nomi/prezzi/modificatori conservate per storico.
+**Order snapshot** — copie di nomi/prezzi/modificatori conservate sull'ordine Accepted finché l'ordine esiste (giornata corrente); non un archivio storico multi-giorno.
 
 **PricePrintMode.DETAILED** — stampa prezzi riga/additions quando coerenti.
 

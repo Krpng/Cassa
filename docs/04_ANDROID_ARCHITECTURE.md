@@ -81,7 +81,8 @@ com.<company>.cassa
 │   ├── order
 │   ├── preview
 │   ├── today
-│   ├── archive
+│   ├── todayorders
+│   ├── archive   # legacy package placeholder; product ARCHIVIO removed (M7 D-044)
 │   ├── menu
 │   ├── importmenu
 │   └── settings
@@ -254,8 +255,10 @@ Responsabilità:
 - osservare draft;
 - transazioni di scrittura;
 - Accepted immutable;
-- today/archive query;
-- duplicate.
+- today query (current businessDate);
+- daily purge (RET-001);
+- current-day Accepted detail;
+- duplicate — PENDING PRODUCT DECISION.
 
 Non esporre Entity Room alla UI.
 
@@ -439,7 +442,7 @@ Nessun analytics cloud nel v1.
 Disabilitare backup cloud automatico del DB nel v1 finché non viene definita una strategia di restore.
 
 Conseguenza documentata:
-- perdita/reset dispositivo può perdere archivio.
+- perdita/reset dispositivo può perdere ordini della giornata corrente (nessun archivio storico cloud).
 
 Backup/export manuale è post-MVP.
 

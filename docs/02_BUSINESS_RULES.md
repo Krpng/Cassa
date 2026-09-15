@@ -46,7 +46,7 @@ Nuovo ordine con DRAFT esistente:
 Eliminazione DRAFT non vuoto:
 - richiede conferma.
 
-Duplicazione ordine storico con DRAFT esistente:
+Duplicazione (se/quando riattivata dal prodotto) con DRAFT esistente:
 - applicare lo stesso conflitto: non creare un secondo DRAFT.
 
 ## 3. Persistenza DRAFT
@@ -354,7 +354,7 @@ Se `finalUnitPriceCents * quantity` oppure la somma dei line total supera il ran
 
 - `COMPLETA` / Acceptance / Preview / numerazione;
 - write di `orders.totalCents` sul DRAFT;
-- nuovi flussi ACCEPTED/archivio/stampa dedicati.
+- nuovi flussi ACCEPTED dedicati (oltre immutabilità) / stampa dedicata.
 
 ## 8. Modifica una / tutte
 
@@ -749,32 +749,61 @@ Retry:
 
 ## 21. Ristampa
 
-- disponibile da Accepted screen, Today e Archive;
+- disponibile da Accepted screen e Ordini di oggi (giornata corrente);
 - nessuna etichetta `RISTAMPA`;
 - output funzionalmente identico alla stampa finale dello stesso ordine;
 - una sola copia per azione esplicita.
 
-## 22. Archivio
+## 22. Ordini accettati della giornata corrente (no archivio storico)
 
-Solo `ACCEPTED`.
+**Product scope change (M7 freeze):** l'app **non** conserva un archivio storico degli ordini.
+
+Solo `ACCEPTED` con `businessDate = currentBusinessDate` sono consultabili.
 
 `Ordini di oggi`:
-- businessDate corrente;
-- più recente -> meno recente.
+- `businessDate` corrente (`BusinessDateCalculator`, soglia 05:00 / `businessDayStartMinutes = 300`);
+- più recente → meno recente (`acceptedAt DESC`).
 
-Archivio:
-- Oggi;
-- Ieri;
-- Scegli data;
-- ricerca displayNumber.
+### Retention / daily purge (RET-001)
 
-Lo stesso numero può esistere:
-- in date diverse;
-- in cicli casuali diversi dello stesso giorno dopo 2.600 ordini.
+Hard delete definitivo degli `ACCEPTED` con:
 
-Usare ID interno + timestamp per disambiguare.
+```text
+businessDate < currentBusinessDate
+```
 
-## 23. Duplicazione
+- idempotente, transazionale, offline;
+- indipendente dalla numerazione (non legge/scrive/resetta `numbering_state`);
+- `numbering_state` storico **non** cancellato dal purge;
+- correttezza: purge eseguito/verificato quando l'app entra in uso con `currentBusinessDate` aggiornata;
+- esecuzione esatta alle 05:00 su Android **non** richiesta; eventuale WorkManager = solo ottimizzazione futura.
+
+FK: `order_item_removals` non ha `ON DELETE CASCADE`. Nel MVP purge:
+- cancellare esplicitamente le removals collegate agli item degli ordini da eliminare;
+- poi eliminare gli `orders` e lasciare i cascade già esistenti su items/additions;
+- **nessuna** migration solo per cambiare FK; DB version resta 2.
+
+### DRAFT al cambio giornata
+
+- DRAFT attivo **non** eliminato alle 05:00;
+- DRAFT creato prima delle 05:00 e accettato dopo le 05:00 riceve la **nuova** `currentBusinessDate` al momento di `AcceptOrder` (regola già: `businessDate` calcolata all'accept).
+
+### Scope obsoleto (non implementare)
+
+- filtri IERI / selezione data storica (ex ARCH-002);
+- ricerca `displayNumber` cross-day (ex ARCH-003);
+- dettaglio/storico multi-giorno (ex ARCH-005 come archivio);
+- concetto/pulsante Home `ARCHIVIO`.
+
+Dettaglio Accepted (ARCH-004 ridefinito): read-only di un `ACCEPTED` della **sola** giornata corrente.
+
+Duplicazione (ex ARCH-006/007): **PENDING PRODUCT DECISION** — non implementare finché non richiesta esplicitamente per gli ordini di oggi.
+
+## 23. Duplicazione — PENDING PRODUCT DECISION
+
+> **SUPERSEDED as open product requirement for M7.** Storico: la duplicazione creava un nuovo `DRAFT` da snapshot Accepted. Non implementare ARCH-006/007 finché non c'è decisione prodotto esplicita sulla duplicazione degli ordini **della giornata corrente**.
+
+Contratto storico (non attivo):
 
 Crea nuovo `DRAFT` copiando:
 - righe;
@@ -801,8 +830,8 @@ Disattivazione, non cancellazione.
 
 Inactive:
 - non aggiungibile a nuovi ordini;
-- storico intatto;
-- riferimenti/snapshot intatti.
+- snapshot degli ordini Accepted **ancora presenti** (giornata corrente) intatti;
+- riferimenti/snapshot intatti finché l'ordine esiste.
 
 Import:
 - prodotti assenti nel nuovo file non vengono automaticamente disattivati.

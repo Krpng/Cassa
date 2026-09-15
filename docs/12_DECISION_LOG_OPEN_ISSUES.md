@@ -54,10 +54,11 @@ Flag configurabile, no hardcoded names.
 Absolute precedence.
 
 ### D-018 Accepted immutable
-Read/reprint/duplicate only.
+Read/reprint only while the order is retained (current business day).
+> Duplicate: **PENDING PRODUCT DECISION** (M7).
 
-### D-019 Duplicate
-Exact snapshots/prices to new Draft.
+### D-019 Duplicate — PENDING PRODUCT DECISION
+> **SUPERSEDED as active M7 requirement.** Exact snapshots/prices to new Draft was the historical contract; do not implement ARCH-006/007 until explicitly re-authorized for current-day orders.
 
 ### D-020 ODS
 Prezzo Asporto only; Sala ignored.
@@ -103,6 +104,19 @@ Congelato: `numbering_state.randomSeedInitialized` (`INTEGER NOT NULL DEFAULT 0`
 
 ### D-043 ACCEPT-002 formal closure — COMPLETE / satisfied by ACCEPT-001 (2026-09-14)
 ACCEPT-002 (Draft / preview actions M6) è **COMPLETE** senza lavoro production/test aggiuntivo: la superficie azioni (`COMPLETA` gated, preview read-only, `INDIETRO/ANNULLA`, `ACCETTA` only, no CTA stampa, zero write/zero number; ACCEPT-T008/T009/T020) è già materializzata e verificata da ACCEPT-001 (`d6e7ff9`). Ownership: ACCEPT-001 = preview content/order/total; ACCEPT-002 = action surface (satisfied); ACCEPT-003 = AcceptOrder + ACCETTA enable/wiring + number allocation. **`ACCETTA` resta visible+disabled** finché ACCEPT-003; nessuna fase intermedia e nessuna preallocazione numero.
+
+### D-044 M7 CHANGE-OF-SCOPE — no historical archive / daily purge (2026-09-15)
+Congelato:
+- nessun archivio storico Accepted;
+- consultabili solo `ACCEPTED` con `businessDate = currentBusinessDate` (soglia 05:00 / `businessDayStartMinutes = 300`);
+- hard delete `ACCEPTED` dove `businessDate < currentBusinessDate` (RET-001);
+- DRAFT preservato al cambio giornata; accept dopo 05:00 → nuova businessDate;
+- `numbering_state` storico non cancellato dal purge; numerazione nuova giornata = stato della nuova data;
+- ARCH-001 PRESERVED; ARCH-002/003/005 OBSOLETE; ARCH-004 = dettaglio giornata corrente; ARCH-006/007 PENDING PRODUCT DECISION;
+- Home: `ORDINI DI OGGI` preserved; concetto `ARCHIVIO` removed from product scope;
+- schema DB v2 unchanged / migration NONE for RET-001 MVP (explicit removals delete, then orders);
+- correttezza purge su app enter-in-use; esecuzione esatta 05:00 Android non richiesta.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness
@@ -146,7 +160,7 @@ Final:
 - quantity positive integer;
 - prices non-negative;
 - no need customer fields;
-- accepted retention indefinite local;
+- accepted retention = **current business day only** (hard delete older ACCEPTED; RET-001);
 - menu admin access non protetto da login nel v1.
 
 ## Open issues BLOCCANTI prima uso reale, non prima coding

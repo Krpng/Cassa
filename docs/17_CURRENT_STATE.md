@@ -64,7 +64,7 @@ M5 Draft order core: COMPLETE
 M6 Preview/acceptance/numbering: IN PROGRESS — NUM COMPLETE; ACCEPT-001/002 COMPLETE; NEXT ACCEPT-003
 ```
 
-M5 is **COMPLETE**: `ORD-001`..`ORD-022`, compact order workspace (`ORDER-059`..`ORDER-083`), and Demo M5 end-to-end validation are done. Pre-M6 audit and **M6 CONTRACT FREEZE** (FREEZE-A random numbering + FREEZE-B acceptance preview/UX) are **COMPLETE**. NUM-001..005 and ACCEPT-001/002 are **COMPLETE** (ACCEPT-002 satisfied by ACCEPT-001). Next authorized production task: **ACCEPT-003** only when explicitly authorized. Do not invent `ORD-023`. Archive, duplicate, and printing remain later milestones.
+M5 is **COMPLETE**: `ORD-001`..`ORD-022`, compact order workspace (`ORDER-059`..`ORDER-083`), and Demo M5 end-to-end validation are done. Pre-M6 audit and **M6 CONTRACT FREEZE** (FREEZE-A random numbering + FREEZE-B acceptance preview/UX) are **COMPLETE**. NUM-001..005 and ACCEPT-001/002 are **COMPLETE** (ACCEPT-002 satisfied by ACCEPT-001). Next authorized production task: **ACCEPT-003** only when explicitly authorized. Do not invent `ORD-023`. Historical archive was later **CANCELLED** (M7 D-044); printing remains later milestones.
 ## 4. Completed tasks
 
 - `APP-001..005`: Android/Compose bootstrap, dependencies, package structure, Hilt, and navigation shell.
@@ -114,7 +114,8 @@ Do **not** enable/wire `ACCETTA` or implement AcceptOrder without authorization 
 - Domain code must not depend on Android, Compose, Room, Bluetooth, NETUM/vendor SDKs, or printer transports.
 - `ClockProvider` supplies time for business mutations; avoid scattered global `now()` calls.
 - Monetary values use `Money` backed by `Long` cents. `Double` and `Float` are forbidden for monetary representation/calculation.
-- Historical order state is reconstructed from snapshots, never from live catalog values.
+- Historical order state for **retained** Accepted orders is reconstructed from snapshots, never from live catalog values.
+- Accepted orders older than the current business day are hard-deleted (RET-001); there is no historical archive.
 
 ## 7. Frozen business rules
 
@@ -774,8 +775,8 @@ M5 does **not** implement or validate:
 
 - acceptance
 - order numbering
-- accepted-order archive
-- duplication of accepted order
+- accepted-order archive (**CANCELLED** by M7 D-044; superseded by current-day only + RET-001)
+- duplication of accepted order (**PENDING PRODUCT DECISION**)
 - fake printing
 - physical NETUM printing
 
@@ -884,3 +885,29 @@ Ownership freeze:
 - ACCEPT-003: AcceptOrder, precondition revalidation, `numberingMode` at accept-time, number allocation, `businessDate`/`acceptedAt`, checked total snapshot, Room transaction, DRAFT→ACCEPTED, ACCETTA enabled + click wiring.
 
 Tests: ACCEPT-T008/T009/T020 PASS cover ACCEPT-002; ACCEPT-T010..012 remain preview/ACCEPT-001; AcceptOrder tests deferred to ACCEPT-003+.
+
+## 26. M7 CHANGE-OF-SCOPE CONTRACT FREEZE (2026-09-15)
+
+```yaml
+branch: main
+HEAD_at_freeze_docs: c9f8446a12d4c18317fa99354fa3a4ca88022631
+ARCH-001: COMPLETE / PRESERVED (Today = currentBusinessDate ACCEPTED only)
+ARCH-002: OBSOLETE (IERI / date picker)
+ARCH-003: OBSOLETE (cross-day number search)
+ARCH-004: REDEFINED — current-day ACCEPTED detail only
+ARCH-005: OBSOLETE as historical archive
+ARCH-006/007: PENDING PRODUCT DECISION
+RET-001: ADDED — daily hard-delete ACCEPTED where businessDate < currentBusinessDate
+Home ARCHIVIO: removed from product scope (UI removal = separate task when authorized)
+ORDINI DI OGGI: PRESERVED
+Accepted retention: CURRENT BUSINESS DAY ONLY (hard delete; no hidden archive)
+DRAFT across 05:00: PRESERVED
+Draft accepted after 05:00: NEW businessDate at AcceptOrder
+numbering_state historical rows: NOT purged by RET-001
+Exact Android 05:00 job: NOT REQUIRED
+Schema: DB v2 UNCHANGED / migration NONE for RET-001 MVP
+Normative decision: D-044
+```
+
+Do **not** implement RET-001 / ARCH-004 / Home ARCHIVIO removal / duplicate until explicitly authorized after this freeze.
+Do **not** resurrect ARCH-002/003/005.

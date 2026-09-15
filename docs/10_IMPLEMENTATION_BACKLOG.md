@@ -273,7 +273,7 @@ Semantica:
 - indipendenza da item note;
 - non influenza custom pizza highlight.
 
-Fuori scope: ORD-022 total live; flussi ACCEPTED/archivio/stampa dedicati.
+Fuori scope: ORD-022 total live; flussi ACCEPTED dedicati oltre l’immutabilità; stampa dedicata.
 
 Test: ORDER-026..039.
 
@@ -373,27 +373,50 @@ Demo M6:
 - preview non consuma numeri;
 - STAMPA visibile disabled.
 
-## M7 — Today/archive/duplicate
+## M7 — Today / current-day Accepted detail / daily purge
 
-### ARCH-001 [P1] Today query/UI
-businessDate.
+> **M7 CHANGE-OF-SCOPE CONTRACT FREEZE.** Nessun archivio storico. Solo `ACCEPTED` della `currentBusinessDate`. Hard delete automatico dei giorni precedenti (RET-001).
 
-### ARCH-002 [P1] Archive date filters
+### ARCH-001 [P1] Today query/UI — COMPLETE / PRESERVED
+businessDate corrente; `ACCEPTED` only; `acceptedAt DESC`.
 
-### ARCH-003 [P1] Number search
+### ARCH-002 [P1] Archive date filters — OBSOLETE
+> **CANCELLED BY PRODUCT SCOPE CHANGE.** Niente IERI / selezione data.
 
-### ARCH-004 [P1] Accepted detail
+### ARCH-003 [P1] Number search — OBSOLETE
+> **CANCELLED BY PRODUCT SCOPE CHANGE.** Niente ricerca ordini cross-day.
 
-### ARCH-005 [P1] Historical snapshot display
+### ARCH-004 [P1] Accepted detail — REDEFINED
+Dettaglio read-only di un `ACCEPTED` della **sola** giornata corrente.
+> Precedente significato “dettaglio archivio storico” superseded.
 
-### ARCH-006 [P1] Duplicate transaction
+### ARCH-005 [P1] Historical snapshot display — OBSOLETE
+> **CANCELLED BY PRODUCT SCOPE CHANGE** come requisito di archivio storico.
+> Gli snapshot restano obbligatori per immutabilità/ristampa degli Accepted **ancora presenti** (giornata corrente).
 
-### ARCH-007 [P1] Draft conflict on duplicate
+### ARCH-006 [P1] Duplicate transaction — PENDING PRODUCT DECISION
+> Non implementare finché non richiesto esplicitamente per ordini di oggi.
 
-Test ARCH/SNAP/DUP.
+### ARCH-007 [P1] Draft conflict on duplicate — PENDING PRODUCT DECISION
+> Dipende da ARCH-006; non implementare ora.
 
-Demo M7:
-- trovare vecchio ordine, duplicarlo.
+### RET-001 [P0] Daily accepted-order purge — ADDED / NEXT when authorized
+Hard delete `ACCEPTED` where `businessDate < currentBusinessDate`.
+
+AC:
+- idempotente, transazionale, offline;
+- indipendente da `numbering_state` (nessun reset/delete numbering);
+- DRAFT preservato;
+- delete esplicito `order_item_removals` poi `orders` (cascade items/additions);
+- schema unchanged (DB v2), migration NONE;
+- correttezza su app enter-in-use con `currentBusinessDate` aggiornata; nessun requirement di job esatto alle 05:00.
+
+Test: RET-T001..RET-T008.
+
+Demo M7 (aggiornato):
+- Ordini di oggi = solo giornata corrente;
+- dopo cambio businessDate, Accepted precedenti non più presenti;
+- dettaglio Accepted giornata corrente (quando ARCH-004 implementato).
 
 ## M8 — Printing foundation
 

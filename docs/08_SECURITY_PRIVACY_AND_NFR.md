@@ -8,7 +8,7 @@ Dati:
 - prezzi;
 - ordini;
 - note;
-- archivio;
+- ordini Accepted della giornata corrente;
 - configurazione stampante.
 
 Non sono richiesti:

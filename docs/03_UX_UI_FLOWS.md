@@ -24,9 +24,7 @@ HOME
 │   ├── Personalizzazione pizza
 │   └── Anteprima
 ├── ORDINI DI OGGI
-│   └── Dettaglio Accepted
-├── ARCHIVIO
-│   └── Dettaglio Accepted
+│   └── Dettaglio Accepted (giornata corrente)
 ├── MENU
 │   ├── Pizze
 │   ├── Frittura
@@ -39,6 +37,8 @@ HOME
     └── Stampante
 ```
 
+> **M7 product scope:** nessun `ARCHIVIO` storico. Solo `ORDINI DI OGGI` (`ACCEPTED` della `currentBusinessDate`).
+
 ## 3. Home
 
 ### Scopo
@@ -48,8 +48,9 @@ Far partire un ordine nel minor tempo possibile.
 1. `NUOVO ORDINE` — CTA dominante.
 2. Banner DRAFT se presente.
 3. `ORDINI DI OGGI`.
-4. `ARCHIVIO`.
-5. Menu e Impostazioni secondari.
+4. Menu e Impostazioni secondari.
+
+> `ARCHIVIO` rimosso dallo scope prodotto (M7 freeze). La UI Home può ancora mostrare un placeholder legacy fino al task di rimozione UI; non è requisito funzionale.
 
 ### Stato con draft
 ```text
@@ -554,6 +555,8 @@ Se bozza:
 
 ## 13. Ordini di oggi
 
+Solo `ACCEPTED` con `businessDate = currentBusinessDate`.
+
 Lista:
 - displayNumber;
 - acceptedAt;
@@ -567,26 +570,22 @@ Empty:
 `Nessun ordine accettato nella giornata operativa corrente.`
 
 Tap:
-- dettaglio.
+- dettaglio Accepted della giornata corrente (ARCH-004 ridefinito).
 
-## 14. Archivio
+Niente filtri IERI / selezione data / ricerca cross-day (ARCH-002/003 OBSOLETE).
 
-Controlli:
+## 14. Archivio — OBSOLETE
+
+> **CANCELLED BY PRODUCT SCOPE CHANGE (M7).** Nessun archivio storico, nessun chip `IERI` / `SCEGLI DATA`, nessuna ricerca numero cross-day.
+
+Contratto storico (non attivo):
 - ricerca numero;
-- chip `OGGI`;
-- `IERI`;
-- `SCEGLI DATA`.
+- chip `OGGI` / `IERI` / `SCEGLI DATA`;
+- risultati multi-giorno.
 
-Risultati:
-- displayNumber;
-- data;
-- ora;
-- totale.
+## 15. Dettaglio Accepted (giornata corrente)
 
-Stesso numero su più record:
-- mostra data/ora per disambiguare.
-
-## 15. Dettaglio Accepted
+Solo ordini `ACCEPTED` della `currentBusinessDate` (ARCH-004 ridefinito).
 
 Mostra:
 - numero;
@@ -598,26 +597,18 @@ Mostra:
 - totale.
 
 Azioni:
-- `RISTAMPA`;
-- `NUOVO ORDINE DA QUESTO`;
+- `RISTAMPA` (quando PRINT in scope);
 - `HOME`.
+
+> `NUOVO ORDINE DA QUESTO` / duplicazione: **PENDING PRODUCT DECISION** (ex ARCH-006/007). Non mostrare finché non deciso.
 
 Nessun controllo edit.
 
-## 16. Duplicazione
+## 16. Duplicazione — PENDING PRODUCT DECISION
 
-Se nessun draft:
-- crea draft;
-- naviga a ordine.
+> **CANCELLED BY PRODUCT SCOPE CHANGE / PENDING DECISION (M7).** Non implementare finché il prodotto non richiede duplicazione degli ordini **della giornata corrente**.
 
-Se draft esistente:
-```text
-Esiste già un ordine in corso.
-
-[RIPRENDI]
-[ELIMINA E DUPLICA]
-[ANNULLA]
-```
+Contratto storico (non attivo): se nessun draft → crea draft; se draft esistente → conflitto RIPRENDI / ELIMINA E DUPLICA / ANNULLA.
 
 ## 17. Gestione menu
 

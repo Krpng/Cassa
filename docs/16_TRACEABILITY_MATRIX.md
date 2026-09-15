@@ -29,9 +29,12 @@ Questa matrice collega requisiti, backlog e test.
 | Random numbering (FREEZE-A) | NUM-002..004, DB-010 | NUM-T010..024, NUM-T029 |
 | RANDOM seed init marker | DB-010, D-042 | NUM-T018, NUM-T020..024 |
 | Mode switch + Settings numbering UI (D-040 RESOLVED) | NUM-005 | NUM-T006, NUM-T015, NUM-T025..035 |
-| Today/archive | ARCH-001..005 | ARCH-T001..005 |
-| Historical snapshots | DB-004, ARCH-005 | SNAP-001..004 |
-| Duplicate | ARCH-006/007 | DUP-001..005 |
+| Today (current business day) | ARCH-001 COMPLETE | ARCH-T001..003 |
+| Daily Accepted purge / retention | RET-001 | RET-T001..008 |
+| Current-day Accepted detail | ARCH-004 REDEFINED | (detail tests when implemented; ex SNAP for retained orders) |
+| Archive date filters / cross-day search / historical archive | ARCH-002/003/005 **OBSOLETE** | ARCH-T004/T005 **OBSOLETE** |
+| Historical snapshots as archive feature | ARCH-005 **OBSOLETE** | SNAP-* for multi-day archive **OBSOLETE**; snapshots remain for current-day immutability/reprint |
+| Duplicate | ARCH-006/007 **PENDING PRODUCT DECISION** | DUP-001..005 deferred until product decision |
 | ODS parse | ODS-001..006 | ODS-001..007/011/012/021 |
 | ODS validate | ODS-007 | ODS-004..007/013/014 |
 | ODS reimport | ODS-008/010/011 | ODS-008..010/017..020 |
