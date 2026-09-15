@@ -39,7 +39,6 @@ class HomeScreenTest {
                     onReplaceConfirm = {},
                     onReplaceCancel = {},
                     onTodayOrders = {},
-                    onArchive = {},
                     onMenu = {},
                     onSettings = {},
                 )
@@ -67,7 +66,6 @@ class HomeScreenTest {
                     onReplaceConfirm = {},
                     onReplaceCancel = {},
                     onTodayOrders = {},
-                    onArchive = {},
                     onMenu = {},
                     onSettings = {},
                 )
@@ -78,6 +76,33 @@ class HomeScreenTest {
         composeRule.onNodeWithText("RIPRENDI ORDINE").assertDoesNotExist()
         composeRule.onNodeWithText("NUOVO ORDINE").performClick()
         composeRule.runOnIdle { assertEquals(1, newOrderClicks) }
+    }
+
+    @Test
+    fun todayOrdersIsPresentAndArchiveIsAbsent() {
+        var todayOrdersClicks = 0
+        composeRule.setContent {
+            MaterialTheme {
+                HomeScreen(
+                    state = HomeUiState(isLoading = false),
+                    onNewOrder = {},
+                    onResumeDraft = {},
+                    onConflictResume = {},
+                    onConflictReplaceRequest = {},
+                    onConflictCancel = {},
+                    onReplaceConfirm = {},
+                    onReplaceCancel = {},
+                    onTodayOrders = { todayOrdersClicks += 1 },
+                    onMenu = {},
+                    onSettings = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("ORDINI DI OGGI").assertIsDisplayed()
+        composeRule.onNodeWithText("ARCHIVIO").assertDoesNotExist()
+        composeRule.onNodeWithText("ORDINI DI OGGI").performClick()
+        composeRule.runOnIdle { assertEquals(1, todayOrdersClicks) }
     }
 
     @Test
@@ -99,7 +124,6 @@ class HomeScreenTest {
                     onReplaceConfirm = {},
                     onReplaceCancel = {},
                     onTodayOrders = {},
-                    onArchive = {},
                     onMenu = {},
                     onSettings = {},
                 )
@@ -144,7 +168,6 @@ class HomeScreenTest {
                         state.value = state.value.copy(showReplaceConfirmation = false)
                     },
                     onTodayOrders = {},
-                    onArchive = {},
                     onMenu = {},
                     onSettings = {},
                 )
@@ -202,7 +225,6 @@ class HomeScreenTest {
                         }
                     },
                     onTodayOrders = {},
-                    onArchive = {},
                     onMenu = {},
                     onSettings = {},
                 )

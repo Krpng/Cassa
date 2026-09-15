@@ -28,7 +28,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 fun HomeRoute(
     onOpenDraft: (String) -> Unit,
     onTodayOrders: () -> Unit,
-    onArchive: () -> Unit,
     onMenu: () -> Unit,
     onSettings: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
@@ -53,7 +52,6 @@ fun HomeRoute(
         onReplaceConfirm = viewModel::confirmReplaceDraft,
         onReplaceCancel = viewModel::cancelReplaceDraft,
         onTodayOrders = onTodayOrders,
-        onArchive = onArchive,
         onMenu = onMenu,
         onSettings = onSettings,
     )
@@ -70,7 +68,6 @@ fun HomeScreen(
     onReplaceConfirm: () -> Unit,
     onReplaceCancel: () -> Unit,
     onTodayOrders: () -> Unit,
-    onArchive: () -> Unit,
     onMenu: () -> Unit,
     onSettings: () -> Unit,
 ) {
@@ -113,9 +110,6 @@ fun HomeScreen(
         }
         OutlinedButton(onClick = onTodayOrders, modifier = Modifier.fillMaxWidth()) {
             Text("ORDINI DI OGGI")
-        }
-        OutlinedButton(onClick = onArchive, modifier = Modifier.fillMaxWidth()) {
-            Text("ARCHIVIO")
         }
         OutlinedButton(onClick = onMenu, modifier = Modifier.fillMaxWidth()) {
             Text("MENU")

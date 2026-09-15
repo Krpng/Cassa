@@ -8,7 +8,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import it.krpng.cassa.feature.acceptance.AcceptancePreviewRoute
 import it.krpng.cassa.feature.acceptance.AcceptancePreviewViewModel
-import it.krpng.cassa.feature.archive.ArchiveScreen
 import it.krpng.cassa.feature.home.DraftRecoveryRoute
 import it.krpng.cassa.feature.home.HomeRoute
 import it.krpng.cassa.feature.importmenu.ImportPreviewRoute
@@ -60,7 +59,6 @@ fun CassaNavHost() {
                     navController.navigate(NewOrderDestination.createRoute(draftId))
                 },
                 onTodayOrders = { navController.navigate(CassaDestination.TODAY_ORDERS.route) },
-                onArchive = { navController.navigate(CassaDestination.ARCHIVE.route) },
                 onMenu = { navController.navigate(CassaDestination.MENU.route) },
                 onSettings = { navController.navigate(CassaDestination.SETTINGS.route) },
             )
@@ -131,9 +129,6 @@ fun CassaNavHost() {
         }
         composable(CassaDestination.TODAY_ORDERS.route) {
             TodayOrdersRoute(onBack = navController::navigateUp)
-        }
-        composable(CassaDestination.ARCHIVE.route) {
-            ArchiveScreen(onBack = navController::navigateUp)
         }
         composable(CassaDestination.MENU.route) {
             MenuRoute(
