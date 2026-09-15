@@ -352,6 +352,8 @@ Parser non scrive DB.
 
 ## 20. Printer architecture
 
+> M8 PRINT-001 (D-048) freezes **contracts/models only**. Implementations: Fake = PRINT-006; Bluetooth transport = M9.
+
 ```text
 Order snapshot
  -> ReceiptComposer
@@ -377,9 +379,9 @@ interface PrinterService {
 }
 ```
 
-Implementazioni:
-- `FakePrinterDriver`;
-- `BluetoothEscPosPrinterDriver`.
+Implementazioni (not PRINT-001):
+- `FakePrinterDriver` (PRINT-006);
+- `BluetoothEscPosPrinterDriver` (M9).
 
 ## 21. Concorrenza stampa
 

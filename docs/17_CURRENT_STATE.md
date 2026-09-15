@@ -917,11 +917,11 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M8 — PRINT CORE / FAKE PRINTER
+NEXT: M8 — PRINT CORE / FAKE PRINTER (first task PRINT-001 READY — D-048)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
-Do **not** implement PRINT until explicitly authorized (M8 NEXT).
+Do **not** implement PRINT beyond authorized PRINT-001 until next task is authorized.
 Do **not** re-open ARCH-006/007 contracts (COMPLETE).
 
 ## 27. ARCH-004 CTA / NAVIGATION CONTRACT FREEZE (2026-09-15)
@@ -1039,6 +1039,38 @@ schema: v2 UNCHANGED
 migration: NONE
 historical_archive: OUT_OF_SCOPE
 NEXT: M8 — PRINT CORE / FAKE PRINTER
+first_M8_task: PRINT-001 READY (D-048)
 ```
 
-Do **not** start M8 until explicitly authorized.
+Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
+Do **not** start M9 Bluetooth/NETUM in PRINT-001.
+
+## 31. PRINT-001 CONTRACT FREEZE (2026-09-15)
+
+```yaml
+decision: D-048
+HEAD_at_freeze_docs: a513b3b
+PRINT-001: READY FOR IMPLEMENTATION
+title: Printer contracts/models
+owns:
+  - PrinterProfile
+  - PricePrintMode (DETAILED default / TOTAL_ONLY)
+  - PrinterDriver interface
+  - PrinterService interface (signatures only)
+  - typed PrinterResult / PrintResult / printer errors
+excludes:
+  - FakePrinterDriver body (PRINT-006)
+  - EscPosEncoder (PRINT-005)
+  - ReceiptComposer / PrintableDocument layout (PRINT-002/004)
+  - PrinterService Mutex impl (PRINT-007)
+  - Bluetooth / NETUM / permissions / MAC / pairing (M9)
+  - STAMPA CTA enable
+  - schema / print_jobs / migration
+schema: DB_v2 UNCHANGED
+migration: NONE
+domain_deps_forbidden: Android Bluetooth, NETUM SDK, Compose, Room entities
+PRINT-002+: NOT STARTED
+M9: NOT STARTED
+```
+
+Do **not** invent missing layout/receipt rules inside PRINT-001 — those remain in `docs/07_PRINTING_SPEC.md` for PRINT-002+.

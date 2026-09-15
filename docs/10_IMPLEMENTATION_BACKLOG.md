@@ -450,8 +450,37 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — NEXT
 
-> **NEXT milestone** after M7 COMPLETE. Do not start until explicitly authorized.
-### PRINT-001 [P0] Printer contracts/models
+> **NEXT milestone** after M7 COMPLETE. First authorized task when M8 starts: **PRINT-001** (contracts/models). Do not start PRINT-002+ until PRINT-001 is COMPLETE and authorized.
+
+### PRINT-001 [P0] Printer contracts/models — READY FOR IMPLEMENTATION (D-048)
+> Pure contracts / domain models only. No Fake implementation, no ESC/POS bytes, no Bluetooth, no UI wiring, no schema/migration.
+
+**Depends on:** M7 COMPLETE (`a513b3b`). Architecture sketch: `docs/04_ANDROID_ARCHITECTURE.md` §20–23; content rules live in `docs/07_PRINTING_SPEC.md` but **layout/content composition is NOT PRINT-001**.
+
+**Owns (AC):**
+1. `PrinterProfile` model (fields from printing spec §3: id/name, paperWidthMm=80 default, charsPerLine, codePage, feedLines, supportsCut, optional cutCommandVariant, pricePrintMode).
+2. `PricePrintMode` (`DETAILED` default, `TOTAL_ONLY` supported) — enum/contract only; no UI required in PRINT-001.
+3. `PrinterDriver` interface:
+   - `suspend fun connect(profile: PrinterProfile): PrinterResult`
+   - `suspend fun print(data: ByteArray): PrinterResult`
+   - `suspend fun disconnect()`
+4. `PrinterService` interface (signatures only):
+   - `suspend fun printDraft(orderId: String): PrintResult`
+   - `suspend fun printAccepted(orderId: String): PrintResult`
+   - `suspend fun testPrint(): PrintResult`
+5. Typed `PrinterResult` / `PrintResult` / printer error model aligned with architecture §23 + printing spec §17 (at least: Success path + BluetoothDisabled, PermissionDenied, PrinterNotConfigured, ConnectionFailed, ConnectionLost, Timeout, PrintFailed, Unknown). Domain must not throw raw exceptions as normal business flow.
+6. Domain/print contracts must **not** depend on Android Bluetooth APIs, NETUM/vendor SDK, Compose, or Room entities.
+7. Schema: **DB v2 unchanged**; migration **NONE**. No `print_jobs` table (SoT: not required in v1).
+8. No production FakePrinterDriver body (owner **PRINT-006**). No EscPosEncoder (PRINT-005). No ReceiptComposer/PrintableDocument layout (PRINT-002/004). No Mutex service impl (PRINT-007). No Settings/BT UI (M9).
+
+**Explicitly deferred:**
+- PRINT-002..007 (composer, PricePrintMode UX, formatter, ESC/POS encoder, FakePrinterDriver, PrinterService+Mutex).
+- PRINT-020..024 / BT-* / HW-* (M9 physical Bluetooth/NETUM, accept+print wiring, permissions, bonded devices, MAC/pairing).
+- Enabling Accepted-detail `STAMPA` CTA (remains VISIBLE+DISABLED until print integration authorized).
+
+**Tests:** contract/compile unit coverage for models/interfaces + sealed error exhaustiveness as practical. Formatter/service PRINT-T001..027 remain owners of later PRINT tasks (not acceptance gate for PRINT-001 alone).
+
+**Demo:** none (contracts only).
 
 ### PRINT-002 [P0] PrintableDocument/ReceiptComposer
 
@@ -466,13 +495,14 @@ Sections, total, notes.
 
 ### PRINT-007 [P0] PrinterService + Mutex
 
-Test PRINT-T001..014, 024..027.
+Test PRINT-T001..014, 024..027 (owned by PRINT-002+ / PRINT-006/007 — not PRINT-001 gate).
 
 Demo M8:
-- fake print completo senza hardware.
+- fake print completo senza hardware (after PRINT-006/007).
 
 ## M9 — Bluetooth NETUM
 
+> Physical printer / Bluetooth / NETUM. **NOT STARTED.** Must not begin in PRINT-001.
 ### BT-001 [P1] Runtime permission manager
 
 ### BT-002 [P1] List bonded devices

@@ -238,6 +238,35 @@ ARCH7-T001..ARCH7-T015 (see `docs/09_TEST_PLAN.md`).
 #### Out of scope for ARCH-007
 Printing; historical archive; schema/migration; catalog reprice; multiple simultaneous DRAFTs; merge current DRAFT with duplicated content.
 
+### D-048 PRINT-001 printer contracts/models freeze (2026-09-15)
+M8 first task: **PRINT-001 = READY FOR IMPLEMENTATION**.
+
+**Owns only:** `PrinterProfile`, `PricePrintMode`, `PrinterDriver`, `PrinterService` interfaces, typed `PrinterResult`/`PrintResult`/printer errors — as sketched in `docs/04_ANDROID_ARCHITECTURE.md` §20–23 and field list in `docs/07_PRINTING_SPEC.md` §3 / §17.
+
+**Hard exclusions (M9 / later PRINT tasks):**
+- no `BluetoothAdapter` / `BluetoothDevice` / `BluetoothSocket`;
+- no Android Bluetooth permissions;
+- no NETUM-specific protocol / vendor SDK in domain;
+- no MAC address / pairing UI / reconnect strategy / physical printer settings UI;
+- no FakePrinterDriver implementation (PRINT-006);
+- no ESC/POS encoder (PRINT-005);
+- no ReceiptComposer / printable layout (PRINT-002/004);
+- no PrinterService Mutex implementation (PRINT-007);
+- no enabling `STAMPA` CTA on Accepted detail;
+- no schema change / no `print_jobs` table / migration NONE.
+
+**Preserved product rules (already frozen elsewhere — not reopened by PRINT-001):**
+- 80 mm non-fiscal ESC/POS architecture;
+- label UI `STAMPA` only (never `RISTAMPA`);
+- accept commit before print; print failure does not roll back Accepted;
+- snapshot-only content for accepted reprints (no catalog reprice);
+- Fake printer for development exists as M8 goal, implemented in PRINT-006+.
+
+**Open (do not invent in PRINT-001):**
+- exact package path under `printer` (follow existing architecture package sketch);
+- whether `UnsupportedEncoding` is a first-class printer error (listed in printing spec §17, not in architecture §23) — defer until encoder/task that needs it;
+- PRINT-T001..027 remain later-task gates, not PRINT-001 AC.
+
 ## Reconciliation decisions made in final pack
 
 ### R-001 Product uniqueness
