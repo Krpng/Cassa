@@ -22,6 +22,23 @@ class PrinterProfileTest {
         assertEquals(false, profile.supportsCut)
         assertEquals(PricePrintMode.DETAILED, profile.pricePrintMode)
         assertNull(profile.cutCommandVariant)
+        assertNull(profile.escPosCodeTable)
+    }
+
+    @Test
+    fun `escPosCodeTable optional selector is constructible and distinct from codePage`() {
+        val profile =
+            PrinterProfile(
+                id = "profile-esc-t",
+                name = "Test",
+                charsPerLine = 32,
+                codePage = "ISO-8859-1",
+                feedLines = 2,
+                escPosCodeTable = 16,
+            )
+
+        assertEquals("ISO-8859-1", profile.codePage)
+        assertEquals(16, profile.escPosCodeTable)
     }
 
     @Test

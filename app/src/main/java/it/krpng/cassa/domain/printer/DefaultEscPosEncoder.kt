@@ -10,8 +10,9 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.UnsupportedCharsetException
 
 /**
- * Generic M8 ESC/POS encoder implementation (PRINT-005 / D-052).
- * Deterministic, stateless; no ESC t / align / double-size / underline.
+ * Generic ESC/POS encoder (PRINT-005 / D-052 / D-060).
+ * Deterministic, stateless; connect-path formatting via PrintableLine semantics.
+ * Optional physical ESC t from [PrinterProfile.escPosCodeTable] only.
  */
 class DefaultEscPosEncoder : EscPosEncoder {
     override fun encode(
@@ -21,6 +22,11 @@ class DefaultEscPosEncoder : EscPosEncoder {
         if (profile.feedLines < 0) {
             return EncodeResult.Failure(EncodeError.InvalidProfile)
         }
+        val codeTable = profile.escPosCodeTable
+        if (codeTable != null && codeTable !in ESC_T_SELECTOR_RANGE) {
+            return EncodeResult.Failure(EncodeError.InvalidProfile)
+        }
+
         val cutBytes: ByteArray? =
             when {
                 !profile.supportsCut -> null
@@ -40,12 +46,27 @@ class DefaultEscPosEncoder : EscPosEncoder {
 
         val out = ByteArrayOutputStream()
         out.write(INIT_BYTES)
+        if (codeTable != null) {
+            out.write(byteArrayOf(0x1B, 0x74, codeTable.toByte()))
+        }
 
+        // After ESC @: printer defaults match LEFT / NORMAL emphasis / NORMAL scale.
+        var alignment = PrintAlignment.LEFT
         var emphasis = PrintEmphasis.NORMAL
+        var textScale = PrintTextScale.NORMAL
+
         for (line in document.lines) {
+            if (line.alignment != alignment) {
+                out.write(alignmentCommand(line.alignment))
+                alignment = line.alignment
+            }
             if (line.emphasis != emphasis) {
                 out.write(emphasisCommand(line.emphasis))
                 emphasis = line.emphasis
+            }
+            if (line.textScale != textScale) {
+                out.write(textScaleCommand(line.textScale))
+                textScale = line.textScale
             }
             when (val encoded = encodeLineText(line.text, charset)) {
                 is LineEncode.Ok -> out.write(encoded.bytes)
@@ -54,8 +75,10 @@ class DefaultEscPosEncoder : EscPosEncoder {
             out.write(LF)
         }
 
-        // Deterministic final NORMAL reset (always, even if already NORMAL).
+        // Deterministic final reset (always), then feed, then optional cut.
+        out.write(ALIGN_LEFT)
         out.write(EMPHASIS_OFF)
+        out.write(SCALE_NORMAL)
         repeat(profile.feedLines) { out.write(LF) }
         if (cutBytes != null) {
             out.write(cutBytes)
@@ -64,10 +87,26 @@ class DefaultEscPosEncoder : EscPosEncoder {
         return EncodeResult.Success(out.toByteArray())
     }
 
+    private fun alignmentCommand(alignment: PrintAlignment): ByteArray =
+        when (alignment) {
+            PrintAlignment.LEFT -> ALIGN_LEFT
+            PrintAlignment.CENTER -> ALIGN_CENTER
+            PrintAlignment.RIGHT -> ALIGN_RIGHT
+        }
+
     private fun emphasisCommand(emphasis: PrintEmphasis): ByteArray =
         when (emphasis) {
             PrintEmphasis.NORMAL -> EMPHASIS_OFF
             PrintEmphasis.EMPHASIZED -> EMPHASIS_ON
+        }
+
+    private fun textScaleCommand(textScale: PrintTextScale): ByteArray =
+        when (textScale) {
+            // D-060 GS ! n (Epson: bits0-3 width, bits4-7 height; 0=1x, 1=2x)
+            PrintTextScale.NORMAL -> SCALE_NORMAL
+            PrintTextScale.DOUBLE_WIDTH -> SCALE_DOUBLE_WIDTH
+            PrintTextScale.DOUBLE_HEIGHT -> SCALE_DOUBLE_HEIGHT
+            PrintTextScale.DOUBLE_BOTH -> SCALE_DOUBLE_BOTH
         }
 
     private fun encodeLineText(
@@ -147,10 +186,18 @@ class DefaultEscPosEncoder : EscPosEncoder {
         private const val EURO_FALLBACK = "EUR"
         private const val CUT_FULL = "FULL"
         private const val CUT_PARTIAL = "PARTIAL"
+        private val ESC_T_SELECTOR_RANGE = 0..255
 
         private val INIT_BYTES: ByteArray = byteArrayOf(0x1B, 0x40)
+        private val ALIGN_LEFT: ByteArray = byteArrayOf(0x1B, 0x61, 0x00)
+        private val ALIGN_CENTER: ByteArray = byteArrayOf(0x1B, 0x61, 0x01)
+        private val ALIGN_RIGHT: ByteArray = byteArrayOf(0x1B, 0x61, 0x02)
         private val EMPHASIS_OFF: ByteArray = byteArrayOf(0x1B, 0x45, 0x00)
         private val EMPHASIS_ON: ByteArray = byteArrayOf(0x1B, 0x45, 0x01)
+        private val SCALE_NORMAL: ByteArray = byteArrayOf(0x1D, 0x21, 0x00)
+        private val SCALE_DOUBLE_WIDTH: ByteArray = byteArrayOf(0x1D, 0x21, 0x01)
+        private val SCALE_DOUBLE_HEIGHT: ByteArray = byteArrayOf(0x1D, 0x21, 0x10)
+        private val SCALE_DOUBLE_BOTH: ByteArray = byteArrayOf(0x1D, 0x21, 0x11)
         private val CUT_FULL_BYTES: ByteArray = byteArrayOf(0x1D, 0x56, 0x00)
         private val CUT_PARTIAL_BYTES: ByteArray = byteArrayOf(0x1D, 0x56, 0x01)
     }

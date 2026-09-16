@@ -46,7 +46,17 @@ Default test:
 - `DETAILED`;
 - `escPosCodeTable=null` (nessun `ESC t`).
 
-`charsPerLine`, JVM `codePage`, eventuale `escPosCodeTable` e feed vengono calibrati su hardware (**HW-001 / D-060**). I valori finali NETUM non sono congelati finché non c’è evidenza su carta.
+`charsPerLine`, JVM `codePage`, eventuale `escPosCodeTable` e feed sono calibrati su hardware (**HW-001**). Valori operativi NETUM M9 (**D-061 FROZEN**):
+
+- `paperWidthMm = 80`
+- `charsPerLine = 42` (safe NORMAL layout width; exact max **not** claimed — 48 wraps)
+- `codePage = IBM00858`
+- `escPosCodeTable = 19`
+- `feedLines = 3`
+- `supportsCut = false`
+- `cutCommandVariant = null`
+
+Preferenza tipografica M9 (non nel profilo): base **DOUBLE_BOTH**; raffinamento gerarchia scontrino **DEFERRED POST-M9**.
 
 PrinterProfile **non** possiede stili business (font titolo/item/totale, allineamenti receipt): quelli vivono in `PrintableDocument` / layout.
 
@@ -446,18 +456,17 @@ Non deve creare Order.
 
 ## 27. Hardware validation NETUM
 
-Checklist (**HW-001 / D-060** — foglio di calibrazione sintetico prima dello scontrino business):
+Checklist (**HW-001 / D-060** capability + **D-061** physical freeze):
 - pairing;
 - selezione bonded device (`printerId` instrumentation);
 - connect / transport (BT-004/005);
 - 80 mm;
-- chars per line (candidati osservati, freeze dopo carta);
-- allineamento / grassetto / scale ≤2×;
-- JVM charset + eventuale `ESC t`;
-- € / accenti;
-- feed / strappo;
-- cutter solo se evidenza hardware (altrimenti `supportsCut=false`);
+- chars per line — M9 frozen **42** (safe; exact max not claimed);
+- allineamento / grassetto / scale ≤2× (M9 preferred base **DOUBLE_BOTH**, styling deferred);
+- JVM **IBM00858** + `ESC t` **19**;
+- € / accenti — hardware PASS with frozen pair;
+- feed **3** / strappo manuale;
+- cutter: **none** (`supportsCut=false`);
 - 10 stampe consecutive = **HW-002**.
 
-Solo dopo validazione, congelare PrinterProfile fisico definitivo (secondo freeze post-hardware).
-Non ridisegnare lo scontrino business in HW-001.
+Profilo fisico NETUM M9: **D-061 FROZEN**. Raffinamento visuale scontrino business: **DEFERRED POST-M9**.

@@ -329,7 +329,7 @@ Motivo:
 - paper width/profile;
 - charsPerLine calibrato;
 - codePage (JVM Charset name);
-- escPosCodeTable optional (physical ESC/POS `ESC t` selector; **D-060** — distinct from JVM `codePage`; not persisted in HW-001);
+- escPosCodeTable optional (physical ESC/POS `ESC t` selector; **D-060/D-061** — distinct from JVM `codePage`; NETUM M9 frozen value **19**; persistence of physical profile fields remains later settings/provider wiring, not HW-001 DataStore invent);
 - feed lines;
 - supportsCut;
 - PricePrintMode (**PRINT-003 / D-050** SoT; default DETAILED; not Room `app_settings`);
@@ -424,8 +424,8 @@ Implementazioni (later tasks):
 - `ReceiptComposer` body / text layout = **PRINT-004 (D-051 COMPLETE)**;
 - `EscPosEncoder` = **PRINT-005 (D-052 COMPLETE)** extended by **D-060 / HW-001** (`ESC a`, `GS !` ≤2×, optional `ESC t`);
 - `FakePrinterDriver` = **PRINT-006 (D-053 COMPLETE)** — PrinterDriver fake: connect-required print, FIFO inject, ordered payload history with defensive copies, `isConnected` only (no domain PrinterState);
-- `PrinterService` + `Mutex` + `PrinterProfileProvider` = **PRINT-007 (D-054 COMPLETE)** — whole-job Mutex; abstract profile provider (concrete = M9 / after HW-001);
-- RFCOMM transport = **BT-004/005 COMPLETE**; physical profile calibration + formatting capability = **HW-001 (D-060 READY)**.
+- `PrinterService` + `Mutex` + `PrinterProfileProvider` = **PRINT-007 (D-054 COMPLETE)** — whole-job Mutex; abstract profile provider (concrete assembly uses **D-061** NETUM values when wired);
+- RFCOMM transport = **BT-004/005 COMPLETE**; physical profile + formatting capability = **HW-001 COMPLETE** (**D-060** + **D-061** NETUM M9 freeze).
 ## 21. Concorrenza stampa
 
 `PrinterService` deve serializzare le stampe con `Mutex` (D-054: **one Mutex per service instance**; entire print job inside `withLock`, including compose/encode/driver lifecycle).
@@ -436,7 +436,7 @@ La UI disabilita i pulsanti mentre stampa, ma la protezione reale è anche nel s
 
 ## 22. Bluetooth MVP
 
-Preferenza (**D-055..D-059 — BT-001..005 COMPLETE; HW-001 READY — D-060 FROZEN**):
+Preferenza (**D-055..D-061 — BT-001..005 COMPLETE; HW-001 COMPLETE — D-060 + D-061 FROZEN**):
 - pairing nel sistema Android;
 - app seleziona un device già bonded;
 - discovery **OUT OF SCOPE** for MVP unless a later task explicitly adds it.
@@ -453,7 +453,7 @@ Android 12+ (API 31+):
 Pre-Android 12:
 - no runtime `BLUETOOTH_CONNECT` prompt; legacy install-time `BLUETOOTH` (maxSdk 30) as needed for bonded strategy.
 
-`BluetoothPermissionManager` = **BT-001 COMPLETE**. Bonded list = **BT-002 COMPLETE (D-056)**. Selected printer identity in `printer_preferences` (`selected_printer_id`) = **BT-003 COMPLETE (D-057)**. Adapter enabled / null adapter / `PrinterError.BluetoothDisabled` = **BT-004 COMPLETE** (D-058). RFCOMM/SPP driver = **BT-004 COMPLETE** (`82cc98f`) — SPP UUID frozen; **Q1-A secure** `createRfcommSocketToServiceRecord` only; no insecure; no secure→insecure fallback. Timeout / disconnect / error mapping = **BT-005 COMPLETE** (`3aad082` / D-059) — connect timeout **10_000 ms** injected at driver/transport; **Q2-A connect-only** (no write/flush timeout); write `IOException` → `ConnectionLost`; **no** auto retry/reconnect. Physical profile + ESC/POS formatting capability calibration = **HW-001 READY (D-060 FROZEN)**. Concrete calibrated `PrinterProfileProvider` values = after HW-001 paper freeze.
+`BluetoothPermissionManager` = **BT-001 COMPLETE**. Bonded list = **BT-002 COMPLETE (D-056)**. Selected printer identity in `printer_preferences` (`selected_printer_id`) = **BT-003 COMPLETE (D-057)**. Adapter enabled / null adapter / `PrinterError.BluetoothDisabled` = **BT-004 COMPLETE** (D-058). RFCOMM/SPP driver = **BT-004 COMPLETE** (`82cc98f`) — SPP UUID frozen; **Q1-A secure** `createRfcommSocketToServiceRecord` only; no insecure; no secure→insecure fallback. Timeout / disconnect / error mapping = **BT-005 COMPLETE** (`3aad082` / D-059) — connect timeout **10_000 ms** injected at driver/transport; **Q2-A connect-only** (no write/flush timeout); write `IOException` → `ConnectionLost`; **no** auto retry/reconnect. Physical profile + ESC/POS formatting capability = **HW-001 COMPLETE** (**D-060** + **D-061** NETUM M9 freeze: `charsPerLine=42`, `codePage=IBM00858`, `escPosCodeTable=19`, `feedLines=3`, `supportsCut=false`). Concrete `PrinterProfileProvider` wiring of these values = remaining M9 (BT-006+). Next: **BT-006** when authorized.
 
 ## 23. Error model
 

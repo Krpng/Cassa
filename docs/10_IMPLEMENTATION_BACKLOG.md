@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). BT-005 COMPLETE (`3aad082` / D-059). Next authorized task: **HW-001** — **READY FOR IMPLEMENTATION** (D-060 FROZEN; generic ESC/POS calibration capabilities; synthetic calibration sheet; no business receipt redesign).
+> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). BT-005 COMPLETE (`3aad082` / D-059). **HW-001 COMPLETE** (D-060 capabilities + **D-061** NETUM M9 physical freeze; READY TO COMMIT). Next authorized task: **BT-006** (when authorized). Do not start BT-006 until HW-001 is committed if that is the operator gate.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -647,24 +647,21 @@ Demo M7 (COMPLETE):
 
 ### PRINT-024 [P1] uncertain outcome microcopy
 
-### HW-001 [P1] NETUM calibration spike — READY FOR IMPLEMENTATION (D-060)
+### HW-001 [P1] NETUM calibration spike — COMPLETE (D-060 + D-061)
 > Physical NETUM profile calibration + generic ESC/POS text formatting capability validation via synthetic calibration sheet. No business receipt redesign.
 
-**Status:** **READY FOR IMPLEMENTATION**. Contract: **D-060 FROZEN**.
+**Status:** **COMPLETE** — **READY TO COMMIT**. Capability contract: **D-060 FROZEN**. Physical profile: **D-061 FROZEN**.
 **Depends on:** BT-005 COMPLETE (`3aad082`).
 
-**Owns (AC) — D-060 FROZEN:**
-1. Extend `PrintableLine` with `alignment` (`LEFT|CENTER|RIGHT`, default `LEFT`) and `textScale` (`NORMAL|DOUBLE_WIDTH|DOUBLE_HEIGHT|DOUBLE_BOTH`, default `NORMAL`); keep `PrintEmphasis` unchanged.
-2. Extend `PrinterProfile` with optional `escPosCodeTable: Int? = null` (physical `ESC t`; distinct from JVM `codePage`).
-3. Encoder: `ESC @`, optional `ESC t`, per-line `ESC a` / `ESC E` / `GS !` (≤2×), final reset to LEFT+NORMAL+NORMAL scale, then feed, optional cut only if profile allows.
-4. Synthetic androidTest calibration document sections [A]..[F]; cutter **not** in first sheet; controllable TEST profile via instrumentation args/fixtures; `printerId` arg; no DataStore persistence; no NETUM name hardcode.
-5. Hardware sequence one step at a time: WIDTH → FORMAT → CODE PAGE → FEED → CUTTER IF RELEVANT → profile freeze (second decision after paper).
-6. Do **not** freeze final NETUM `charsPerLine` / JVM+`ESC t` / `feedLines` / cutter in this task's contract — observe first.
-7. User text size/format requirement included as capability validation; business mapping of scales to header/order/total deferred.
+**Owns (AC) — delivered:**
+1. `PrintableLine` alignment + textScale; `PrinterProfile.escPosCodeTable`; encoder `ESC a` / `GS !` ≤2× / optional `ESC t` + final reset.
+2. Synthetic androidTest calibration harness (`EscPosCalibrationHardwareTest`) with one section per run.
+3. Hardware evidence + M9 NETUM freeze (**D-061**): `charsPerLine=42`, `codePage=IBM00858`, `escPosCodeTable=19`, `feedLines=3`, `supportsCut=false`, `cutCommandVariant=null`.
+4. M9 preferred base text scale **DOUBLE_BOTH** recorded separately (not a profile field); detailed receipt styling deferred post-M9.
 
 **Blocking open questions:** NONE.
 
-**Not owned:** production receipt redesign; BT-006/007 UI; discovery/retry/reconnect; Room/migrations; final physical profile value freeze (post-hardware).
+**Not owned:** production receipt redesign; BT-006/007 UI; discovery/retry/reconnect; Room/migrations; HW-002; feed fine-tuning / visual hierarchy post-M9.
 
 ### HW-002 [P1] 10 consecutive prints
 

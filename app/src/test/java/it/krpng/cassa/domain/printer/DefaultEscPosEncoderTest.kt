@@ -7,21 +7,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * PRINT-005 / D-052 byte-for-byte EscPosEncoder tests.
+ * PRINT-005 / D-052 / D-060 byte-for-byte EscPosEncoder tests.
  * No hardware; no numbered PRINT-T claims.
  */
 class DefaultEscPosEncoderTest {
     private val encoder = DefaultEscPosEncoder()
 
     @Test
-    fun `empty document is ESC at then final NORMAL then feed then optional cut`() {
+    fun `empty document is ESC at then final reset then feed then optional cut`() {
         val result =
             success(
                 document(emptyList()),
                 profile(feedLines = 0, supportsCut = false),
             )
         assertArrayEquals(
-            bytes(0x1B, 0x40, 0x1B, 0x45, 0x00),
+            bytes(0x1B, 0x40) + FINAL_RESET,
             result,
         )
     }
@@ -34,36 +34,32 @@ class DefaultEscPosEncoderTest {
     }
 
     @Test
-    fun `NORMAL line has no emphasis transition and ends with final NORMAL reset`() {
+    fun `NORMAL line has no emphasis transition and ends with final reset`() {
         val bytes =
             success(
                 document(listOf(line("Hi", PrintEmphasis.NORMAL))),
                 profile(feedLines = 0),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                'H'.code, 'i'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes('H'.code, 'i'.code, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
     }
 
     @Test
-    fun `EMPHASIZED line emits ESC E 1 then final ESC E 0`() {
+    fun `EMPHASIZED line emits ESC E 1 then final reset`() {
         val bytes =
             success(
                 document(listOf(line("Hi", PrintEmphasis.EMPHASIZED))),
                 profile(feedLines = 0),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                0x1B, 0x45, 0x01,
-                'H'.code, 'i'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes(0x1B, 0x45, 0x01) +
+                bytes('H'.code, 'i'.code, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
     }
@@ -82,28 +78,26 @@ class DefaultEscPosEncoderTest {
                 profile(feedLines = 0),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                'A'.code, 0x0A,
-                0x1B, 0x45, 0x01,
-                'B'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-                'C'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes('A'.code, 0x0A) +
+                bytes(0x1B, 0x45, 0x01) +
+                bytes('B'.code, 0x0A) +
+                bytes(0x1B, 0x45, 0x00) +
+                bytes('C'.code, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
     }
 
     @Test
-    fun `document ending EMPHASIZED still forces final NORMAL`() {
+    fun `document ending EMPHASIZED still forces final NORMAL emphasis`() {
         val bytes =
             success(
                 document(listOf(line("X", PrintEmphasis.EMPHASIZED))),
                 profile(feedLines = 0),
             )
-        val tail = bytes.copyOfRange(bytes.size - 3, bytes.size)
-        assertArrayEquals(bytes(0x1B, 0x45, 0x00), tail)
+        val emphasisTail = bytes.copyOfRange(bytes.size - 6, bytes.size - 3)
+        assertArrayEquals(bytes(0x1B, 0x45, 0x00), emphasisTail)
     }
 
     @Test
@@ -114,12 +108,10 @@ class DefaultEscPosEncoderTest {
                 profile(feedLines = 0),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                'A'.code, 0x0A,
-                'B'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes('A'.code, 0x0A) +
+                bytes('B'.code, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
         assertTrue(bytes.none { it == 0x0D.toByte() })
@@ -132,10 +124,7 @@ class DefaultEscPosEncoderTest {
                 document(listOf(line(""))),
                 profile(feedLines = 0),
             )
-        assertArrayEquals(
-            bytes(0x1B, 0x40, 0x0A, 0x1B, 0x45, 0x00),
-            bytes,
-        )
+        assertArrayEquals(bytes(0x1B, 0x40, 0x0A) + FINAL_RESET, bytes)
     }
 
     @Test
@@ -145,10 +134,7 @@ class DefaultEscPosEncoderTest {
                 document(listOf(line(""), line(""))),
                 profile(feedLines = 0),
             )
-        assertArrayEquals(
-            bytes(0x1B, 0x40, 0x0A, 0x0A, 0x1B, 0x45, 0x00),
-            bytes,
-        )
+        assertArrayEquals(bytes(0x1B, 0x40, 0x0A, 0x0A) + FINAL_RESET, bytes)
     }
 
     @Test
@@ -178,11 +164,9 @@ class DefaultEscPosEncoderTest {
                 profile(codePage = "ISO-8859-1"),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                'l'.code, '\''.code, 'a'.code, 'c'.code, 'q'.code, 'u'.code, 'a'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes('l'.code, '\''.code, 'a'.code, 'c'.code, 'q'.code, 'u'.code, 'a'.code, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
     }
@@ -195,11 +179,9 @@ class DefaultEscPosEncoderTest {
                 profile(codePage = "ISO-8859-1"),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                '"'.code, 'c'.code, 'i'.code, 'a'.code, 'o'.code, '"'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes('"'.code, 'c'.code, 'i'.code, 'a'.code, 'o'.code, '"'.code, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
     }
@@ -212,11 +194,9 @@ class DefaultEscPosEncoderTest {
                 profile(codePage = "ISO-8859-1"),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                'a'.code, '-'.code, 'b'.code, '-'.code, 'c'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes('a'.code, '-'.code, 'b'.code, '-'.code, 'c'.code, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
     }
@@ -228,9 +208,8 @@ class DefaultEscPosEncoderTest {
                 document(listOf(line("7\u20AC"))),
                 profile(codePage = "windows-1252"),
             )
-        // windows-1252 maps € to 0x80
         assertArrayEquals(
-            bytes(0x1B, 0x40, '7'.code, 0x80, 0x0A, 0x1B, 0x45, 0x00),
+            bytes(0x1B, 0x40, '7'.code, 0x80, 0x0A) + FINAL_RESET,
             bytes,
         )
     }
@@ -243,11 +222,9 @@ class DefaultEscPosEncoderTest {
                 profile(codePage = "ISO-8859-1"),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                '7'.code, 'E'.code, 'U'.code, 'R'.code, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes('7'.code, 'E'.code, 'U'.code, 'R'.code, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
     }
@@ -260,7 +237,6 @@ class DefaultEscPosEncoderTest {
                 profile(codePage = "ISO-8859-1"),
             )
         assertEquals(EncodeResult.Failure(EncodeError.UnencodableCharacter), result)
-        // Ensure success path never silently used '?' for this input.
         if (result is EncodeResult.Success) {
             assertTrue(result.bytes.none { it == '?'.code.toByte() })
         }
@@ -274,11 +250,9 @@ class DefaultEscPosEncoderTest {
                 profile(codePage = "ISO-8859-1"),
             )
         assertArrayEquals(
-            bytes(
-                0x1B, 0x40,
-                'c'.code, 'a'.code, 'f'.code, 'f'.code, 0xE8, 0x0A,
-                0x1B, 0x45, 0x00,
-            ),
+            bytes(0x1B, 0x40) +
+                bytes('c'.code, 'a'.code, 'f'.code, 'f'.code, 0xE8, 0x0A) +
+                FINAL_RESET,
             bytes,
         )
     }
@@ -286,14 +260,14 @@ class DefaultEscPosEncoderTest {
     @Test
     fun `feedLines zero adds no extra LF after final reset`() {
         val bytes = success(document(emptyList()), profile(feedLines = 0))
-        assertArrayEquals(bytes(0x1B, 0x40, 0x1B, 0x45, 0x00), bytes)
+        assertArrayEquals(bytes(0x1B, 0x40) + FINAL_RESET, bytes)
     }
 
     @Test
     fun `feedLines positive appends that many LF after final reset`() {
         val bytes = success(document(emptyList()), profile(feedLines = 3))
         assertArrayEquals(
-            bytes(0x1B, 0x40, 0x1B, 0x45, 0x00, 0x0A, 0x0A, 0x0A),
+            bytes(0x1B, 0x40) + FINAL_RESET + bytes(0x0A, 0x0A, 0x0A),
             bytes,
         )
     }
@@ -315,7 +289,7 @@ class DefaultEscPosEncoderTest {
                 document(emptyList()),
                 profile(feedLines = 0, supportsCut = false, cutVariant = "FULL"),
             )
-        assertArrayEquals(bytes(0x1B, 0x40, 0x1B, 0x45, 0x00), bytes)
+        assertArrayEquals(bytes(0x1B, 0x40) + FINAL_RESET, bytes)
     }
 
     @Test
@@ -326,7 +300,7 @@ class DefaultEscPosEncoderTest {
                 profile(feedLines = 1, supportsCut = true, cutVariant = "FULL"),
             )
         assertArrayEquals(
-            bytes(0x1B, 0x40, 0x1B, 0x45, 0x00, 0x0A, 0x1D, 0x56, 0x00),
+            bytes(0x1B, 0x40) + FINAL_RESET + bytes(0x0A, 0x1D, 0x56, 0x00),
             bytes,
         )
     }
@@ -339,7 +313,7 @@ class DefaultEscPosEncoderTest {
                 profile(feedLines = 0, supportsCut = true, cutVariant = "PARTIAL"),
             )
         assertArrayEquals(
-            bytes(0x1B, 0x40, 0x1B, 0x45, 0x00, 0x1D, 0x56, 0x01),
+            bytes(0x1B, 0x40) + FINAL_RESET + bytes(0x1D, 0x56, 0x01),
             bytes,
         )
     }
@@ -365,12 +339,179 @@ class DefaultEscPosEncoderTest {
     }
 
     @Test
-    fun `does not emit ESC t code page select`() {
-        val bytes = success(document(listOf(line("A"))), profile())
-        // ESC t = 1B 74
+    fun `escPosCodeTable null does not emit ESC t`() {
+        val bytes = success(document(listOf(line("A"))), profile(escPosCodeTable = null))
         for (i in 0 until bytes.size - 1) {
             assertTrue(!(bytes[i] == 0x1B.toByte() && bytes[i + 1] == 0x74.toByte()))
         }
+    }
+
+    @Test
+    fun `LEFT CENTER RIGHT emit ESC a 0 1 2 and return to LEFT`() {
+        val bytes =
+            success(
+                document(
+                    listOf(
+                        line("L", alignment = PrintAlignment.LEFT),
+                        line("C", alignment = PrintAlignment.CENTER),
+                        line("R", alignment = PrintAlignment.RIGHT),
+                        line("Back", alignment = PrintAlignment.LEFT),
+                    ),
+                ),
+                profile(feedLines = 0),
+            )
+        assertArrayEquals(
+            bytes(0x1B, 0x40) +
+                bytes('L'.code, 0x0A) +
+                bytes(0x1B, 0x61, 0x01) +
+                bytes('C'.code, 0x0A) +
+                bytes(0x1B, 0x61, 0x02) +
+                bytes('R'.code, 0x0A) +
+                bytes(0x1B, 0x61, 0x00) +
+                bytes('B'.code, 'a'.code, 'c'.code, 'k'.code, 0x0A) +
+                FINAL_RESET,
+            bytes,
+        )
+    }
+
+    @Test
+    fun `text scales emit GS excl NORMAL WIDTH HEIGHT BOTH without leakage`() {
+        val bytes =
+            success(
+                document(
+                    listOf(
+                        line("N", textScale = PrintTextScale.NORMAL),
+                        line("W", textScale = PrintTextScale.DOUBLE_WIDTH),
+                        line("H", textScale = PrintTextScale.DOUBLE_HEIGHT),
+                        line("B", textScale = PrintTextScale.DOUBLE_BOTH),
+                        line("back", textScale = PrintTextScale.NORMAL),
+                    ),
+                ),
+                profile(feedLines = 0),
+            )
+        assertArrayEquals(
+            bytes(0x1B, 0x40) +
+                bytes('N'.code, 0x0A) +
+                bytes(0x1D, 0x21, 0x01) +
+                bytes('W'.code, 0x0A) +
+                bytes(0x1D, 0x21, 0x10) +
+                bytes('H'.code, 0x0A) +
+                bytes(0x1D, 0x21, 0x11) +
+                bytes('B'.code, 0x0A) +
+                bytes(0x1D, 0x21, 0x00) +
+                bytes('b'.code, 'a'.code, 'c'.code, 'k'.code, 0x0A) +
+                FINAL_RESET,
+            bytes,
+        )
+    }
+
+    @Test
+    fun `DOUBLE_BOTH then NORMAL clears scale leakage`() {
+        val bytes =
+            success(
+                document(
+                    listOf(
+                        line("BIG", textScale = PrintTextScale.DOUBLE_BOTH),
+                        line("ok", textScale = PrintTextScale.NORMAL),
+                    ),
+                ),
+                profile(feedLines = 0),
+            )
+        assertArrayEquals(
+            bytes(0x1B, 0x40) +
+                bytes(0x1D, 0x21, 0x11) +
+                bytes('B'.code, 'I'.code, 'G'.code, 0x0A) +
+                bytes(0x1D, 0x21, 0x00) +
+                bytes('o'.code, 'k'.code, 0x0A) +
+                FINAL_RESET,
+            bytes,
+        )
+    }
+
+    @Test
+    fun `escPosCodeTable valid selector emits ESC t after initialize`() {
+        val bytes =
+            success(
+                document(listOf(line("A"))),
+                profile(feedLines = 0, escPosCodeTable = 16),
+            )
+        assertArrayEquals(
+            bytes(0x1B, 0x40, 0x1B, 0x74, 16) +
+                bytes('A'.code, 0x0A) +
+                FINAL_RESET,
+            bytes,
+        )
+    }
+
+    @Test
+    fun `escPosCodeTable 0 is accepted`() {
+        val bytes =
+            success(
+                document(listOf(line("A"))),
+                profile(feedLines = 0, escPosCodeTable = 0),
+            )
+        assertEquals(0x1B.toByte(), bytes[2])
+        assertEquals(0x74.toByte(), bytes[3])
+        assertEquals(0x00.toByte(), bytes[4])
+    }
+
+    @Test
+    fun `escPosCodeTable 255 is accepted`() {
+        val bytes =
+            success(
+                document(listOf(line("A"))),
+                profile(feedLines = 0, escPosCodeTable = 255),
+            )
+        assertEquals(0x1B.toByte(), bytes[2])
+        assertEquals(0x74.toByte(), bytes[3])
+        assertEquals(0xFF.toByte(), bytes[4])
+    }
+
+    @Test
+    fun `escPosCodeTable -1 returns InvalidProfile`() {
+        val result =
+            encoder.encode(
+                document(listOf(line("A"))),
+                profile(escPosCodeTable = -1),
+            )
+        assertEquals(EncodeResult.Failure(EncodeError.InvalidProfile), result)
+    }
+
+    @Test
+    fun `escPosCodeTable 256 returns InvalidProfile`() {
+        val result =
+            encoder.encode(
+                document(listOf(line("A"))),
+                profile(escPosCodeTable = 256),
+            )
+        assertEquals(EncodeResult.Failure(EncodeError.InvalidProfile), result)
+    }
+
+    @Test
+    fun `CENTER EMPHASIZED DOUBLE_BOTH are independent on one line`() {
+        val bytes =
+            success(
+                document(
+                    listOf(
+                        line(
+                            text = "X",
+                            emphasis = PrintEmphasis.EMPHASIZED,
+                            alignment = PrintAlignment.CENTER,
+                            textScale = PrintTextScale.DOUBLE_BOTH,
+                        ),
+                    ),
+                ),
+                profile(feedLines = 0),
+            )
+        assertArrayEquals(
+            bytes(0x1B, 0x40) +
+                bytes(0x1B, 0x61, 0x01) +
+                bytes(0x1B, 0x45, 0x01) +
+                bytes(0x1D, 0x21, 0x11) +
+                bytes('X'.code, 0x0A) +
+                FINAL_RESET,
+            bytes,
+        )
     }
 
     // --- helpers ---
@@ -390,13 +531,22 @@ class DefaultEscPosEncoderTest {
     private fun line(
         text: String,
         emphasis: PrintEmphasis = PrintEmphasis.NORMAL,
-    ): PrintableLine = PrintableLine(text = text, emphasis = emphasis)
+        alignment: PrintAlignment = PrintAlignment.LEFT,
+        textScale: PrintTextScale = PrintTextScale.NORMAL,
+    ): PrintableLine =
+        PrintableLine(
+            text = text,
+            emphasis = emphasis,
+            alignment = alignment,
+            textScale = textScale,
+        )
 
     private fun profile(
         codePage: String = "ISO-8859-1",
         feedLines: Int = 0,
         supportsCut: Boolean = false,
         cutVariant: String? = null,
+        escPosCodeTable: Int? = null,
     ): PrinterProfile =
         PrinterProfile(
             id = "p1",
@@ -406,8 +556,19 @@ class DefaultEscPosEncoderTest {
             feedLines = feedLines,
             supportsCut = supportsCut,
             cutCommandVariant = cutVariant,
+            escPosCodeTable = escPosCodeTable,
         )
 
     private fun bytes(vararg values: Int): ByteArray =
         ByteArray(values.size) { i -> values[i].toByte() }
+
+    companion object {
+        /** ESC a 0 + ESC E 0 + GS ! 0 — D-060 final formatting reset. */
+        private val FINAL_RESET: ByteArray =
+            byteArrayOf(
+                0x1B, 0x61, 0x00,
+                0x1B, 0x45, 0x00,
+                0x1D, 0x21, 0x00,
+            )
+    }
 }

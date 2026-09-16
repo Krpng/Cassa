@@ -1524,7 +1524,78 @@ Non-blocking (post-impl hardware): final NETUM `charsPerLine` / JVM+`ESC t` pair
 
 #### HW-001 readiness
 
-**READY FOR IMPLEMENTATION.**
+**READY FOR IMPLEMENTATION** (capability phase). Physical values: see **D-061** after paper.
+
+### D-061 HW-001 NETUM M9 physical profile freeze (2026-09-16) — FROZEN
+
+**Task:** HW-001 — post-hardware profile freeze (STEP 6 after paper evidence).
+**Status:** **FROZEN**.
+**Depends on:** D-060 FROZEN; HW-001 capability implementation + PHONE+NETUM calibration evidence.
+**Base HEAD (docs freeze point):** `8d0aec7` (D-060); HW-001 implementation remains uncommitted until authorized commit.
+
+#### Purpose (FROZEN)
+
+Freeze the **operational NETUM physical `PrinterProfile` values for M9** after paper validation. Does **not** redesign business receipts. Does **not** start BT-006.
+
+#### Hardware evidence (FROZEN summary)
+
+| Area | Observation | Outcome |
+|------|-------------|---------|
+| WIDTH | 32 fits; 42 fits; 48 wraps by ~5 chars | **charsPerLine=42** safe NORMAL layout width; exact 43–47 max **NOT CLAIMED** |
+| FORMAT / text size | Operator approved global **DOUBLE_BOTH** (2×w+2×h) as M9 preferred base | Preference recorded; **not** a `PrinterProfile` field |
+| CODE PAGE | ISO-8859-1 + no `ESC t` → Italian accents wrong; €→EUR fallback | **REJECTED** for NETUM |
+| CODE PAGE | JVM **IBM00858** + `ESC t` selector **19** → àèéìòù + € correct | **VALIDATED** |
+| FEED | `feedLines=3` operationally approved | **FROZEN for M9**; fine tuning deferred post-M9 real use |
+| CUTTER | No automatic cutter; manual tear only | **supportsCut=false**, `cutCommandVariant=null` |
+
+#### Frozen M9 NETUM physical profile (FROZEN)
+
+```text
+paperWidthMm      = 80
+charsPerLine      = 42   # safe validated NORMAL-text layout width; NOT exact physical maximum
+codePage          = IBM00858
+escPosCodeTable   = 19
+feedLines         = 3
+supportsCut       = false
+cutCommandVariant = null
+```
+
+#### Text scale (FROZEN — separate from profile)
+
+- M9 preferred base print scale: **DOUBLE_BOTH** (GS ! `0x11`).
+- Belongs to `PrintableDocument` / receipt styling — **not** stored on `PrinterProfile`.
+- Detailed receipt hierarchy (title / order number / total / spacing / effective 2× wrap): **DEFERRED POST-M9 / REAL USE**.
+- Do not treat this freeze as authorization to redesign production `ReceiptComposer` unless separately authorized.
+
+#### Code page pair (FROZEN)
+
+- JVM charset: **IBM00858** (literal accents + literal euro encodable; no EUR fallback required for this pair).
+- Physical table: **`ESC t` n=19** (validated on hardware; frozen for M9 NETUM).
+- ISO-8859-1 without `ESC t`: rejected for NETUM accents.
+
+#### Cutter (FROZEN)
+
+- `supportsCut = false`, `cutCommandVariant = null`.
+- No further cutter hardware tests required for this device.
+
+#### Feed (FROZEN for M9)
+
+- `feedLines = 3` operationally approved.
+- Fine tuning deferred until post-M9 real-use testing.
+
+#### Scope guard (FROZEN)
+
+Out of this freeze: BT-006 settings UI; BT-007; production receipt redesign; discovery/retry/reconnect; Room; migrations; HW-002 ten consecutive prints (separate).
+
+Schema: **DB v2 unchanged**. Migration: **NONE**.
+
+#### Open questions
+
+**NONE** blocking M9 profile use. Non-blocking deferred: post-M9 visual refinement; feed fine tuning; exact charsPerLine maximum above 42.
+
+#### HW-001 status after this freeze
+
+**HW-001 READY TO COMMIT** (implementation + harness + this documentation freeze). Next authorized task: **BT-006** (when authorized). Do not start BT-006 in this freeze task.
 
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
