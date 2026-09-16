@@ -858,7 +858,91 @@ Selected-printer persistence (BT-003); RFCOMM/socket/connect/print (BT-004/005);
 **Open questions blocking BT-002:**
 NONE.
 
-## Reconciliation decisions made in final pack
+### D-057 BT-003 selected printer persistence contract freeze (2026-09-16)
+After BT-002 COMPLETE (`d97cb49`): **BT-003 = READY FOR IMPLEMENTATION**.
+
+**Owns:** persist / read / observe / clear the **selected bonded printer identity** in the existing printer DataStore. No Bluetooth stack access, no RFCOMM, no UI, no NETUM profile, no PrinterProfileProvider concrete assembly.
+
+#### Persistence SoT (frozen)
+- Mechanism: **DataStore** (architecture §18; schema §12; SoT device/printer prefs).
+- **Reuse** existing file `printer_preferences` (PRINT-003 / `PrinterPreferences.DATA_STORE_FILE_NAME`).
+- Do **not** create a second DataStore solely for selection.
+- Canonical preference key (follow PRINT-003 snake_case): `selected_printer_id` (string).
+- Room schema **v2 unchanged**; DataStore preference evolution is **not** a Room migration.
+
+#### Canonical identity (frozen)
+- Persist **`selectedPrinterId` = `BondedBluetoothDevice.id`** (Android Bluetooth device **address** / MAC-form string) — D-056 + schema §12 `selectedPrinterId/address`.
+- **Do not** use display name as identity.
+- **Do not** persist `BluetoothDevice`, sockets, adapter references, or physical profile calibration fields in BT-003.
+- **Printer name / `deviceName`:** schema lists it as **optional**; BT-003 does **not** require or own name snapshot persistence. Display name remains BT-002 list / BT-006 UI concern.
+
+#### Public model / API surface (frozen)
+- Prefer extending existing domain `PrinterSettingsRepository` (+ `DataStorePrinterSettingsRepository`) so PricePrintMode and selection share one SoT — exact method names follow project style, semantically:
+  - `getSelectedPrinterId(): String?`
+  - `observeSelectedPrinterId(): Flow<String?>`
+  - `setSelectedPrinterId(id: String)`
+  - `clearSelectedPrinterId()`
+- Unconfigured / cleared / missing key → **`null`**. This is a normal preference state — **not** a DataStore error and **not** `PrinterError.PrinterNotConfigured` at the persistence layer. Later `PrinterProfileProvider` / BT-004 may map null → `PrinterNotConfigured`.
+
+#### Set / clear semantics (frozen)
+- **Set:** stores the exact nonblank id string provided (no invented MAC normalization / reformatting unless Android already supplied that form via BT-002).
+- **Blank / whitespace-only id:** **invalid** — must be **rejected** and must **not** be written as a configured selection. Rejection shape follows existing repository conventions (e.g. require / `IllegalArgumentException`); do **not** invent a new preference-error hierarchy.
+- **Clear:** removes selection → subsequent get/observe = `null`. Clear when already empty remains empty (idempotent outcome).
+- **Same id set repeatedly:** semantically **idempotent** (stable get/observe result). Contract does not depend on counting physical DataStore write ops.
+
+#### Bonded-device validation (frozen)
+- BT-003 **does not** query the Bluetooth stack / BT-002 provider on set.
+- UI (BT-006) normally picks an id from the bonded list; connect-time availability = BT-004/005.
+
+#### Stale selection after external unpair (frozen)
+- BT-003 **preserves** the stored id; **no** automatic clear / background cleanup when the device disappears from bondedDevices.
+- Later resolve/connect may surface not-configured / unavailable per BT-004/005 — not invented here.
+
+#### PrinterProfileProvider / physical profile (frozen)
+- BT-003 owns **identity persistence only**.
+- Concrete hardware `PrinterProfileProvider` (charsPerLine/codePage/feed/NETUM defaults + wiring selected id into profile) remains **later M9** (D-054 deferral + HW-001 for physical calibration). BT-003 must not assemble NETUM profiles.
+
+#### PricePrintMode coexistence (frozen)
+- Same `printer_preferences` DataStore; new key alongside `price_print_mode`.
+- Changing selected printer must **not** change `PricePrintMode`.
+- Changing `PricePrintMode` must **not** change selected printer id.
+- Default `PricePrintMode` remains **DETAILED** (D-050).
+
+#### DataStore read / error policy (frozen)
+- Missing / blank stored selection → `null` (unconfigured).
+- Opaque nonblank stored string → return as-is (no invented MAC-format validation on read).
+- IOException / DataStore failures: **reuse PRINT-003 behavior** (propagate via normal DataStore/coroutine failure paths); do not invent a parallel exception hierarchy for BT-003.
+- No manual Mutex, no in-memory second source of truth, no SharedPreferences duplicate.
+
+#### Security / privacy (frozen)
+- Stored **locally only** on device DataStore.
+- No backend/cloud/analytics.
+- No new logging requirement for the address (security §6: do not log MAC in the clear without necessity).
+- No custom encryption unless a later docs task requires it.
+
+#### Tests (BT-003 owned; JVM DataStore patterns as PRINT-003)
+At least:
+- default / no preference → null;
+- set valid id → get/observe exact same id;
+- replace A with B → B;
+- clear → null; clear when empty → null;
+- set same id repeatedly → stable result;
+- blank/whitespace id → rejected; no invalid configured value persisted;
+- selected-printer key coexists with PricePrintMode;
+- PricePrintMode unchanged when selection changes;
+- selection unchanged when PricePrintMode changes;
+- persistence survives new repository instance on same DataStore backing file.
+Follow existing Windows-safe DataStore test discipline (avoid fragile multi-write rename races where already documented).
+
+#### Manual / hardware
+- **Manual test required: NO** (persistence-only; deterministic JVM coverage).
+- Samsung: **NO**. NETUM: **NO**.
+
+#### Out of scope
+Bonded listing (BT-002); permission UI; discovery/SCAN/location; Bluetooth enabled state; RFCOMM/socket/connect/print; NETUM; physical profile calibration; settings/testPrint UI; STAMPA enable; Room/`print_jobs`; PrinterService/`PrinterError` changes; inventing concrete PrinterProfileProvider.
+
+**Open questions blocking BT-003:**
+NONE.
 
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.

@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001 COMPLETE `345dce6`; BT-002 READY — D-056)
+NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001/002 COMPLETE; BT-003 READY — D-057)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: M8 COMPLETE; first_M9_task_next: BT-001 COMPLETE; BT-002 READY (D-056)
+first_M8_task_next: M8 COMPLETE; BT-001/002 COMPLETE; BT-003 READY (D-057)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1309,39 +1309,61 @@ migration: NONE
 
 **FINAL:** BT-001 COMPLETE on `345dce6`.
 
-## 39. BT-002 CONTRACT FREEZE (2026-09-15) — READY
+## 39. BT-002 CONTRACT FREEZE (2026-09-15) — COMPLETE
 
 ```yaml
 decision: D-056
 status: FROZEN
 HEAD_at_freeze_docs: 345dce6
+implementation_commit: d97cb49
 M8: COMPLETE
-M9: 1/14 COMPLETE
+M9: 2/14 COMPLETE
 BT-001: COMPLETE
-BT-002: READY FOR IMPLEMENTATION
+BT-002: COMPLETE
 title: List bonded Bluetooth devices
-owns:
-  - BondedBluetoothDevicesProvider (bondedDevices only)
-  - BondedBluetoothDevice(id=address, name nullable)
-  - BondedDevicesResult Success | Failure(PermissionDenied | BluetoothUnavailable)
-  - Q1 ordering: named first / name CI ASC locale-independent / id ASC; blank after named / id ASC
-  - Q2 adapter null -> Failure(BluetoothUnavailable) local (not PrinterError)
-excludes:
-  - discovery / BLUETOOTH_SCAN / location / pairing
-  - adapter.isEnabled / PrinterError.BluetoothDisabled (BT-004/005)
-  - persistence (BT-003); RFCOMM/NETUM/STAMPA UI
-  - PrinterService / PrintResult / PrinterError changes
-  - UI name placeholder strings (BT-006)
 blocking_open_questions: NONE
-manual_after_impl: PHONE ONLY
-netum_for_listing: NO
-samsung: NO
+manual: PHONE ONLY androidTest PASS
+netum: NO
 schema: DB_v2 UNCHANGED
 migration: NONE
-BT-003+: NOT STARTED
 ```
 
-**FINAL REFINEMENT:** Q1–Q2 resolved. Open questions blocking BT-002: **NONE**.
+**FINAL:** BT-002 COMPLETE on `d97cb49`.
 
-Do **not** implement BT-002 until explicitly authorized.
-Do **not** start BT-003+ / NETUM hardware work in BT-002.
+## 40. BT-003 CONTRACT FREEZE (2026-09-16) — READY
+
+```yaml
+decision: D-057
+status: FROZEN
+HEAD_at_freeze_docs: d97cb49
+M8: COMPLETE
+M9: 2/14 COMPLETE
+BT-001: COMPLETE
+BT-002: COMPLETE
+BT-003: READY FOR IMPLEMENTATION
+title: Persist selected printer
+owns:
+  - selected_printer_id in existing printer_preferences DataStore
+  - PrinterSettingsRepository get/observe/set/clear String?
+  - null = unconfigured (not PrinterNotConfigured at persistence layer)
+  - blank/whitespace id rejected; no bonded validation on set
+  - stale selection preserved after external unpair
+  - coexistence with PricePrintMode DETAILED default
+excludes:
+  - Bluetooth stack / listing / isEnabled / RFCOMM / print
+  - deviceName persistence (optional schema field not owned by BT-003)
+  - concrete PrinterProfileProvider / NETUM physical profile
+  - settings UI / STAMPA enable / Room schema
+blocking_open_questions: NONE
+manual: NO
+samsung: NO
+netum: NO
+schema: DB_v2 UNCHANGED
+migration: NONE
+BT-004+: NOT STARTED
+```
+
+**FINAL REFINEMENT:** Open questions blocking BT-003: **NONE**.
+
+Do **not** implement BT-003 until explicitly authorized.
+Do **not** start BT-004+ / NETUM hardware work in BT-003.

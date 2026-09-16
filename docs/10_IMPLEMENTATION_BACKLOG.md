@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). Next: **BT-002** (D-056 FROZEN — READY).
+> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49`). Next: **BT-003** (D-057 FROZEN — READY).
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001 COMPLETE (`345dce6` / D-055). Next authorized task: **BT-002** List bonded devices — **READY** (D-056). Do not start BT-003+ until BT-002 is COMPLETE and authorized.
+> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). Next authorized task: **BT-003** Persist selected printer — **READY** (D-057). Do not start BT-004+ until BT-003 is COMPLETE and authorized.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -552,7 +552,7 @@ Demo M7 (COMPLETE):
 
 **Demo:** none (permissions/unit). Hardware: **NO**; Samsung: **NO**; NETUM: **NO**.
 
-### BT-002 [P1] List bonded devices — READY FOR IMPLEMENTATION (D-056)
+### BT-002 [P1] List bonded devices — COMPLETE (`d97cb49` / D-056)
 > Read Android bonded/paired devices into an app-safe model; `BondedDevicesResult` Success/Failure; bonded-only. No discovery, SCAN, location, persistence, RFCOMM, NETUM, PrinterService, or settings UI.
 
 **Depends on:** BT-001 COMPLETE (`345dce6`). Contract: **D-056**.
@@ -570,11 +570,29 @@ Demo M7 (COMPLETE):
 
 **Owned tests:** permission granted → list; permission denied → PermissionDenied; SecurityException → PermissionDenied; adapter null → BluetoothUnavailable; zero bonded → Success(empty); multiples + duplicate names by id; Q1 ordering + locale-independence; no discovery; **no** `isEnabled` tests.
 
-**Manual (after impl/review, not now):** PHONE ONLY — ≥1 system-paired device appears in list; no discovery. NETUM: **NO**. Samsung: **NO**.
+**Manual:** PHONE ONLY androidTest PASS (`BondedBluetoothDevicesAndroidTest`). NETUM: **NO**. Samsung: **NO**.
 
 **Not owned:** persistence (BT-003); RFCOMM/BluetoothDisabled/`isEnabled` (BT-004/005); settings UI / name fallback (BT-006); STAMPA; NETUM.
 
-### BT-003 [P1] Persist selected printer
+### BT-003 [P1] Persist selected printer — READY FOR IMPLEMENTATION (D-057)
+> Persist / read / observe / clear selected bonded printer **identity** in existing `printer_preferences` DataStore. No Bluetooth stack, RFCOMM, UI, NETUM profile, or concrete PrinterProfileProvider.
+
+**Depends on:** BT-002 COMPLETE (`d97cb49`); PRINT-003 DataStore (`printer_preferences` / D-050). Contract: **D-057**.
+
+**Owns (AC):** see **D-057**. Summary:
+1. Reuse `printer_preferences`; key `selected_printer_id` = `BondedBluetoothDevice.id` (address). No name persistence in BT-003.
+2. Extend `PrinterSettingsRepository` / DataStore impl: get / observe / set / clear → `String?` (`null` = unconfigured).
+3. Blank/whitespace id rejected; same-id set idempotent; no bonded-stack validation on set; stale selection preserved after external unpair.
+4. Coexist with `PricePrintMode` (default DETAILED unchanged). Identity only — not physical profile / PrinterProfileProvider.
+5. Schema Room v2 unchanged; migration NONE.
+
+**Blocking open questions:** NONE.
+
+**Owned tests:** JVM DataStore (PRINT-003 patterns) — default null; set/get; replace; clear; blank reject; coexistence with PricePrintMode; survive repository recreation.
+
+**Manual:** **NO**. Hardware: **NO**. Samsung: **NO**. NETUM: **NO**.
+
+**Not owned:** bonded listing; RFCOMM/BluetoothDisabled (BT-004/005); settings UI (BT-006); NETUM/HW profile; PrinterService.
 
 ### BT-004 [P1] RFCOMM/SPP driver
 
