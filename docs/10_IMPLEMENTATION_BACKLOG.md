@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). BT-005 COMPLETE (`3aad082` / D-059). **HW-001 COMPLETE** (D-060 capabilities + **D-061** NETUM M9 physical freeze; READY TO COMMIT). Next authorized task: **BT-006** (when authorized). Do not start BT-006 until HW-001 is committed if that is the operator gate.
+> M8 COMPLETE. BT-001..005 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). Next authorized task: **BT-006** — **READY FOR IMPLEMENTATION** (**D-062 FROZEN**). Do not start BT-007 until BT-006 COMPLETE (unless explicitly authorized).
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -633,9 +633,28 @@ Demo M7 (COMPLETE):
 
 **Not owned:** write/flush timeout; PRINT-024 microcopy; PRINT-023 operator RIPROVA UX; settings UI; discovery/SCAN; insecure RFCOMM; HW-001 calibration; Room.
 
-### BT-006 [P1] Printer settings UI
+### BT-006 [P1] Printer settings UI — READY FOR IMPLEMENTATION (D-062)
+> Cashier Impostazioni → Stampante: bonded selection, permission UX, PricePrintMode UI, concrete `PrinterProfileProvider` wiring (D-061). No discovery. No test print execution.
+
+**Status:** **READY FOR IMPLEMENTATION**. Contract: **D-062 FROZEN**.
+**Depends on:** BT-001..005 COMPLETE; HW-001 COMPLETE (`3d05c91` / D-061); PRINT-003; PRINT-007 abstraction.
+
+**Owns (AC) — D-062 FROZEN:**
+1. Stampante section on existing `SettingsScreen` (Home → IMPOSTAZIONI); no new NavHost destination.
+2. Permission request UX (BT-001 APIs); bonded-only list (BT-002); select/clear via `PrinterSettingsRepository` (BT-003).
+3. Stale selection visible; no auto-clear; clear CTA **Nessuna stampante**.
+4. Device label = name or **Dispositivo Bluetooth**; secondary address line always.
+5. PricePrintMode radios: **Prezzi dettagliati** / **Solo totale**; immediate persist.
+6. Concrete production `PrinterProfileProvider` + Hilt: selected id + D-061 physical + DataStore pricePrintMode; never hardcode real MAC.
+7. CTA open Android Bluetooth settings for pairing / adapter off; open app settings when permission not requestable.
+8. JVM ViewModel (+ provider) tests; manual PHONE validation.
+
+**Blocking open questions:** NONE.
+
+**Not owned:** `STAMPA DI PROVA` / `testPrint` invoke (**BT-007**); discovery/SCAN/pairing; RFCOMM/timeout; receipt styling; physical profile editor; Room/migrations.
 
 ### BT-007 [P1] Test print UI
+> Adds `STAMPA DI PROVA` on printer settings and invokes `PrinterService.testPrint()`. Depends on BT-006 provider wiring. **NOT STARTED.**
 
 ### PRINT-020 [P1] PrintDraft integration
 

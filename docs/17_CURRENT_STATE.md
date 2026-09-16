@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BT-006 NEXT; HW-001 READY TO COMMIT (D-060 + D-061); BT-001..005 COMPLETE (`3aad082`)
+NEXT: M9 — BT-006 READY (D-062 FROZEN); HW-001 COMPLETE (`3d05c91`); BT-001..005 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: M8 COMPLETE; BT-001..005 COMPLETE; HW-001 READY TO COMMIT (D-060 + D-061); BT-006 NEXT
+first_M8_task_next: M8 COMPLETE; BT-001..005 COMPLETE; HW-001 COMPLETE (`3d05c91`); BT-006 READY (D-062)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1449,7 +1449,7 @@ status: FROZEN
 HEAD_docs_base: 8d0aec7
 M8: COMPLETE
 M9: 6/14 COMPLETE (HW-001 READY TO COMMIT; BT-001..005 COMPLETE)
-BT-006+: NOT STARTED / NEXT
+BT-006+: READY FOR IMPLEMENTATION (D-062) / BT-007 NOT STARTED
 title: NETUM M9 operational PrinterProfile freeze
 paperWidthMm: 80
 charsPerLine: 42
@@ -1471,4 +1471,35 @@ migration: NONE
 hardware_further_run_this_freeze: NO
 ```
 
-**HW-001 READY TO COMMIT.** Do not start **BT-006** until authorized. Do not redesign production `ReceiptComposer` in the HW-001 commit unless separately authorized.
+**HW-001 COMPLETE** at `3d05c91`. Next: **BT-006** under **D-062** (READY FOR IMPLEMENTATION). Do not redesign production `ReceiptComposer` unless separately authorized.
+
+## 45. BT-006 CONTRACT FREEZE (2026-09-16) — D-062 FROZEN
+
+```yaml
+decision: D-062
+status: FROZEN
+HEAD_at_freeze: 3d05c91
+M8: COMPLETE
+M9: 6/14 COMPLETE
+BT-001..BT-005: COMPLETE
+HW-001: COMPLETE
+BT-006: READY FOR IMPLEMENTATION
+BT-007+: NOT STARTED
+title: Printer settings UI
+entry: Home -> IMPOSTAZIONI -> SettingsScreen Stampante section
+bonded_only: YES
+discovery: NO
+PricePrintMode_UI: IN SCOPE
+physical_profile_editable: NO
+PrinterProfileProvider_concrete: BT-006 OWNS
+test_print_button: BT-007
+stale_selection: SHOW / NO AUTO-CLEAR
+clear_selection: YES
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed: NO
+tests_changed: NO
+gradle_executed: NO
+```
+
+**READY FOR IMPLEMENTATION.** Do not start **BT-007** in this freeze.

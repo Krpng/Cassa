@@ -320,10 +320,10 @@ After PRINT-002 COMPLETE (`c0ce4e7`): **PRINT-003 = READY FOR IMPLEMENTATION**.
 - single SoT — do not duplicate into Room.
 
 **UX:**
-- Public UI **not mandatory** (printing spec §11);
+- Public UI **not mandatory** in PRINT-003 itself (printing spec §11);
 - no draft/accepted/print-dialog entry point;
-- printer settings UI remains M9/BT-006;
-- Italian user-facing labels: **OPEN** (glossary describes semantics only).
+- printer settings UI = **BT-006 / D-062**;
+- Italian user-facing labels: **FROZEN in D-062** — `DETAILED` → **Prezzi dettagliati**; `TOTAL_ONLY` → **Solo totale**.
 
 **Defers:**
 - DETAILED/TOTAL_ONLY layout rendering → PRINT-004;
@@ -331,9 +331,8 @@ After PRINT-002 COMPLETE (`c0ce4e7`): **PRINT-003 = READY FOR IMPLEMENTATION**.
 - Room migration / `print_jobs` → none.
 
 **Open (do not invent in PRINT-003):**
-- exact DataStore key naming / Preferences file name (follow project conventions when DataStore is introduced);
-- Italian Settings copy for DETAILED/TOTAL_ONLY;
-- whether a Settings radio lands in PRINT-003 vs only M9 printer settings (public UI optional).
+- exact DataStore key naming / Preferences file name (follow project conventions when DataStore is introduced) — **RESOLVED by PRINT-003 implementation**;
+- Settings radio ownership — **RESOLVED: BT-006 / D-062**.
 
 
 ### D-051 PRINT-004 receipt formatter / ReceiptComposer body freeze (2026-09-15)
@@ -1595,7 +1594,174 @@ Schema: **DB v2 unchanged**. Migration: **NONE**.
 
 #### HW-001 status after this freeze
 
-**HW-001 READY TO COMMIT** (implementation + harness + this documentation freeze). Next authorized task: **BT-006** (when authorized). Do not start BT-006 in this freeze task.
+**HW-001 COMPLETE** at `3d05c91`. Next: **BT-006** under **D-062**.
+
+### D-062 BT-006 Printer settings UI contract (2026-09-16) — FROZEN
+
+**Task:** BT-006 — Printer settings UI
+**Status:** **FROZEN** — **BT-006 READY FOR IMPLEMENTATION**.
+**Base HEAD:** `3d05c91` (HW-001 COMPLETE).
+**Depends on:** BT-001..005 COMPLETE; HW-001 / D-061 COMPLETE; PRINT-003 / D-050 COMPLETE; PRINT-007 `PrinterProfileProvider` abstraction COMPLETE.
+**Docs-only freeze:** no production/test code changes in this decision.
+
+#### Purpose (FROZEN)
+
+Deliver cashier-facing **Impostazioni → Stampante** UI to:
+
+1. request Bluetooth permission when needed;
+2. list **bonded** devices only;
+3. select / clear persisted printer identity;
+4. show coherent selected / stale / empty / error states;
+5. expose **PricePrintMode** UI (persistence already PRINT-003);
+6. wire a **concrete production `PrinterProfileProvider`** using `selected_printer_id` + **D-061** physical constants + DataStore `pricePrintMode`.
+
+Does **not** execute test print (BT-007). Does **not** discover/pair. Does **not** edit D-061 physical calibration. Does **not** redesign receipt typography.
+
+#### Navigation entry (FROZEN)
+
+- Entry: Home → **IMPOSTAZIONI** → existing `SettingsScreen` route (`CassaDestination.SETTINGS`).
+- Add a **Stampante** section on the **same** `SettingsScreen` (alongside Numerazione).
+- **No** new NavHost destination required for MVP.
+- Rationale: Numerazione already uses this shell (UX §19); IA tree places Stampante under Impostazioni.
+
+#### Bonded-only / discovery (FROZEN)
+
+- List via existing `BondedBluetoothDevicesProvider` only.
+- **NO** discovery, SCAN, `BLUETOOTH_SCAN`, location permission, in-app pairing/`createBond`.
+- To associate a new printer: CTA → **open Android system Bluetooth settings** (pairing happens outside the app).
+
+#### Permission UX (FROZEN)
+
+- Uses BT-001 `BluetoothPermissionManager` APIs only (no invented permission state machine).
+- On section enter / load:
+  - if required runtime permission missing **and** `isRuntimePermissionRequestNeeded()` → **request once** via Compose activity result launcher;
+  - show **Permission required** state with explicit CTA to request if not auto-requested / after dismiss;
+  - **Denied** (still requestable): Italian error + **RIPROVA** (request again);
+  - **Not requestable / permanently denied** (`!isRuntimePermissionRequestNeeded` && still missing): Italian error + CTA **Apri impostazioni app** (system app settings), not a fake Bluetooth SCAN path.
+- Pre-API 31: no Bluetooth runtime prompt (BT-001).
+- Avoid permission request loops (single request per user action / one auto-request per enter cycle).
+
+#### Bluetooth disabled / unavailable (FROZEN)
+
+- BT-002 list path does **not** own `BluetoothDisabled`.
+- BT-006 UI **may** check adapter enabled/null via a thin platform helper (not RFCOMM; not inventing new `PrinterError` for listing).
+- States:
+  - adapter **null** → **Bluetooth non disponibile**;
+  - adapter present + **disabled** → **Bluetooth disattivato** + CTA open system Bluetooth settings;
+  - do **not** present disabled as “nessun dispositivo associato”.
+- `PrinterError.BluetoothDisabled` remains owned by connect/print (BT-004) for later BT-007/PRINT paths.
+
+#### Device list / display (FROZEN)
+
+- Primary label: non-blank `BondedBluetoothDevice.name`; else **`Dispositivo Bluetooth`**.
+- Secondary line: show **Bluetooth address (`id`)** always (disambiguates duplicate names; UX §20 technical id “se utile”).
+- Do **not** hardcode vendor strings / real lab MAC / “NETUM” / “BlueTooth Printer”.
+- Duplicate names retained as distinct rows (distinct ids) — D-056.
+- Ordering: provider order (D-056) unchanged.
+
+#### Selection semantics (FROZEN)
+
+- Tap row → **immediate** persist of exact `device.id` via `PrinterSettingsRepository.setSelectedPrinterId` (same immediate-persist pattern as Numerazione).
+- No separate Save button.
+- No MAC normalization; no printer-name persistence; no automatic RFCOMM; no automatic test print.
+- Selected row must be recognizable without color-only (a11y).
+
+#### Stale selection (FROZEN)
+
+- Persisted `selected_printer_id` may remain after unpair (D-057) — **do not auto-clear**.
+- UI must distinguish:
+  - `selectedPrinterId` from DataStore;
+  - whether that id is in the current bonded list.
+- If selected id **not** in bonded list: show **selection unavailable / non attualmente associata** (Italian microcopy), keep id visible (masked/technical), CTAs: choose another bonded device **or** clear selection.
+- Do not silently rewrite DataStore.
+
+#### Clear selection (FROZEN)
+
+- **IN SCOPE.** Expose explicit control **Nessuna stampante** / clear → `clearSelectedPrinterId()`.
+- Useful for recovering from stale selection; API already exists (D-057).
+
+#### PricePrintMode UI (FROZEN — IN SCOPE)
+
+- Owner UI: **BT-006** (PRINT-003 parked public UI at M9/BT-006; D-050).
+- Modes: `DETAILED` / `TOTAL_ONLY`; default DETAILED unchanged.
+- Italian labels (freeze OPEN from D-050):
+  - `DETAILED` → **Prezzi dettagliati**
+  - `TOTAL_ONLY` → **Solo totale**
+- Immediate persistence via `updatePricePrintMode`; failure → inline error + RIPROVA (Settings pattern).
+- Does not change receipt layout rules (PRINT-004).
+
+#### Physical profile (FROZEN)
+
+- D-061 values are **NOT user-editable** in MVP.
+- **Visibility:** hidden/internal (not shown as cashier controls).
+- Concrete provider embeds D-061 constants; no calibration UI.
+
+#### Concrete `PrinterProfileProvider` (FROZEN — BT-006 owns)
+
+- Abstraction already exists (PRINT-007). **No production concrete impl yet** — gap closed by BT-006.
+- BT-006 must add production provider + Hilt binding that:
+  - `selected_printer_id == null` → `getActiveProfile() == null` → `PrinterNotConfigured` at service;
+  - otherwise builds `PrinterProfile(id = selectedId, name = bondedNameOrFallback, …D-061 physical…, pricePrintMode = DataStore)`;
+  - **never** hardcodes a real device MAC;
+  - may return a profile for a **stale** selected id (connect later → `ConnectionFailed` per D-058), name fallback if not bonded.
+- BT-007 / PRINT-020+ **consume** this provider; they do not redefine D-061.
+
+#### Test print button (FROZEN)
+
+- **`STAMPA DI PROVA` = BT-007 only.**
+- BT-006 must **not** add the button, disabled stub, or invoke `PrinterService.testPrint()`.
+- UX §20 lists test print on settings page; backlog split: selection/config = BT-006; invoke test print = BT-007 (button added then).
+
+#### UI states (FROZEN minimum)
+
+Cover at least:
+
+- loading;
+- permission required;
+- permission denied (requestable / not requestable);
+- Bluetooth unavailable;
+- Bluetooth disabled;
+- no bonded devices (+ CTA open system BT settings);
+- bonded devices available;
+- selected device present in list;
+- selected device stale/unpaired;
+- persistence failure (select / clear / price mode);
+- bonded list load failure (`PermissionDenied` / `BluetoothUnavailable` from BT-002).
+
+Feedback: prefer **inline state + RIPROVA** (existing Settings pattern). No snackbar required for successful selection if selected state is visible. No crash on recoverable errors.
+
+#### ViewModel contract (FROZEN guidance)
+
+Keep simple `StateFlow` + sealed UI state (match `SettingsViewModel` / TodayOrders patterns). Minimum fields/events:
+
+**State inputs:** loading; permission flags; adapter availability/enabled; devices; `selectedPrinterId`; stale flag; `pricePrintMode`; error message.
+
+**Events:** `onEnter`/`retryLoad`; `requestPermission` / `onPermissionResult`; `selectPrinter(id)`; `clearSelection`; `selectPricePrintMode`; `openSystemBluetoothSettings`; `openAppSettings` (permanent deny).
+
+No mandatory complex MVI.
+
+#### Tests (FROZEN ownership)
+
+- JVM ViewModel tests (primary).
+- Compose UI tests where project patterns already exist for Settings-like screens.
+- Provider unit tests for null / selected / stale name fallback / D-061 fields / pricePrintMode.
+- Coverage minimum: permission missing; granted+devices; no devices; selected; stale; persist success/failure; duplicate names; unnamed device; PricePrintMode update; clear selection.
+- **Manual PHONE validation:** YES after implementation.
+- **NETUM:** PARTIAL — needed for real bonded/selected evidence; **not** required for every UI state (disabled BT, permission deny, empty bonded can use phone-only).
+
+#### Out of scope (FROZEN)
+
+Discovery; pairing; RFCOMM/timeout changes; test print execution; receipt styling / DOUBLE_BOTH application; physical profile editor; Room; migrations; cloud; STAMPA enable (later PRINT tasks); BT-007+.
+
+Schema: **DB v2 unchanged**. Migration: **NONE**.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### BT-006 readiness
+
+**READY FOR IMPLEMENTATION.** Do not start **BT-007** until BT-006 COMPLETE (or explicitly authorized otherwise).
 
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
