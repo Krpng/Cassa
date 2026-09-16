@@ -53,7 +53,8 @@ Questa matrice collega requisiti, backlog e test.
 | Final print | PRINT-004/007/021 | PRINT-T002..014 |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |
 | Bluetooth RFCOMM/SPP driver | BT-004 **COMPLETE** (D-058; `82cc98f`; Q1-A secure) | unit + PHONE+NETUM hardware PASS |
-| Timeout/disconnect/error mapping | BT-005 **READY** (D-059 FROZEN; connect 10_000 ms; Q2-A connect-only) | PRINT-T021 full + loss/uncertain; unit timeout without hardware |
+| Timeout/disconnect/error mapping | BT-005 **COMPLETE** (D-059; `3aad082`; connect 10_000 ms; Q2-A connect-only) | unit + PHONE+NETUM (normal + local BT-off → ConnectionLost) |
+| NETUM ESC/POS calibration | HW-001 **READY** (D-060 FROZEN; synthetic sheet; align/scale/optional ESC t) | PHONE+NETUM one-step hardware after impl |
 | Printer settings/test | BT-006/007 | PRINT-T027 HW/UI + PRINT-007 service |
 | One copy/mutex | PRINT-007 | PRINT-T009/T024 |
 | Non-fiscal | PRINT spec/release | manual review |

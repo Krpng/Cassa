@@ -33,7 +33,8 @@ Campi consigliati:
 - id/name;
 - paperWidthMm = 80;
 - charsPerLine;
-- codePage;
+- codePage (JVM Charset name — text → bytes);
+- escPosCodeTable opzionale (`Int?`; selettore fisico `ESC t n`; **D-060**; distinto da `codePage`);
 - feedLines;
 - supportsCut;
 - cutCommandVariant opzionale;
@@ -42,9 +43,12 @@ Campi consigliati:
 Default test:
 - 80 mm;
 - `supportsCut=false`;
-- `DETAILED`.
+- `DETAILED`;
+- `escPosCodeTable=null` (nessun `ESC t`).
 
-`charsPerLine` e code page vengono calibrati su hardware.
+`charsPerLine`, JVM `codePage`, eventuale `escPosCodeTable` e feed vengono calibrati su hardware (**HW-001 / D-060**). I valori finali NETUM non sono congelati finché non c’è evidenza su carta.
+
+PrinterProfile **non** possiede stili business (font titolo/item/totale, allineamenti receipt): quelli vivono in `PrintableDocument` / layout.
 
 ## 4. Tipi stampa
 
@@ -355,42 +359,61 @@ SPP UUID (D-058): `00001101-0000-1000-8000-00805F9B34FB`.
 RFCOMM socket (D-058 Q1-A): **secure only** — `createRfcommSocketToServiceRecord(SPP_UUID)`.
 Insecure RFCOMM / secure→insecure fallback: **NOT ALLOWED** in BT-004 (contract revision required if hardware proves insecure necessary).
 
-Timeout / disconnect / error mapping (**D-059 FROZEN** / BT-005 READY):
+Timeout / disconnect / error mapping (**D-059 COMPLETE** / BT-005 `3aad082`):
 - Connect timeout default **10_000 ms**, injected at driver/transport (not PrinterProfile / DataStore / Room); close attempt socket to interrupt blocking `BluetoothSocket.connect()`; map to `PrinterError.Timeout`.
 - **Q2-A connect-only** — no explicit write/flush timeout in MVP (future contract revision required).
 - Write/flush `IOException` after CONNECTED → `ConnectionLost` (uncertain outcome §20); microcopy → PRINT-024.
 - No automatic print retry; no automatic reconnect algorithm; next explicit job reconnects via normal `PrinterService` lifecycle (D-054).
 
+Calibrazione profilo / formattazione testo (**D-060 FROZEN** / HW-001 READY): vedi §23–§24 / decision log D-060.
 Non bloccare main thread.
 
 ## 23. ESC/POS encoder
 
-Responsabilità:
-- init;
-- alignment;
-- bold;
-- double size per header;
-- normal size;
-- line feed;
-- text encoding;
-- optional cut.
+Responsabilità (baseline + **D-060**):
+- init (`ESC @`);
+- optional physical code-table select (`ESC t n`) when `escPosCodeTable != null`;
+- physical alignment (`ESC a`);
+- bold/emphasis (`ESC E`);
+- character scale ≤2× (`GS !`: NORMAL / DOUBLE_WIDTH / DOUBLE_HEIGHT / DOUBLE_BOTH);
+- normal size reset;
+- line feed (LF);
+- text encoding via JVM charset (`codePage`);
+- optional cut when `supportsCut`.
+
+Ordine documento (**D-060**):
+1. `ESC @`
+2. optional `ESC t`
+3. per ogni riga: alignment + emphasis + scale + text + LF
+4. reset finale ≥ LEFT + NORMAL emphasis + NORMAL scale
+5. `feedLines` × LF
+6. optional cut
+
+`PrintableLine` defaults (`alignment=LEFT`, `textScale=NORMAL`) preservano lo scontrino esistente finché il layout non opta nei nuovi stili.
 
 Non mettere layout business nel driver Bluetooth.
+Non inventare mapping silenziosi per `€`/glifi; fallback encoder esistente (`€`→`EUR` se non rappresentabile).
 
 ## 24. Charset
 
-Calibrare:
-- `à è ì ò ù`;
+Due livelli distinti (**D-060**):
+- `codePage` = JVM Charset (Unicode → bytes);
+- `escPosCodeTable` = selettore tabella fisica stampante (`ESC t`), opzionale.
+
+Calibrare su carta (**HW-001**):
+- `à è é ì ò ù`;
 - apostrofi;
 - `€`.
 
-Se `€` non disponibile nella code page:
-- PrinterProfile può usare fallback `EUR`;
-- non sostituire con carattere illeggibile.
+Se `€` non disponibile nella code page JVM scelta:
+- encoder usa fallback `EUR`;
+- non sostituire con carattere illeggibile / mapping silenzioso inventato.
 
 Normalizzare caratteri tipografici non supportati:
 - smart quotes -> quote/apostrofo standard;
 - dash unicode -> `-`.
+
+La coppia definitiva JVM + `ESC t` per NETUM **non** è congelata finché non c’è evidenza hardware.
 
 ## 25. FakePrinterDriver
 
@@ -423,20 +446,18 @@ Non deve creare Order.
 
 ## 27. Hardware validation NETUM
 
-Checklist:
+Checklist (**HW-001 / D-060** — foglio di calibrazione sintetico prima dello scontrino business):
 - pairing;
-- selezione bonded device;
-- connect;
-- reconnect;
+- selezione bonded device (`printerId` instrumentation);
+- connect / transport (BT-004/005);
 - 80 mm;
-- chars per line;
-- €;
-- accenti;
-- numero grande;
-- note lunghe;
-- 10 stampe consecutive;
-- spegnimento durante stampa;
-- retry;
-- feed/strappo.
+- chars per line (candidati osservati, freeze dopo carta);
+- allineamento / grassetto / scale ≤2×;
+- JVM charset + eventuale `ESC t`;
+- € / accenti;
+- feed / strappo;
+- cutter solo se evidenza hardware (altrimenti `supportsCut=false`);
+- 10 stampe consecutive = **HW-002**.
 
-Solo dopo validazione, salvare PrinterProfile definitivo.
+Solo dopo validazione, congelare PrinterProfile fisico definitivo (secondo freeze post-hardware).
+Non ridisegnare lo scontrino business in HW-001.

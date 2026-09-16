@@ -127,13 +127,15 @@ Questo evita che `AcceptOrder` dipenda da una preferenza non transazionale.
 
 ## Cosa non è ancora fisicamente validato
 
-- caratteri per riga NETUM;
-- code page;
-- simbolo euro;
-- lettere accentate;
+- caratteri per riga NETUM (candidati osservabili; freeze post-carta — **HW-001 / D-060**);
+- JVM code page + eventuale selettore fisico `ESC t` (`escPosCodeTable`);
+- simbolo euro / lettere accentate sulla carta;
+- capability allineamento / grassetto / scale ≤2×;
 - feed lines;
-- stabilità connessione;
-- eventuale supporto cutter su future stampanti.
+- eventuale cutter automatico (default attuale: strappo manuale / `supportsCut=false`);
+- stabilità connessione (BT-005 osservata; non calibrazione profilo).
+
+Valori fisici finali NETUM: **secondo freeze dopo HW-001**, non in D-060.
 
 ## Regola per nuove decisioni
 

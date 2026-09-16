@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001..004 COMPLETE; BT-005 READY — D-059 FROZEN)
+NEXT: M9 — HW-001 READY (D-060 FROZEN); BT-001..005 COMPLETE (`3aad082`)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: M8 COMPLETE; BT-001..004 COMPLETE; BT-005 READY (D-059 FROZEN)
+first_M8_task_next: M8 COMPLETE; BT-001..005 COMPLETE; HW-001 READY (D-060 FROZEN)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1373,7 +1373,7 @@ spp_uuid: 00001101-0000-1000-8000-00805F9B34FB
 insecure: NOT_USED
 secure_to_insecure_fallback: NOT_ALLOWED
 hardware_validation: DONE — PHONE + NETUM (BT-004 gate)
-hw_001_calibration: DEFERRED — after BT-005
+hw_001_calibration: NEXT — D-060 FROZEN / READY FOR IMPLEMENTATION
 blocking_open_questions: NONE
 schema: DB_v2 UNCHANGED
 migration: NONE
@@ -1426,4 +1426,40 @@ gradle_executed: NO
 
 **Blocking open questions:** **NONE**.
 
-BT-005 is **READY FOR IMPLEMENTATION**. Do not invent write/flush timeout, automatic retry, or automatic reconnect. After BT-005 COMPLETE → **HW-001 NEXT** (before BT-006).
+BT-005 is **COMPLETE** at `3aad082`. Do not invent write/flush timeout, automatic retry, or automatic reconnect. Next: **HW-001** under **D-060** (before BT-006).
+
+## 43. HW-001 CONTRACT FREEZE (2026-09-16) — D-060 FROZEN
+
+```yaml
+decision: D-060
+status: FROZEN
+HEAD_at_freeze: 3aad082
+M8: COMPLETE
+M9: 5/14 COMPLETE
+BT-001..BT-005: COMPLETE
+HW-001: READY FOR IMPLEMENTATION
+BT-006+: NOT STARTED
+title: ESC/POS calibration capabilities
+PrintableLine_alignment: LEFT|CENTER|RIGHT (default LEFT)
+PrintableLine_textScale: NORMAL|DOUBLE_WIDTH|DOUBLE_HEIGHT|DOUBLE_BOTH (default NORMAL)
+PrintEmphasis: PRESERVED
+ESC_a: IN SCOPE
+GS_exclamation: IN SCOPE (<=2x)
+ESC_t: OPTIONAL profile-driven (escPosCodeTable Int? = null)
+JVM_codePage_vs_physical_table: SEPARATED
+business_receipt_redesign: DEFERRED
+charsPerLine_final: NOT YET FROZEN
+JVM_codePage_final: NOT YET FROZEN
+ESC_t_selector_final: NOT YET FROZEN
+feedLines_final: NOT YET FROZEN
+supportsCut_final: NOT YET FROZEN (current false)
+calibration_harness: REQUIRED synthetic sheet [A]..[F]
+hardware_sequence: WIDTH -> FORMAT -> CODE PAGE -> FEED -> CUTTER IF RELEVANT -> PROFILE FREEZE
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed: NO
+tests_changed: NO
+gradle_executed: NO
+```
+
+**READY FOR IMPLEMENTATION.** Extend generic document/encoder model (not ad-hoc raw-only test bytes). Do not freeze final NETUM physical values until paper evidence (second freeze). Do not redesign business receipt in HW-001.

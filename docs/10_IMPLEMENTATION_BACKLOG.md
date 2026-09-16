@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49`). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). Next: **BT-005** (D-059 FROZEN — **READY FOR IMPLEMENTATION**; connect timeout 10_000 ms; Q2-A connect-only).
+> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49`). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). BT-005 COMPLETE (`3aad082` / D-059). Next: **HW-001** (D-060 FROZEN — **READY FOR IMPLEMENTATION**).
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). Next authorized task: **BT-005** — **READY FOR IMPLEMENTATION** (D-059 FROZEN; connect timeout 10_000 ms injected; Q2-A connect-only; no auto retry/reconnect).
+> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). BT-005 COMPLETE (`3aad082` / D-059). Next authorized task: **HW-001** — **READY FOR IMPLEMENTATION** (D-060 FROZEN; generic ESC/POS calibration capabilities; synthetic calibration sheet; no business receipt redesign).
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -611,10 +611,10 @@ Demo M7 (COMPLETE):
 
 **Not owned:** timeout enforcement / uncertain ConnectionLost UX / retry/reconnect (BT-005); settings/testPrint UI; concrete NETUM `PrinterProfileProvider` defaults; discovery/SCAN/location; Room.
 
-### BT-005 [P1] Timeout/disconnect/error mapping — READY FOR IMPLEMENTATION (D-059)
+### BT-005 [P1] Timeout/disconnect/error mapping — COMPLETE (`3aad082` / D-059)
 > Hardened connect timeout, connection-loss/uncertain outcome mapping, reconnect/retry **policy** on top of BT-004 transport.
 
-**Status:** **READY FOR IMPLEMENTATION**. Contract: **D-059 FROZEN**.
+**Status:** **COMPLETE** (`3aad082`). Contract: **D-059 FROZEN**.
 **Depends on:** BT-004 COMPLETE (`82cc98f`).
 
 **Owns (AC) — D-059 FROZEN:**
@@ -647,8 +647,24 @@ Demo M7 (COMPLETE):
 
 ### PRINT-024 [P1] uncertain outcome microcopy
 
-### HW-001 [P1] NETUM calibration spike
-chars/codepage/feed.
+### HW-001 [P1] NETUM calibration spike — READY FOR IMPLEMENTATION (D-060)
+> Physical NETUM profile calibration + generic ESC/POS text formatting capability validation via synthetic calibration sheet. No business receipt redesign.
+
+**Status:** **READY FOR IMPLEMENTATION**. Contract: **D-060 FROZEN**.
+**Depends on:** BT-005 COMPLETE (`3aad082`).
+
+**Owns (AC) — D-060 FROZEN:**
+1. Extend `PrintableLine` with `alignment` (`LEFT|CENTER|RIGHT`, default `LEFT`) and `textScale` (`NORMAL|DOUBLE_WIDTH|DOUBLE_HEIGHT|DOUBLE_BOTH`, default `NORMAL`); keep `PrintEmphasis` unchanged.
+2. Extend `PrinterProfile` with optional `escPosCodeTable: Int? = null` (physical `ESC t`; distinct from JVM `codePage`).
+3. Encoder: `ESC @`, optional `ESC t`, per-line `ESC a` / `ESC E` / `GS !` (≤2×), final reset to LEFT+NORMAL+NORMAL scale, then feed, optional cut only if profile allows.
+4. Synthetic androidTest calibration document sections [A]..[F]; cutter **not** in first sheet; controllable TEST profile via instrumentation args/fixtures; `printerId` arg; no DataStore persistence; no NETUM name hardcode.
+5. Hardware sequence one step at a time: WIDTH → FORMAT → CODE PAGE → FEED → CUTTER IF RELEVANT → profile freeze (second decision after paper).
+6. Do **not** freeze final NETUM `charsPerLine` / JVM+`ESC t` / `feedLines` / cutter in this task's contract — observe first.
+7. User text size/format requirement included as capability validation; business mapping of scales to header/order/total deferred.
+
+**Blocking open questions:** NONE.
+
+**Not owned:** production receipt redesign; BT-006/007 UI; discovery/retry/reconnect; Room/migrations; final physical profile value freeze (post-hardware).
 
 ### HW-002 [P1] 10 consecutive prints
 
