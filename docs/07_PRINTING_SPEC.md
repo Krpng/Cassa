@@ -355,6 +355,12 @@ SPP UUID (D-058): `00001101-0000-1000-8000-00805F9B34FB`.
 RFCOMM socket (D-058 Q1-A): **secure only** — `createRfcommSocketToServiceRecord(SPP_UUID)`.
 Insecure RFCOMM / secure→insecure fallback: **NOT ALLOWED** in BT-004 (contract revision required if hardware proves insecure necessary).
 
+Timeout / disconnect / error mapping (**D-059 FROZEN** / BT-005 READY):
+- Connect timeout default **10_000 ms**, injected at driver/transport (not PrinterProfile / DataStore / Room); close attempt socket to interrupt blocking `BluetoothSocket.connect()`; map to `PrinterError.Timeout`.
+- **Q2-A connect-only** — no explicit write/flush timeout in MVP (future contract revision required).
+- Write/flush `IOException` after CONNECTED → `ConnectionLost` (uncertain outcome §20); microcopy → PRINT-024.
+- No automatic print retry; no automatic reconnect algorithm; next explicit job reconnects via normal `PrinterService` lifecycle (D-054).
+
 Non bloccare main thread.
 
 ## 23. ESC/POS encoder

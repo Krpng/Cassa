@@ -424,7 +424,7 @@ La UI disabilita i pulsanti mentre stampa, ma la protezione reale è anche nel s
 
 ## 22. Bluetooth MVP
 
-Preferenza (**D-055..D-058 — BT-001/002/003 COMPLETE; BT-004 READY**):
+Preferenza (**D-055..D-059 — BT-001/002/003/004 COMPLETE; BT-005 READY**):
 - pairing nel sistema Android;
 - app seleziona un device già bonded;
 - discovery **OUT OF SCOPE** for MVP unless a later task explicitly adds it.
@@ -441,7 +441,7 @@ Android 12+ (API 31+):
 Pre-Android 12:
 - no runtime `BLUETOOTH_CONNECT` prompt; legacy install-time `BLUETOOTH` (maxSdk 30) as needed for bonded strategy.
 
-`BluetoothPermissionManager` = **BT-001 COMPLETE**. Bonded list = **BT-002 COMPLETE (D-056)**. Selected printer identity in `printer_preferences` (`selected_printer_id`) = **BT-003 COMPLETE (D-057)**. Adapter enabled / null adapter / `PrinterError.BluetoothDisabled` = **BT-004** (D-058). RFCOMM/SPP driver = **BT-004 READY (D-058)** — SPP UUID frozen; **Q1-A secure** `createRfcommSocketToServiceRecord` only; no insecure; no secure→insecure fallback. Timeout/reconnect/uncertain loss = **BT-005**. Concrete `PrinterProfileProvider` remains later M9 (not BT-003/004 transport).
+`BluetoothPermissionManager` = **BT-001 COMPLETE**. Bonded list = **BT-002 COMPLETE (D-056)**. Selected printer identity in `printer_preferences` (`selected_printer_id`) = **BT-003 COMPLETE (D-057)**. Adapter enabled / null adapter / `PrinterError.BluetoothDisabled` = **BT-004 COMPLETE** (D-058). RFCOMM/SPP driver = **BT-004 COMPLETE** (`82cc98f`) — SPP UUID frozen; **Q1-A secure** `createRfcommSocketToServiceRecord` only; no insecure; no secure→insecure fallback. Timeout / disconnect / error mapping = **BT-005 READY (D-059 FROZEN)** — connect timeout **10_000 ms** injected at driver/transport; **Q2-A connect-only** (no write/flush timeout); write `IOException` → `ConnectionLost`; **no** auto retry/reconnect; timeout + socket-close to interrupt blocking connect. Concrete `PrinterProfileProvider` remains later M9 (not BT-003/004/005 transport hardening).
 
 ## 23. Error model
 

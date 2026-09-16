@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001/002/003 COMPLETE; BT-004 READY — D-058 Q1-A secure)
+NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001..004 COMPLETE; BT-005 READY — D-059 FROZEN)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: M8 COMPLETE; BT-001/002/003 COMPLETE; BT-004 READY (D-058 Q1-A secure)
+first_M8_task_next: M8 COMPLETE; BT-001..004 COMPLETE; BT-005 READY (D-059 FROZEN)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1353,34 +1353,77 @@ migration: NONE
 
 **FINAL:** BT-003 COMPLETE on `e44c3e4`.
 
-## 41. BT-004 CONTRACT FREEZE (2026-09-16) — READY
+## 41. BT-004 CONTRACT FREEZE (2026-09-16) — READY → COMPLETE
 
 ```yaml
 decision: D-058
 status: FROZEN
 HEAD_at_freeze_docs: e44c3e4
+implementation_HEAD: 82cc98f
 M8: COMPLETE
-M9: 3/14 COMPLETE
+M9: 4/14 COMPLETE
 BT-001: COMPLETE
 BT-002: COMPLETE
 BT-003: COMPLETE
-BT-004: READY FOR IMPLEMENTATION
+BT-004: COMPLETE
 title: RFCOMM/SPP printer driver
 rfcomm_mode: SECURE
 api: createRfcommSocketToServiceRecord
 spp_uuid: 00001101-0000-1000-8000-00805F9B34FB
 insecure: NOT_USED
 secure_to_insecure_fallback: NOT_ALLOWED
-hardware_validation: YES — AFTER IMPLEMENTATION — PHONE + NETUM
-hw_001_calibration: DEFERRED
+hardware_validation: DONE — PHONE + NETUM (BT-004 gate)
+hw_001_calibration: DEFERRED — after BT-005
 blocking_open_questions: NONE
 schema: DB_v2 UNCHANGED
 migration: NONE
-BT-005+: NOT STARTED
 ```
 
-**FINAL REFINEMENT:** Q1 resolved as **Q1-A SECURE**. Open questions blocking BT-004: **NONE**.
+**FINAL REFINEMENT:** Q1 resolved as **Q1-A SECURE**. BT-004 implementation + hardware gate COMPLETE at `82cc98f`.
 
-Do **not** implement BT-004 until explicitly authorized.
-Do **not** start BT-005 until BT-004 is COMPLETE.
 Do **not** use insecure RFCOMM or secure→insecure fallback without an explicit contract revision after PHONE + NETUM evidence.
+
+## 42. BT-005 CONTRACT DECISION RESOLUTION (2026-09-16) — D-059 FROZEN
+
+```yaml
+decision: D-059
+status: FROZEN
+HEAD_at_freeze: 82cc98f
+M8: COMPLETE
+M9: 4/14 COMPLETE
+BT-001..BT-004: COMPLETE
+BT-005: READY FOR IMPLEMENTATION
+title: Timeout / disconnect / error mapping
+Q1_connect_timeout_ms: 10000
+timeout_configuration: DRIVER_TRANSPORT_INJECTED
+Q2_write_flush_timeout: Q2-A_CONNECT_ONLY — NOT IMPLEMENTED
+timeout_mechanism: CLOSE_SOCKET_TO_INTERRUPT_BLOCKING_CONNECT
+timeout_race: TIMEOUT_PRESERVED_OVER_CLOSE_INDUCED_IOEXCEPTION
+ConnectionFailed: pre-CONNECTED failures
+ConnectionLost: post-CONNECTED write/flush IOException + print while DISCONNECTED (uncertain §20)
+PrintFailed: NOT USED FOR RFCOMM WRITE IOEXCEPTION
+uncertain_outcome: ConnectionLost signal; microcopy PRINT-024
+automatic_print_retry: NO
+automatic_reconnect: NO
+future_explicit_retry: new PrinterService job / fresh connect (D-054)
+CancellationException: rethrow except controlled TimeoutCancellationException → Timeout
+state_after_transport_failure: DISCONNECTED
+cleanup_precedence: PRIMARY_ERROR_PRESERVED
+PrinterService_redesign: NO — minimal CancellationException rethrow only if needed
+hardware_validation: PHONE + NETUM AFTER IMPLEMENTATION
+HW-001_after_BT-005: YES
+blocking_open_questions: NONE
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed: NO
+tests_changed: NO
+gradle_executed: NO
+```
+
+**Q1 RESOLVED:** connect timeout = **10_000 ms** (injected; not PrinterProfile/DataStore/Room). False timeouts on normal NETUM → revise D-059 explicitly (no runtime auto-adapt).
+
+**Q2 RESOLVED:** **Q2-A CONNECT-ONLY** — no write/flush timeout in BT-005 MVP.
+
+**Blocking open questions:** **NONE**.
+
+BT-005 is **READY FOR IMPLEMENTATION**. Do not invent write/flush timeout, automatic retry, or automatic reconnect. After BT-005 COMPLETE → **HW-001 NEXT** (before BT-006).

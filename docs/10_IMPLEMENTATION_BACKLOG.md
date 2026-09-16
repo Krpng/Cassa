@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49`). BT-003 COMPLETE (`e44c3e4` / D-057). Next: **BT-004** (D-058 FROZEN — **READY**; secure RFCOMM Q1-A).
+> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49`). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). Next: **BT-005** (D-059 FROZEN — **READY FOR IMPLEMENTATION**; connect timeout 10_000 ms; Q2-A connect-only).
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). BT-003 COMPLETE (`e44c3e4` / D-057). Next authorized task: **BT-004** RFCOMM/SPP driver — **READY FOR IMPLEMENTATION** (D-058 FROZEN; Q1-A secure RFCOMM). Do not start BT-005 until BT-004 is COMPLETE.
+> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). BT-003 COMPLETE (`e44c3e4` / D-057). BT-004 COMPLETE (`82cc98f` / D-058). Next authorized task: **BT-005** — **READY FOR IMPLEMENTATION** (D-059 FROZEN; connect timeout 10_000 ms injected; Q2-A connect-only; no auto retry/reconnect).
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -594,7 +594,7 @@ Demo M7 (COMPLETE):
 
 **Not owned:** bonded listing; RFCOMM/BluetoothDisabled (BT-004/005); settings UI (BT-006); NETUM/HW profile; PrinterService.
 
-### BT-004 [P1] RFCOMM/SPP driver — READY FOR IMPLEMENTATION (D-058)
+### BT-004 [P1] RFCOMM/SPP driver — COMPLETE (`82cc98f` / D-058)
 > Real Bluetooth Classic RFCOMM/SPP `PrinterDriver` transport: resolve bonded device from `PrinterProfile.id`, **secure** connect via `createRfcommSocketToServiceRecord(SPP_UUID)`, write encoded bytes, disconnect/cleanup. Bonded-only; reuse BT-001 permissions; own `BluetoothDisabled` gate.
 
 **Depends on:** BT-003 COMPLETE (`e44c3e4`). Contract: **D-058 FROZEN**.
@@ -611,8 +611,27 @@ Demo M7 (COMPLETE):
 
 **Not owned:** timeout enforcement / uncertain ConnectionLost UX / retry/reconnect (BT-005); settings/testPrint UI; concrete NETUM `PrinterProfileProvider` defaults; discovery/SCAN/location; Room.
 
-### BT-005 [P1] Timeout/disconnect/error mapping
-> Hardened timeout, connection-loss/uncertain outcome mapping, reconnect/retry policy on top of BT-004 transport. Do not start until BT-004 COMPLETE.
+### BT-005 [P1] Timeout/disconnect/error mapping — READY FOR IMPLEMENTATION (D-059)
+> Hardened connect timeout, connection-loss/uncertain outcome mapping, reconnect/retry **policy** on top of BT-004 transport.
+
+**Status:** **READY FOR IMPLEMENTATION**. Contract: **D-059 FROZEN**.
+**Depends on:** BT-004 COMPLETE (`82cc98f`).
+
+**Owns (AC) — D-059 FROZEN:**
+1. Connect timeout default **10_000 ms**, injected at driver/transport level (not PrinterProfile / DataStore / Room); map to `PrinterError.Timeout`.
+2. Mechanism: timeout + **close attempt socket** to interrupt blocking `BluetoothSocket.connect()`; timeout-won flag preserves `Timeout` over close-induced `IOException`.
+3. **Q2-A connect-only** — no explicit write/flush timeout in MVP.
+4. Write/flush `IOException` after CONNECTED → `ConnectionLost` + DISCONNECTED (uncertain physical outcome §20); microcopy → PRINT-024 (not BT-005 UI).
+5. Cleanup precedence: primary typed failure preserved; close errors secondary.
+6. **NO** automatic print retry; **NO** automatic reconnect algorithm; next explicit job/RIPROVA = fresh connect via D-054 lifecycle.
+7. `CancellationException`: controlled timeout → `Timeout`; other cancel → rethrow; service may only add minimal cancel rethrow (no Mutex/lifecycle redesign).
+8. Unit tests deterministic (fake gateway + injectable/virtual time); no real 10 s sleeps; no hardware for unit timeout.
+9. Manual after impl: PHONE + NETUM (normal print; power-off / BT-off observation). False connect timeouts on normal NETUM → revise D-059 explicitly (no runtime auto-adapt).
+10. After BT-005 COMPLETE → **HW-001 NEXT** (before BT-006).
+
+**Blocking open questions:** NONE.
+
+**Not owned:** write/flush timeout; PRINT-024 microcopy; PRINT-023 operator RIPROVA UX; settings UI; discovery/SCAN; insecure RFCOMM; HW-001 calibration; Room.
 
 ### BT-006 [P1] Printer settings UI
 

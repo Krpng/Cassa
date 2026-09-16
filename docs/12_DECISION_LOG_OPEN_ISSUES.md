@@ -1032,11 +1032,12 @@ After BT-003 COMPLETE (`e44c3e4`): **BT-004 = READY FOR IMPLEMENTATION**.
 | BluetoothDisabled (disabled + null adapter) | **BT-004** |
 | Device not bonded / socket create/connect failure (no timeout) | **BT-004** → `ConnectionFailed` |
 | Raw write IOException (no timeout wrapper) | **BT-004** preliminary → `PrintFailed` or `ConnectionLost` if socket already dead |
-| Connect/write **timeout enforcement** | **BT-005** → `Timeout` |
-| Connection-loss classification + uncertain paper UX | **BT-005** |
-| Retry / reconnect algorithm / multi-attempt | **BT-005** or later (not BT-004) |
+| Connect **timeout enforcement** (connect-only) | **BT-005** → `Timeout` (**D-059 FROZEN**; default **10_000 ms**) |
+| Write/flush timeout | **NOT** BT-005 MVP (**D-059 Q2-A**) — future contract revision required |
+| Connection-loss classification + uncertain paper UX signal | **BT-005** transport → `ConnectionLost`; microcopy **PRINT-024** (**D-059**) |
+| Retry / reconnect algorithm / multi-attempt | **BT-005 policy** = **NO automatic** retry/reconnect (**D-059**); operator/next job only |
 
-BT-004 = raw connect/write/close transport + gates above. BT-005 = hardened timing + loss/uncertain mapping + reconnect policy.
+BT-004 = raw connect/write/close transport + gates above. BT-005 = hardened connect timing + loss/uncertain mapping + retry/reconnect **policy** (D-059 FROZEN).
 
 #### Threading (FROZEN)
 - Security §8: Bluetooth I/O on **Dispatchers.IO** (or injected IO `CoroutineDispatcher`).
@@ -1077,6 +1078,234 @@ Discovery; pairing/`createBond`; `BLUETOOTH_SCAN`; location; settings/testPrint 
 
 #### Open questions blocking BT-004
 NONE.
+
+### D-059 BT-005 Bluetooth transport timeout and failure contract (2026-09-16) — FROZEN
+
+**Task:** BT-005 — Timeout / disconnect / error mapping
+**Status:** **FROZEN** — **BT-005 READY FOR IMPLEMENTATION**.
+**Base HEAD:** `82cc98f` (BT-004 COMPLETE).
+**Production / tests / Gradle:** docs-only decision resolution; no code changes in this freeze.
+
+#### Scope (FROZEN)
+
+BT-005 hardens the **BT-004** secure RFCOMM transport already shipped. Owns exclusively:
+
+1. **Connect timeout** enforcement (default **10_000 ms**) and `PrinterError.Timeout` mapping.
+2. **Transport failure classification** (refine BT-004 preliminary write mapping).
+3. **Connection-lost** handling after a usable session existed.
+4. **Deterministic cleanup** after failures (owned resources closed; driver → DISCONNECTED when socket is dead/uncertain).
+5. **Error mapping** onto the **existing** `PrinterError` set (no new variants).
+
+BT-005 does **not** own:
+
+- Write/flush timeout (**Q2-A**).
+- Automatic print retry of the same payload.
+- An invented automatic reconnect algorithm / multi-attempt connect loop.
+- Uncertain-outcome **microcopy** / RIPROVA UX → **PRINT-024** / UX docs.
+- Settings UI, discovery, pairing, SCAN/location, ESC/POS/format, NETUM calibration, Room.
+
+Backlog wording “reconnect/retry policy” = **policy freeze** (explicit operator / next job), **not** authority to invent reconnect/retry algorithms.
+
+#### Q1 — Connect timeout duration (RESOLVED)
+
+- **Production default:** `10_000` ms (MVP explicit decision).
+- **Configuration:** injected / configurable at **transport-driver** (or gateway) level.
+- **Must not** live in: `PrinterProfile`, DataStore user setting, Room.
+- **Tests:** duration injectable / virtual-time friendly; **no** real 10-second sleeps.
+- If PHONE+NETUM hardware gate shows **false timeouts** on a normal NETUM connection: **revise D-059 explicitly** — do **not** auto-adapt the value at runtime.
+
+#### Q2 — Write / flush timeout (RESOLVED — Q2-A CONNECT-ONLY)
+
+BT-005 MVP does **not** implement explicit timeout on `OutputStream.write()` or `OutputStream.flush()`.
+
+Contract rationale:
+
+- blocking RFCOMM write/flush is not reliably interrupted by bare coroutine cancellation;
+- forced-close timeout during write can create uncertain physical print outcome;
+- existing `PrinterError.Timeout` does not encode operation phase;
+- do not invent ambiguous write-timeout semantics in MVP.
+
+Therefore:
+
+- connect timeout → `PrinterError.Timeout`;
+- write `IOException` after CONNECTED → `ConnectionLost` + DISCONNECTED + cleanup;
+- flush `IOException` after CONNECTED → `ConnectionLost` + DISCONNECTED + cleanup.
+
+A future write/flush timeout requires an **explicit separate contract revision** with coherent uncertain-outcome representation. **Not** part of BT-005 MVP.
+
+#### Existing error model (FROZEN — inventory)
+
+| `PrinterError` | BT-005 transport relevance |
+|----------------|----------------------------|
+| `BluetoothDisabled` | Connect-gate (BT-004); mid-session I/O → `ConnectionLost` |
+| `PermissionDenied` | Connect/write `SecurityException` (BT-001/004) |
+| `PrinterNotConfigured` | Blank `profile.id` (BT-004) / null profile (service) |
+| `ConnectionFailed` | Failure **before** usable CONNECTED session |
+| `ConnectionLost` | After CONNECTED: transport dead / write-path loss; also print while DISCONNECTED |
+| `Timeout` | **Connect timeout only** (Q2-A) |
+| `PrintFailed` | Remains in model (Fake); **Android RFCOMM write/flush `IOException` → `ConnectionLost`**, not `PrintFailed` |
+| `Unknown` | Unexpected only; must not mask primary typed failures |
+| `UnsupportedEncoding` / `UnencodableCharacter` / `InvalidPrinterProfile` | **Encode / D-054** — **NOT** BT-005 transport |
+| `OrderNotFound` / `InvalidOrderState` | Service eligibility — **NOT** BT-005 |
+
+**Do not** add new `PrinterError` variants in BT-005 (including no typed `PossiblyPrinted` / `UncertainPrint`).
+
+#### ConnectionFailed vs ConnectionLost vs PrintFailed (FROZEN)
+
+Aligned with D-053 Fake + D-058 + printing §20:
+
+- **`ConnectionFailed`** = failure **before** a usable connection is established (`connect` does not reach CONNECTED Success). Includes: not bonded, secure socket factory failure, `connect()` `IOException` (non-timeout), output-stream acquisition failure before CONNECTED.
+- **`ConnectionLost`** = a usable connection **existed** (or print attempted while already DISCONNECTED) and then transport failed: `print` while DISCONNECTED; write/flush `IOException` after CONNECTED; stream/socket gone mid-session. Per printing §20, **`ConnectionLost` during write = uncertain physical outcome**.
+- **`PrintFailed`** = Fake may inject while remaining CONNECTED. For **real RFCOMM**, mid-print `IOException` → **`ConnectionLost` + DISCONNECTED**, not `PrintFailed`.
+
+No ambiguous overlap: pre-CONNECTED connect failures never use `ConnectionLost`; post-CONNECTED write/flush transport failures never use `ConnectionFailed`.
+
+#### Uncertain print outcome (FROZEN)
+
+- Transport signal for uncertain paper: **`PrinterError.ConnectionLost`** on write/flush failure after CONNECTED.
+- **No** new typed hierarchy in BT-005.
+- Operator microcopy = **PRINT-024** / UX §12 — BT-005 introduces **no UI**.
+
+#### Connect timeout mechanism (FROZEN)
+
+`BluetoothSocket.connect()` is **blocking**. A bare `withTimeout { blockingConnect() }` without closing the socket is **not** sufficient.
+
+Required semantics:
+
+1. Create secure SPP socket.
+2. Start connect on IO dispatcher; arm timeout (**10_000 ms** production default).
+3. If timeout wins: close attempt socket → unblock connect → clear session → state **DISCONNECTED** → result **`PrinterError.Timeout`**.
+4. Race: connect `IOException` caused by timeout-induced close must **not** overwrite **`Timeout`** — use a deterministic timeout-won flag / operation state (no `exception.message` matching).
+5. If connect failed first with `IOException` and timeout did not win → **`ConnectionFailed`**.
+
+Allowed shapes (all must close the socket on timeout): `withTimeout` + close-on-timeout sibling, gateway-level timeout that closes the socket, or executor/future **only if** cancel still closes the socket.
+
+`TimeoutCancellationException` from the **controlled** connect timeout path → `PrinterError.Timeout`. Other `CancellationException` → **rethrow**.
+
+#### Driver state after failures (FROZEN)
+
+Binary state remains DISCONNECTED | CONNECTED (D-058).
+
+| Failure | State after | Resources |
+|---------|-------------|-----------|
+| Connect timeout | DISCONNECTED | Close attempt socket; clear session |
+| Connect failure (`IOException` / factory / stream) | DISCONNECTED | Close attempt; clear |
+| Write failure | DISCONNECTED | Close owned socket/stream; clear |
+| Flush failure | DISCONNECTED | Close; clear |
+| Mid-session `PermissionDenied` | DISCONNECTED | Close; clear |
+| Bluetooth disabled mid-session (via I/O failure) | DISCONNECTED | Close; clear (`ConnectionLost`) |
+
+In all cases: owned session resources cleared; close attempted quietly; primary typed error preserved.
+
+#### Cleanup precedence (FROZEN)
+
+Same spirit as M8 D-054 Q6b / D-058 closeQuietly:
+
+- **Primary** typed connect/write failure is preserved.
+- Socket/stream close errors during cleanup are **secondary** — best-effort; never invent `DisconnectFailed`; never replace primary `Timeout` / `ConnectionFailed` / `ConnectionLost` / `PermissionDenied` with close noise or `Unknown`.
+- Boundary: driver owns quiet close on its failure paths; `DefaultPrinterService` still runs `disconnect()` in `finally` and must not erase a typed `PrintResult.Failure` (D-054).
+
+#### Bluetooth disabled during session (FROZEN mapping + HW note)
+
+- Pre-connect `adapter.isEnabled == false` / null adapter → `BluetoothDisabled` (**BT-004**).
+- After CONNECTED, Bluetooth off observed via I/O failure → **`ConnectionLost`**. No required mid-session `isEnabled` re-check in BT-005 MVP.
+- Exact OS/stack exception on BT-off mid-RFCOMM: **NEEDS HARDWARE VALIDATION** after implementation — mapping preference remains `ConnectionLost`.
+
+#### Permission revoked during session (FROZEN)
+
+- `SecurityException` on connect or write/flush → **`PermissionDenied`**.
+- Then DISCONNECTED + deterministic close/clear.
+- No string-matching on messages.
+
+#### Automatic print retry (FROZEN — NO)
+
+- **NO automatic print retry** after `Timeout` / `ConnectionLost` / any typed failure (double-print risk).
+- Operator RIPROVA = PRINT-023/024.
+
+#### Automatic reconnect (FROZEN — NO algorithm)
+
+- **NO automatic reconnect** loop in BT-005.
+- Do **not** invent a reconnect algorithm.
+
+#### Future explicit retry (FROZEN)
+
+- New `PrinterService` job: Mutex → connect once → print once → disconnect finally (**D-054 unchanged**).
+
+#### PrinterService boundary (FROZEN)
+
+- **No** retry/lifecycle redesign.
+- Only allowed service change if needed for implementation: preserve/rethrow non-timeout `CancellationException` (do not map to `Unknown`).
+- Timeout → `PrinterError.Timeout` produced **inside the driver**.
+
+#### Final error mapping matrix (FROZEN)
+
+| Situation | Map to |
+|-----------|--------|
+| Permission missing / `SecurityException` | `PermissionDenied` |
+| Adapter null before connect | `BluetoothDisabled` |
+| Adapter disabled before connect | `BluetoothDisabled` |
+| Selected printer missing/blank | `PrinterNotConfigured` |
+| Selected device no longer bonded | `ConnectionFailed` |
+| Socket factory failure | `ConnectionFailed` |
+| Connect `IOException` before usable connection (timeout did not win) | `ConnectionFailed` |
+| Connect timeout wins | `Timeout` |
+| Output stream acquisition failure | `ConnectionFailed` |
+| Print while DISCONNECTED | `ConnectionLost` |
+| Write `IOException` after CONNECTED | `ConnectionLost` |
+| Flush `IOException` after CONNECTED | `ConnectionLost` |
+| Bluetooth switched off during active session (via I/O failure) | `ConnectionLost` |
+| `SecurityException` during session | `PermissionDenied` |
+| Close/cleanup exception with primary error | secondary; preserve primary |
+
+No `exception.message` matching.
+
+#### CancellationException (FROZEN)
+
+- Controlled connect timeout `TimeoutCancellationException` → `PrinterError.Timeout`.
+- Other `CancellationException` → **rethrow** (not `Unknown` / `ConnectionFailed` / `ConnectionLost`).
+
+#### Testability / clock (FROZEN)
+
+- Unit tests own: deterministic timeout behavior; race timeout-vs-connect failure; cleanup precedence; cancellation; write/flush failure mappings.
+- Injectable duration + virtual time; **no** real 10 s sleeps; **no** hardware required for unit timeout tests.
+
+#### Configuration (FROZEN)
+
+- Connect timeout: **driver/transport injected**; production default **10_000 ms**.
+- **Not** in `PrinterProfile`, DataStore user setting, or Room.
+- Not app Settings UI in BT-005.
+
+#### Hardware validation (FROZEN plan — after implementation)
+
+Manual **PHONE + NETUM**, one case at a time, non-destructive:
+
+1. Normal print still works (regression vs BT-004; watch for false connect timeouts → revise D-059 explicitly if needed).
+2. Transport loss / printer power-off → typed failure (`ConnectionFailed` / `ConnectionLost` / `Timeout` as applicable).
+3. Bluetooth-off mid-session if safely reproducible → prefer `ConnectionLost` on write path.
+
+Not HW-001 calibration.
+
+#### HW-001 order (FROZEN)
+
+After **BT-005 COMPLETE** → **HW-001 NEXT**, before BT-006, unless a new blocker appears.
+
+HW-001 remains owner of: `charsPerLine`, `codePage`, `feedLines`, ESC `t` physical behavior, cutter/profile calibration.
+
+#### Scope guard (FROZEN)
+
+Out of BT-005: write/flush timeout; automatic retry; automatic reconnect; insecure RFCOMM fallback; discovery; pairing; `BLUETOOTH_SCAN`; location; receipt formatting; ESC/POS encoder changes; NETUM calibration; UI/microcopy; Room; migrations.
+
+Schema: **v2 unchanged**. Migration: **NONE**.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+Non-blocking after impl: mid-session BT-off OS behavior hardware observation; false-timeout revision path if normal NETUM connect exceeds 10 s.
+
+#### BT-005 readiness
+
+**READY FOR IMPLEMENTATION.**
 
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
