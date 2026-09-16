@@ -1763,6 +1763,132 @@ Schema: **DB v2 unchanged**. Migration: **NONE**.
 
 **READY FOR IMPLEMENTATION.** Do not start **BT-007** until BT-006 COMPLETE (or explicitly authorized otherwise).
 
+### D-063 BT-007 Test print UI contract (2026-09-16) — FROZEN
+
+**Task:** BT-007 — Test print UI
+**Status:** **FROZEN** — **BT-007 READY FOR IMPLEMENTATION**.
+**Base HEAD:** `8b41233` (BT-006 COMPLETE).
+**Depends on:** BT-001..006 COMPLETE; HW-001 / D-061; PRINT-007 `PrinterService.testPrint()` + Mutex; BT-004/005 driver.
+**Docs-only freeze:** no production/test code changes in this decision.
+**Does not reopen:** BT-006 accepted Minor (`permissionRequestAttempted` ViewModel-memory only).
+
+#### Purpose (FROZEN)
+
+Deliver cashier-facing **Impostazioni → Stampante → STAMPA DI PROVA** that:
+
+1. invokes existing `PrinterService.testPrint()` once per explicit tap;
+2. uses `PrinterProfileProvider` (selected id + D-061 + PricePrintMode);
+3. shows success/failure feedback without mutating orders;
+4. respects BT-005 (no auto retry/reconnect) and BT-006 (no silent printer substitution).
+
+Does **not** own PRINT-020..024, HW-002, receipt typography redesign, discovery/pairing, transport changes, or physical profile editing.
+
+#### Navigation / placement (FROZEN)
+
+- Same `SettingsScreen` Stampante section as BT-006.
+- Add button label exactly: **`STAMPA DI PROVA`** (UX §20 / PRINTING_SPEC §26).
+- **No** new NavHost destination.
+
+#### Enablement (FROZEN)
+
+**Enabled** only when all hold:
+
+- printer-settings UI is `Ready`;
+- `selectedPrinterId != null`;
+- `selectedIsStale == false` (id present in current bonded list);
+- no test-print job in progress.
+
+**Disabled / unavailable** when:
+
+- no selected printer;
+- stale/unpaired selection;
+- permission / Bluetooth unavailable or disabled / load error states (existing BT-006 section states);
+- test print already `PRINTING`.
+
+Do **not** silently use another bonded device. Do **not** auto-clear stale selection.
+
+#### Profile / API (FROZEN)
+
+- Call site: `PrinterService.testPrint(): PrintResult` (no parameters — actual interface).
+- Profile resolution: inside service via `PrinterProfileProvider.getActiveProfile()`; `null` → `PrinterError.PrinterNotConfigured`.
+- Physical constants remain D-061 (80 / 42 / IBM00858 / ESC t 19 / feed 3 / no cutter).
+- Never hardcode real device MAC/name.
+- UI/ViewModel must **not** call `PrinterDriver` directly.
+
+#### Test content (FROZEN)
+
+Reuse existing `DefaultPrinterService.testPrintDocument()` **unchanged** (D-054 / Q3):
+
+- EMPHASIZED: `TEST STAMPANTE`
+- NORMAL: `Cassa`
+- NORMAL: `à è ì ò ù €`
+- `PrintKind.DRAFT` technical only; no Order; no numbering; no `ReceiptComposer`.
+
+**Typography:** no DOUBLE_BOTH / spacing / feed redesign in BT-007. M9 DOUBLE_BOTH preference remains deferred post-M9 for business receipts.
+
+#### Execution (FROZEN)
+
+- Explicit user tap only → one job.
+- `DefaultPrinterService` whole-job Mutex remains SoT (serialize with any future print jobs).
+- While `PRINTING`: disable button + visible progress.
+- Double-tap / recomposition / ON_RESUME must **not** start another job.
+- Job owned by ViewModel coroutine (survives UI recreation without restarting); **not** resumed across process death.
+- Failure → no automatic retry; when idle again, user may tap **STAMPA DI PROVA** for a new job (no separate Riprova required unless existing error CTA pattern is reused).
+
+#### Success UX (FROZEN)
+
+- On `PrintResult.Success`: transient feedback **`Test stampa inviato`**.
+- Meaning: service completed connect/print/disconnect lifecycle successfully (D-054). Do **not** claim absolute physical-paper certainty beyond that.
+- Prefer ephemeral Snackbar or equivalent short-lived message; clear printing progress.
+
+#### Error UX (FROZEN) — map existing `PrinterError` only (no new domain types)
+
+| Error | User-facing (Italian intent) | CTA |
+|---|---|---|
+| `PermissionDenied` | Autorizzazione Bluetooth necessaria | existing BT-006 permission / app-settings flow |
+| `BluetoothDisabled` | Bluetooth disattivato | Apri impostazioni Bluetooth |
+| `PrinterNotConfigured` | Nessuna stampante selezionata | select printer in list |
+| `ConnectionFailed` | Impossibile connettersi alla stampante | re-enable STAMPA DI PROVA when idle |
+| `ConnectionLost` | Connessione interrotta durante la stampa di prova | re-enable STAMPA DI PROVA (no PRINT-024 order copy) |
+| `Timeout` | Timeout di connessione alla stampante | re-enable STAMPA DI PROVA |
+| `PrintFailed` / `UnsupportedEncoding` / `UnencodableCharacter` / `InvalidPrinterProfile` / `Unknown` | Impossibile completare la stampa di prova | re-enable STAMPA DI PROVA |
+| `OrderNotFound` / `InvalidOrderState` | Unexpected for testPrint — treat as Unknown | same |
+
+**No** automatic retry. **No** PRINT-024 “potrebbe essere stato stampato” order semantics for BT-007.
+
+#### ViewModel ownership (FROZEN)
+
+- Prefer extending existing `PrinterSettingsViewModel` with orthogonal test-print fields (`isTestPrinting` / message or sealed test-print phase) rather than a new Nav destination.
+- Inject `PrinterService` when Hilt graph is wired.
+- Do not redesign BT-006 permission/adapter architecture; handle service-returned PermissionDenied/BluetoothDisabled races safely.
+
+#### DI note (FROZEN)
+
+Production `PrinterService` / driver / encoder may still lack Hilt bindings after BT-006. **BT-007 owns minimal Singleton wiring** to make `testPrint()` callable from settings UI. Do not redesign Mutex/driver contracts.
+
+#### Tests (FROZEN)
+
+JVM (primary): A no selection / NotConfigured; B stale → no service call; C valid → one `testPrint`; D double-tap while printing → one job; E success feedback; F–K error mappings; L no crash on unexpected; M manual retry after failure; N no order/DB mutation (PRINT-T027). Compose optional: enabled/disabled + progress.
+
+#### Manual hardware (FROZEN)
+
+Samsung + paired NETUM test printer **REQUIRED** after implementation/code review (one tap → one paper; no duplicate; idle restore). Do not run in this freeze task.
+
+#### Out of scope (FROZEN)
+
+PRINT-020..024; HW-002; discovery/SCAN/location/pairing; RFCOMM/timeout changes; receipt styling; physical profile editor; Room/schema/migrations; cloud.
+
+Schema: **DB v2 unchanged**. Migration: **NONE**.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### BT-007 readiness
+
+**READY FOR IMPLEMENTATION.**
+
+
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
 Latest reimport rule says same product name updates even if category changes.

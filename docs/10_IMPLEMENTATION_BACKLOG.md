@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..006 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-006 COMPLETE**. Next authorized task: **BT-007** — **NOT STARTED**. Do not start BT-007 until explicitly authorized.
+> M8 COMPLETE. BT-001..006 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-006 COMPLETE**. Next authorized task: **BT-007** — **READY FOR IMPLEMENTATION** (**D-063 FROZEN**). Do not start PRINT-020+ until BT-007 COMPLETE (unless explicitly authorized).
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -660,8 +660,25 @@ Demo M7 (COMPLETE):
 
 **Not owned:** `STAMPA DI PROVA` / `testPrint` invoke (**BT-007**); discovery/SCAN/pairing; RFCOMM/timeout; receipt styling; physical profile editor; Room/migrations.
 
-### BT-007 [P1] Test print UI — NOT STARTED
-> Adds `STAMPA DI PROVA` on printer settings and invokes `PrinterService.testPrint()`. Depends on BT-006 provider wiring (**COMPLETE**). **NOT STARTED.**
+### BT-007 [P1] Test print UI — READY FOR IMPLEMENTATION (D-063)
+> Adds **`STAMPA DI PROVA`** on Impostazioni → Stampante and invokes existing `PrinterService.testPrint()`. Depends on BT-006 provider wiring (**COMPLETE**).
+
+**Status:** **READY FOR IMPLEMENTATION**. Contract: **D-063 FROZEN**.
+**Depends on:** BT-006 COMPLETE (`8b41233`); PRINT-007 `testPrint` + Mutex; concrete `PrinterProfileProvider` (BT-006); BT-004/005 driver.
+
+**Owns (AC) — D-063 FROZEN:**
+1. Button **STAMPA DI PROVA** on existing Stampante section (no new NavHost destination).
+2. Enabled only when printer settings `Ready` + non-null selected id + **not** stale + not already printing.
+3. One explicit tap → one `PrinterService.testPrint()` job; profile via `PrinterProfileProvider`; no direct `PrinterDriver` from UI.
+4. Reuse `DefaultPrinterService.testPrintDocument()` unchanged (`TEST STAMPANTE` / `Cassa` / accents+€); no Order/Room/numbering.
+5. Success feedback: transient **Test stampa inviato** (transport job completed — do not claim absolute paper certainty beyond service Success).
+6. Map `PrinterError` to Italian recoverable UI; **no** auto-retry/reconnect; manual re-tap allowed when idle/enabled.
+7. Minimal Hilt wiring for production `PrinterService` graph if still unbound (driver + encoder + composer + service).
+8. JVM ViewModel tests A–N; Compose enabled/disabled/progress if existing pattern fits; Samsung+NETUM manual after review.
+
+**Blocking open questions:** NONE.
+
+**Not owned:** PRINT-020..024; HW-002; receipt typography / DOUBLE_BOTH application; discovery/pairing; transport/timeout changes; physical profile editor; Room/migrations; BT-006 permission-attempt persistence Minor.
 
 ### PRINT-020 [P1] PrintDraft integration
 

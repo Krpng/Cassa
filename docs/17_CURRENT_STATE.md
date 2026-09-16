@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BT-007 NEXT; BT-006 COMPLETE; HW-001 COMPLETE (`3d05c91`); BT-001..006 COMPLETE; M9 7/14
+NEXT: M9 — BT-007 READY (D-063 FROZEN); BT-006 COMPLETE; M9 7/14
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1537,3 +1537,30 @@ migration: NONE
 ```
 
 **BT-006 COMPLETE.** Next: **BT-007** (test print UI) when authorized. Do not start BT-007 without explicit authorization.
+
+## 47. BT-007 CONTRACT FREEZE (2026-09-16) — D-063 FROZEN
+
+```yaml
+decision: D-063
+status: FROZEN
+base_HEAD: 8b41233
+M8: COMPLETE
+M9: 7/14 COMPLETE
+BT-006: COMPLETE
+BT-007: READY FOR IMPLEMENTATION
+title: Test print UI
+entry: SettingsScreen Stampante -> STAMPA DI PROVA
+API: PrinterService.testPrint()
+profile: PrinterProfileProvider / D-061
+content: DefaultPrinterService.testPrintDocument() UNCHANGED
+typography: NO CHANGE
+auto_retry: NO
+PRINT-020+: OUT OF SCOPE
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed: NO
+tests_changed: NO
+gradle_executed: NO
+```
+
+**READY FOR IMPLEMENTATION.** Do not start PRINT-020+ / HW-002 in this freeze.
