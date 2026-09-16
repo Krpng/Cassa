@@ -1,6 +1,9 @@
 package it.krpng.cassa.feature.settings
 
 import it.krpng.cassa.domain.model.PricePrintMode
+import it.krpng.cassa.domain.printer.PrintResult
+import it.krpng.cassa.domain.printer.PrinterError
+import it.krpng.cassa.domain.printer.PrinterService
 import it.krpng.cassa.domain.repository.PrinterSettingsRepository
 import it.krpng.cassa.platform.bluetooth.BluetoothAdapterAvailability
 import it.krpng.cassa.platform.bluetooth.BluetoothAdapterStateProvider
@@ -9,6 +12,7 @@ import it.krpng.cassa.platform.bluetooth.BondedBluetoothDevice
 import it.krpng.cassa.platform.bluetooth.BondedBluetoothDevicesProvider
 import it.krpng.cassa.platform.bluetooth.BondedDevicesError
 import it.krpng.cassa.platform.bluetooth.BondedDevicesResult
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -525,6 +529,337 @@ class PrinterSettingsViewModelTest {
             assertEquals("AA:02", repository.selectedId)
         }
 
+    // --- BT-007 test print ---
+
+    @Test
+    fun `BT007 A no selected printer does not call testPrint`() = runTest(mainDispatcher) {
+        val printerService = FakePrinterService()
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                selectedId = null,
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+
+        assertEquals(0, printerService.testPrintCalls)
+        assertEquals(TestPrintUiState.Idle, viewModel.testPrintUiState.value)
+    }
+
+    @Test
+    fun `BT007 B stale selected printer does not call testPrint`() = runTest(mainDispatcher) {
+        val printerService = FakePrinterService()
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "Alive")),
+                selectedId = "STALE:ID",
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+
+        assertEquals(0, printerService.testPrintCalls)
+        assertEquals(TestPrintUiState.Idle, viewModel.testPrintUiState.value)
+    }
+
+    @Test
+    fun `BT007 C valid selected printer calls testPrint once`() = runTest(mainDispatcher) {
+        val printerService = FakePrinterService(result = PrintResult.Success)
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                selectedId = "AA:01",
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printerService.testPrintCalls)
+        assertTrue(viewModel.testPrintUiState.value is TestPrintUiState.Success)
+        assertEquals(
+            "Test stampa inviato",
+            (viewModel.testPrintUiState.value as TestPrintUiState.Success).message,
+        )
+    }
+
+    @Test
+    fun `BT007 D double tap while printing calls testPrint once`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printerService =
+            FakePrinterService(
+                result = PrintResult.Success,
+                blockUntil = gate,
+            )
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                selectedId = "AA:01",
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+        assertEquals(TestPrintUiState.Printing, viewModel.testPrintUiState.value)
+
+        viewModel.runTestPrint()
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printerService.testPrintCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, printerService.testPrintCalls)
+        assertTrue(viewModel.testPrintUiState.value is TestPrintUiState.Success)
+    }
+
+    @Test
+    fun `BT007 E success clears printing and allows new explicit tap`() = runTest(mainDispatcher) {
+        val printerService = FakePrinterService(result = PrintResult.Success)
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                selectedId = "AA:01",
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+        assertTrue(viewModel.testPrintUiState.value is TestPrintUiState.Success)
+
+        viewModel.consumeTestPrintFeedback()
+        assertEquals(TestPrintUiState.Idle, viewModel.testPrintUiState.value)
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+        assertEquals(2, printerService.testPrintCalls)
+    }
+
+    @Test
+    fun `BT007 F PermissionDenied maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedError(
+            PrinterError.PermissionDenied,
+            "Autorizzazione Bluetooth necessaria",
+        )
+    }
+
+    @Test
+    fun `BT007 G BluetoothDisabled maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedError(
+            PrinterError.BluetoothDisabled,
+            "Bluetooth disattivato",
+        )
+    }
+
+    @Test
+    fun `BT007 H PrinterNotConfigured maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedError(
+            PrinterError.PrinterNotConfigured,
+            "Nessuna stampante selezionata",
+        )
+    }
+
+    @Test
+    fun `BT007 I ConnectionFailed maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedError(
+            PrinterError.ConnectionFailed,
+            "Impossibile connettersi alla stampante",
+        )
+    }
+
+    @Test
+    fun `BT007 J ConnectionLost maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedError(
+            PrinterError.ConnectionLost,
+            "Connessione interrotta durante la stampa di prova",
+        )
+    }
+
+    @Test
+    fun `BT007 K Timeout maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedError(
+            PrinterError.Timeout,
+            "Timeout di connessione alla stampante",
+        )
+    }
+
+    @Test
+    fun `BT007 L PrintFailed and Unknown map generic failure`() = runTest(mainDispatcher) {
+        assertMappedError(
+            PrinterError.PrintFailed,
+            "Impossibile completare la stampa di prova",
+        )
+        assertMappedError(
+            PrinterError.Unknown,
+            "Impossibile completare la stampa di prova",
+        )
+    }
+
+    @Test
+    fun `BT007 M unexpected service exception is recoverable`() = runTest(mainDispatcher) {
+        val printerService = FakePrinterService(throwOnTestPrint = true)
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                selectedId = "AA:01",
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+
+        val state = viewModel.testPrintUiState.value as TestPrintUiState.Error
+        assertEquals("Impossibile completare la stampa di prova", state.message)
+
+        viewModel.consumeTestPrintFeedback()
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+        assertEquals(2, printerService.testPrintCalls)
+    }
+
+    @Test
+    fun `BT007 N manual retry after failure starts new job`() = runTest(mainDispatcher) {
+        val printerService =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.ConnectionFailed))
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                selectedId = "AA:01",
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+        assertTrue(viewModel.testPrintUiState.value is TestPrintUiState.Error)
+
+        printerService.result = PrintResult.Success
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+
+        assertEquals(2, printerService.testPrintCalls)
+        assertTrue(viewModel.testPrintUiState.value is TestPrintUiState.Success)
+    }
+
+    @Test
+    fun `BT007 O testPrint does not touch printer settings repository`() = runTest(mainDispatcher) {
+        val repository = FakePrinterSettingsRepository(selectedId = "AA:01")
+        val printerService = FakePrinterService(result = PrintResult.Success)
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                repository = repository,
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        val beforeSelected = repository.selectedId
+        val beforePrice = repository.priceMode
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+
+        assertEquals(beforeSelected, repository.selectedId)
+        assertEquals(beforePrice, repository.priceMode)
+        assertEquals(0, repository.mutationCount)
+        assertEquals(1, printerService.testPrintCalls)
+    }
+
+    @Test
+    fun `BT007 P refresh during print does not overwrite config from print completion`() =
+        runTest(mainDispatcher) {
+            val gate = CompletableDeferred<Unit>()
+            val printerService =
+                FakePrinterService(
+                    result = PrintResult.Success,
+                    blockUntil = gate,
+                )
+            val bonded = MutableBondedProvider(listOf(BondedBluetoothDevice("AA:01", "One")))
+            val viewModel =
+                createViewModel(
+                    bondedProvider = bonded,
+                    selectedId = "AA:01",
+                    printerService = printerService,
+                )
+            advanceUntilIdle()
+
+            viewModel.runTestPrint()
+            advanceUntilIdle()
+            assertEquals(TestPrintUiState.Printing, viewModel.testPrintUiState.value)
+
+            bonded.devices =
+                listOf(
+                    BondedBluetoothDevice("AA:01", "One"),
+                    BondedBluetoothDevice("AA:02", "Two"),
+                )
+            viewModel.refresh()
+            advanceUntilIdle()
+
+            val ready = viewModel.uiState.value as PrinterSettingsUiState.Ready
+            assertEquals(2, ready.devices.size)
+            assertEquals(TestPrintUiState.Printing, viewModel.testPrintUiState.value)
+
+            gate.complete(Unit)
+            advanceUntilIdle()
+
+            val after = viewModel.uiState.value as PrinterSettingsUiState.Ready
+            assertEquals(2, after.devices.size)
+            assertTrue(viewModel.testPrintUiState.value is TestPrintUiState.Success)
+        }
+
+    @Test
+    fun `BT007 Q refresh does not auto invoke testPrint`() = runTest(mainDispatcher) {
+        val printerService = FakePrinterService(result = PrintResult.Success)
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                selectedId = "AA:01",
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+        assertEquals(0, printerService.testPrintCalls)
+
+        viewModel.refresh()
+        advanceUntilIdle()
+        viewModel.refresh()
+        advanceUntilIdle()
+
+        assertEquals(0, printerService.testPrintCalls)
+        assertEquals(TestPrintUiState.Idle, viewModel.testPrintUiState.value)
+    }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.assertMappedError(
+        error: PrinterError,
+        expectedMessage: String,
+    ) {
+        val printerService =
+            FakePrinterService(result = PrintResult.Failure(error))
+        val viewModel =
+            createViewModel(
+                devices = listOf(BondedBluetoothDevice("AA:01", "One")),
+                selectedId = "AA:01",
+                printerService = printerService,
+            )
+        advanceUntilIdle()
+
+        viewModel.runTestPrint()
+        advanceUntilIdle()
+
+        val state = viewModel.testPrintUiState.value as TestPrintUiState.Error
+        assertEquals(expectedMessage, state.message)
+        // Configuration Ready remains intact after failure.
+        assertTrue(viewModel.uiState.value is PrinterSettingsUiState.Ready)
+    }
+
     private fun createViewModel(
         permissionGranted: Boolean = true,
         requestNeeded: Boolean = false,
@@ -544,6 +879,7 @@ class PrinterSettingsViewModelTest {
             ),
         bondedFailure: BondedDevicesError? = null,
         shouldShowRationale: (String) -> Boolean = { false },
+        printerService: PrinterService = FakePrinterService(),
     ): PrinterSettingsViewModel {
         val resolvedBonded =
             bondedProvider
@@ -559,7 +895,30 @@ class PrinterSettingsViewModelTest {
             adapterStateProvider = adapterStateProvider,
             bondedDevicesProvider = resolvedBonded,
             printerSettingsRepository = repository,
+            printerService = printerService,
         ).also { it.refresh(shouldShowRationale) }
+    }
+}
+
+private class FakePrinterService(
+    var result: PrintResult = PrintResult.Success,
+    var throwOnTestPrint: Boolean = false,
+    private val blockUntil: CompletableDeferred<Unit>? = null,
+) : PrinterService {
+    var testPrintCalls: Int = 0
+        private set
+
+    override suspend fun printDraft(orderId: String): PrintResult =
+        error("printDraft must not be called by BT-007")
+
+    override suspend fun printAccepted(orderId: String): PrintResult =
+        error("printAccepted must not be called by BT-007")
+
+    override suspend fun testPrint(): PrintResult {
+        testPrintCalls += 1
+        blockUntil?.await()
+        if (throwOnTestPrint) error("unexpected testPrint failure")
+        return result
     }
 }
 
@@ -600,6 +959,8 @@ private class FakePrinterSettingsRepository(
 ) : PrinterSettingsRepository {
     private val selectedFlow = MutableStateFlow(selectedId)
     private val priceFlow = MutableStateFlow(priceMode)
+    var mutationCount: Int = 0
+        private set
 
     override suspend fun getPricePrintMode(): PricePrintMode {
         if (failGetPriceMode) error("get price failed")
@@ -610,6 +971,7 @@ private class FakePrinterSettingsRepository(
 
     override suspend fun updatePricePrintMode(mode: PricePrintMode) {
         if (failUpdatePriceMode) error("update price failed")
+        mutationCount += 1
         priceMode = mode
         priceFlow.value = mode
     }
@@ -623,12 +985,14 @@ private class FakePrinterSettingsRepository(
 
     override suspend fun setSelectedPrinterId(id: String) {
         if (failSetSelected) error("set selected failed")
+        mutationCount += 1
         selectedId = id
         selectedFlow.value = id
     }
 
     override suspend fun clearSelectedPrinterId() {
         if (failClearSelected) error("clear failed")
+        mutationCount += 1
         selectedId = null
         selectedFlow.value = null
     }

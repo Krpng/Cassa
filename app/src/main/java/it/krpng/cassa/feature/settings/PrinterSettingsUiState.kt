@@ -64,3 +64,22 @@ sealed interface PersistenceRetry {
 
     data class SelectPriceMode(val mode: PricePrintMode) : PersistenceRetry
 }
+
+/**
+ * Orthogonal test-print phase (D-063 / BT-007).
+ * Independent from [PrinterSettingsUiState] configuration so refresh cannot wipe PRINTING
+ * incorrectly, and print completion cannot overwrite newer configuration.
+ */
+sealed interface TestPrintUiState {
+    data object Idle : TestPrintUiState
+
+    data object Printing : TestPrintUiState
+
+    data class Success(
+        val message: String = "Test stampa inviato",
+    ) : TestPrintUiState
+
+    data class Error(
+        val message: String,
+    ) : TestPrintUiState
+}

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +43,7 @@ import it.krpng.cassa.domain.model.PricePrintMode
 @Composable
 fun PrinterSettingsSection(
     state: PrinterSettingsUiState,
+    testPrintState: TestPrintUiState = TestPrintUiState.Idle,
     onRetryLoad: () -> Unit,
     onRetryPermission: () -> Unit,
     onPermissionResult: ((String) -> Boolean) -> Unit,
@@ -49,6 +51,7 @@ fun PrinterSettingsSection(
     onClearPrinter: () -> Unit,
     onSelectPricePrintMode: (PricePrintMode) -> Unit,
     onRetryPersistence: () -> Unit,
+    onTestPrint: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val activity = context as? ComponentActivity
@@ -188,10 +191,12 @@ fun PrinterSettingsSection(
         is PrinterSettingsUiState.Ready -> {
             PrinterReadyContent(
                 state = state,
+                testPrintState = testPrintState,
                 onSelectPrinter = onSelectPrinter,
                 onClearPrinter = onClearPrinter,
                 onSelectPricePrintMode = onSelectPricePrintMode,
                 onRetryPersistence = onRetryPersistence,
+                onTestPrint = onTestPrint,
                 onOpenBluetoothSettings = { openBluetoothSettings(context) },
             )
         }
@@ -211,12 +216,19 @@ private fun NonRequestablePermissionCta(onOpenAppSettings: () -> Unit) {
 @Composable
 private fun PrinterReadyContent(
     state: PrinterSettingsUiState.Ready,
+    testPrintState: TestPrintUiState,
     onSelectPrinter: (String) -> Unit,
     onClearPrinter: () -> Unit,
     onSelectPricePrintMode: (PricePrintMode) -> Unit,
     onRetryPersistence: () -> Unit,
+    onTestPrint: () -> Unit,
     onOpenBluetoothSettings: () -> Unit,
 ) {
+    val isPrinting = testPrintState is TestPrintUiState.Printing
+    val testPrintEnabled =
+        state.selectedPrinterId != null &&
+            !state.selectedIsStale &&
+            !isPrinting
     if (state.selectedIsStale && state.selectedPrinterId != null) {
         Text(
             text = "Stampante selezionata non disponibile",
@@ -326,6 +338,68 @@ private fun PrinterReadyContent(
         ) {
             Text("RIPROVA")
         }
+    }
+
+    Spacer(modifier = Modifier.height(20.dp))
+    TextButton(
+        onClick = onTestPrint,
+        enabled = testPrintEnabled,
+        modifier =
+            Modifier
+                .heightIn(min = 48.dp)
+                .semantics {
+                    contentDescription =
+                        if (isPrinting) {
+                            "Stampa di prova in corso"
+                        } else {
+                            "Stampa di prova"
+                        }
+                },
+    ) {
+        if (isPrinting) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                )
+                Text("STAMPA IN CORSO…")
+            }
+        } else {
+            Text("STAMPA DI PROVA")
+        }
+    }
+
+    when (testPrintState) {
+        is TestPrintUiState.Success -> {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = testPrintState.message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier =
+                    Modifier.semantics {
+                        contentDescription = testPrintState.message
+                    },
+            )
+        }
+        is TestPrintUiState.Error -> {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = testPrintState.message,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.error,
+                modifier =
+                    Modifier.semantics {
+                        contentDescription = testPrintState.message
+                    },
+            )
+        }
+        TestPrintUiState.Idle,
+        TestPrintUiState.Printing,
+        -> Unit
     }
 }
 

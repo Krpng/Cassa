@@ -21,6 +21,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -38,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.domain.model.NumberingMode
 import it.krpng.cassa.domain.model.PricePrintMode
 import it.krpng.cassa.feature.common.CassaBackButton
+import kotlinx.coroutines.delay
 
 @Composable
 fun SettingsRoute(
@@ -52,15 +54,33 @@ fun SettingsRoute(
     }
 
     // First ON_RESUME = enter load; later resumes reload after system Bluetooth / app settings.
+    // Does not start test print (D-063).
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         printerViewModel.refresh(shouldShowRationale)
     }
 
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
     val printerState = printerViewModel.uiState.collectAsStateWithLifecycle().value
+    val testPrintState = printerViewModel.testPrintUiState.collectAsStateWithLifecycle().value
+
+    LaunchedEffect(testPrintState) {
+        when (testPrintState) {
+            is TestPrintUiState.Success,
+            is TestPrintUiState.Error,
+            -> {
+                delay(3_000)
+                printerViewModel.consumeTestPrintFeedback()
+            }
+            TestPrintUiState.Idle,
+            TestPrintUiState.Printing,
+            -> Unit
+        }
+    }
+
     SettingsScreen(
         state = state,
         printerState = printerState,
+        testPrintState = testPrintState,
         onBack = onBack,
         onNumberingModeSelected = viewModel::selectNumberingMode,
         onRetrySave = viewModel::retrySave,
@@ -72,6 +92,7 @@ fun SettingsRoute(
         onClearPrinter = printerViewModel::clearPrinter,
         onSelectPricePrintMode = printerViewModel::selectPricePrintMode,
         onPrinterRetryPersistence = printerViewModel::retryPersistence,
+        onTestPrint = printerViewModel::runTestPrint,
     )
 }
 
@@ -79,6 +100,7 @@ fun SettingsRoute(
 fun SettingsScreen(
     state: SettingsUiState,
     printerState: PrinterSettingsUiState,
+    testPrintState: TestPrintUiState = TestPrintUiState.Idle,
     onBack: () -> Unit,
     onNumberingModeSelected: (NumberingMode) -> Unit,
     onRetrySave: () -> Unit,
@@ -90,6 +112,7 @@ fun SettingsScreen(
     onClearPrinter: () -> Unit = {},
     onSelectPricePrintMode: (PricePrintMode) -> Unit = {},
     onPrinterRetryPersistence: () -> Unit = {},
+    onTestPrint: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
@@ -146,6 +169,7 @@ fun SettingsScreen(
 
         PrinterSettingsSection(
             state = printerState,
+            testPrintState = testPrintState,
             onRetryLoad = onPrinterRetryLoad,
             onRetryPermission = onPrinterRetryPermission,
             onPermissionResult = onPrinterPermissionResult,
@@ -153,6 +177,7 @@ fun SettingsScreen(
             onClearPrinter = onClearPrinter,
             onSelectPricePrintMode = onSelectPricePrintMode,
             onRetryPersistence = onPrinterRetryPersistence,
+            onTestPrint = onTestPrint,
         )
     }
 }

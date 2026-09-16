@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BT-007 READY (D-063 FROZEN); BT-006 COMPLETE; M9 7/14
+NEXT: M9 — PRINT-020 NEXT; BT-007 COMPLETE; M9 8/14
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1564,3 +1564,39 @@ gradle_executed: NO
 ```
 
 **READY FOR IMPLEMENTATION.** Do not start PRINT-020+ / HW-002 in this freeze.
+
+## 48. BT-007 COMPLETE (2026-09-16) — Test print UI
+
+```yaml
+task: BT-007
+status: COMPLETE
+decision: D-063 FROZEN
+base_HEAD: efe773f
+M8: COMPLETE
+M9: 8/14 COMPLETE
+BT-001..BT-006: COMPLETE
+HW-001: COMPLETE
+BT-007: COMPLETE
+NEXT: PRINT-020 — PrintDraft integration
+title: Test print UI (STAMPA DI PROVA)
+code_review: PASS Critical 0 / Major 0
+minors_accepted_M9: 3
+focused_JVM: PrinterSettingsViewModelTest 43 PASS
+assembleDebug: PASS
+assembleDebugAndroidTest: PASS
+manual_Samsung_SM_S931B_NETUM: PASS
+explicit_taps: 1
+physical_prints: 1
+TEST_STAMPANTE: PASS
+accents: PASS
+euro: PASS
+auto_retry: NO
+order_Room_mutation: NONE
+receipt_styling: DEFERRED POST-M9
+PrinterProfile: UNCHANGED (D-061 via PrinterProfileProvider)
+transport: UNCHANGED
+schema: DB_v2 UNCHANGED
+migration: NONE
+```
+
+**BT-007 COMPLETE.** Next: **PRINT-020** (PrintDraft integration) when authorized. Do not start PRINT-021+ / HW-002 without explicit authorization.

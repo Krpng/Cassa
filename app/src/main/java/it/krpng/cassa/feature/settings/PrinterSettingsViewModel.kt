@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import it.krpng.cassa.domain.model.PricePrintMode
+import it.krpng.cassa.domain.printer.PrintResult
+import it.krpng.cassa.domain.printer.PrinterError
+import it.krpng.cassa.domain.printer.PrinterService
 import it.krpng.cassa.domain.repository.PrinterSettingsRepository
 import it.krpng.cassa.platform.bluetooth.BluetoothAdapterAvailability
 import it.krpng.cassa.platform.bluetooth.BluetoothAdapterStateProvider
@@ -13,6 +16,7 @@ import it.krpng.cassa.platform.bluetooth.BondedBluetoothDevicesProvider
 import it.krpng.cassa.platform.bluetooth.BondedDevicesError
 import it.krpng.cassa.platform.bluetooth.BondedDevicesResult
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,10 +24,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Stampante section ViewModel (D-062 / BT-006).
+ * Stampante section ViewModel (D-062 / D-063 / BT-006 / BT-007).
  *
- * Owns bonded list + selection + PricePrintMode UI state.
- * Does not connect, test-print, or open system settings intents.
+ * Owns bonded list + selection + PricePrintMode UI state and orthogonal test-print phase.
+ * Does not open system settings intents or call [it.krpng.cassa.domain.printer.PrinterDriver].
  */
 @HiltViewModel
 class PrinterSettingsViewModel @Inject constructor(
@@ -31,13 +35,19 @@ class PrinterSettingsViewModel @Inject constructor(
     private val adapterStateProvider: BluetoothAdapterStateProvider,
     private val bondedDevicesProvider: BondedBluetoothDevicesProvider,
     private val printerSettingsRepository: PrinterSettingsRepository,
+    private val printerService: PrinterService,
 ) : ViewModel() {
     private val _uiState =
         MutableStateFlow<PrinterSettingsUiState>(PrinterSettingsUiState.Loading)
     val uiState: StateFlow<PrinterSettingsUiState> = _uiState.asStateFlow()
 
+    private val _testPrintUiState =
+        MutableStateFlow<TestPrintUiState>(TestPrintUiState.Idle)
+    val testPrintUiState: StateFlow<TestPrintUiState> = _testPrintUiState.asStateFlow()
+
     private var loadJob: Job? = null
     private var persistJob: Job? = null
+    private var testPrintJob: Job? = null
 
     /** True after this UI has received at least one runtime permission launcher result. */
     private var permissionRequestAttempted: Boolean = false
@@ -47,10 +57,7 @@ class PrinterSettingsViewModel @Inject constructor(
 
     /**
      * Reloads permission → adapter → bonded → selection → price mode.
-     * Invoked from Compose [androidx.lifecycle.Lifecycle.Event.ON_RESUME] while Settings is visible.
-     *
-     * @param shouldShowRationale Activity-backed rationale check for missing permissions
-     *   (first-request ambiguity: never-requested stays requestable even when rationale is false).
+     * Does **not** start or cancel an in-flight test print (D-063).
      */
     fun refresh(shouldShowRationale: (String) -> Boolean = this.shouldShowRationale) {
         this.shouldShowRationale = shouldShowRationale
@@ -174,6 +181,49 @@ class PrinterSettingsViewModel @Inject constructor(
     }
 
     /**
+     * Explicit STAMPA DI PROVA action (D-063).
+     * One tap → at most one [PrinterService.testPrint] while a job is active.
+     */
+    fun runTestPrint() {
+        if (testPrintJob?.isActive == true) return
+        if (_testPrintUiState.value is TestPrintUiState.Printing) return
+        val ready = _uiState.value as? PrinterSettingsUiState.Ready ?: return
+        if (ready.selectedPrinterId == null || ready.selectedIsStale) return
+
+        testPrintJob =
+            viewModelScope.launch {
+                _testPrintUiState.value = TestPrintUiState.Printing
+                try {
+                    when (val result = printerService.testPrint()) {
+                        PrintResult.Success ->
+                            _testPrintUiState.value = TestPrintUiState.Success()
+                        is PrintResult.Failure ->
+                            _testPrintUiState.value =
+                                TestPrintUiState.Error(mapTestPrintError(result.error))
+                    }
+                } catch (e: CancellationException) {
+                    _testPrintUiState.value = TestPrintUiState.Idle
+                    throw e
+                } catch (_: Exception) {
+                    _testPrintUiState.value =
+                        TestPrintUiState.Error("Impossibile completare la stampa di prova")
+                }
+            }
+    }
+
+    /** Clears transient success/error so feedback is not replayed after recomposition. */
+    fun consumeTestPrintFeedback() {
+        when (_testPrintUiState.value) {
+            is TestPrintUiState.Success,
+            is TestPrintUiState.Error,
+            -> _testPrintUiState.value = TestPrintUiState.Idle
+            TestPrintUiState.Idle,
+            TestPrintUiState.Printing,
+            -> Unit
+        }
+    }
+
+    /**
      * Applies a Ready mutation only when UI is still Ready — skips if a concurrent
      * [refresh] moved to Loading / another state so an older persistence job cannot
      * overwrite fresher authoritative state.
@@ -269,4 +319,28 @@ class PrinterSettingsViewModel @Inject constructor(
         devices: List<PrinterDeviceUi>,
     ): Boolean =
         selectedPrinterId != null && devices.none { it.id == selectedPrinterId }
+
+    private fun mapTestPrintError(error: PrinterError): String =
+        when (error) {
+            PrinterError.PermissionDenied ->
+                "Autorizzazione Bluetooth necessaria"
+            PrinterError.BluetoothDisabled ->
+                "Bluetooth disattivato"
+            PrinterError.PrinterNotConfigured ->
+                "Nessuna stampante selezionata"
+            PrinterError.ConnectionFailed ->
+                "Impossibile connettersi alla stampante"
+            PrinterError.ConnectionLost ->
+                "Connessione interrotta durante la stampa di prova"
+            PrinterError.Timeout ->
+                "Timeout di connessione alla stampante"
+            PrinterError.PrintFailed,
+            PrinterError.UnsupportedEncoding,
+            PrinterError.UnencodableCharacter,
+            PrinterError.InvalidPrinterProfile,
+            PrinterError.OrderNotFound,
+            PrinterError.InvalidOrderState,
+            PrinterError.Unknown,
+            -> "Impossibile completare la stampa di prova"
+        }
 }

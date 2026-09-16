@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..006 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-006 COMPLETE**. Next authorized task: **BT-007** — **READY FOR IMPLEMENTATION** (**D-063 FROZEN**). Do not start PRINT-020+ until BT-007 COMPLETE (unless explicitly authorized).
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **8/14**. Next authorized task: **PRINT-020** — PrintDraft integration. Do not start PRINT-021+ / HW-002 until PRINT-020 COMPLETE (unless explicitly authorized).
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -660,10 +660,10 @@ Demo M7 (COMPLETE):
 
 **Not owned:** `STAMPA DI PROVA` / `testPrint` invoke (**BT-007**); discovery/SCAN/pairing; RFCOMM/timeout; receipt styling; physical profile editor; Room/migrations.
 
-### BT-007 [P1] Test print UI — READY FOR IMPLEMENTATION (D-063)
+### BT-007 [P1] Test print UI — COMPLETE (D-063)
 > Adds **`STAMPA DI PROVA`** on Impostazioni → Stampante and invokes existing `PrinterService.testPrint()`. Depends on BT-006 provider wiring (**COMPLETE**).
 
-**Status:** **READY FOR IMPLEMENTATION**. Contract: **D-063 FROZEN**.
+**Status:** **COMPLETE**. Contract: **D-063 FROZEN**.
 **Depends on:** BT-006 COMPLETE (`8b41233`); PRINT-007 `testPrint` + Mutex; concrete `PrinterProfileProvider` (BT-006); BT-004/005 driver.
 
 **Owns (AC) — D-063 FROZEN:**
@@ -676,11 +676,19 @@ Demo M7 (COMPLETE):
 7. Minimal Hilt wiring for production `PrinterService` graph if still unbound (driver + encoder + composer + service).
 8. JVM ViewModel tests A–N; Compose enabled/disabled/progress if existing pattern fits; Samsung+NETUM manual after review.
 
+**Evidence:**
+- D-063 FROZEN; code review PASS — Critical 0 / Major 0 (3 Minors accepted for M9)
+- Focused JVM: **PrinterSettingsViewModelTest 43 PASS**
+- `assembleDebug` / `assembleDebugAndroidTest`: PASS
+- Manual Samsung SM-S931B + paired NETUM: one explicit tap → **one** physical print; `TEST STAMPANTE` / accents / € PASS; no crash; no auto-retry; no Order/Room mutation
+- Receipt styling refinements: **DEFERRED POST-M9**
+- Schema v2 unchanged; migration NONE
+
 **Blocking open questions:** NONE.
 
 **Not owned:** PRINT-020..024; HW-002; receipt typography / DOUBLE_BOTH application; discovery/pairing; transport/timeout changes; physical profile editor; Room/migrations; BT-006 permission-attempt persistence Minor.
 
-### PRINT-020 [P1] PrintDraft integration
+### PRINT-020 [P1] PrintDraft integration — NEXT
 
 ### PRINT-021 [P1] PrintAccepted integration
 
