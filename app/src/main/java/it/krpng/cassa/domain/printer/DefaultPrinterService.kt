@@ -3,6 +3,7 @@ package it.krpng.cassa.domain.printer
 import it.krpng.cassa.domain.model.OrderStatus
 import it.krpng.cassa.domain.model.PrinterProfile
 import it.krpng.cassa.domain.repository.OrderRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -109,11 +110,15 @@ class DefaultPrinterService(
                         }
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: Throwable) {
             outcome = PrintResult.Failure(PrinterError.Unknown)
         } finally {
             try {
                 printerDriver.disconnect()
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: Throwable) {
                 if (outcome is PrintResult.Success) {
                     outcome = PrintResult.Failure(PrinterError.Unknown)

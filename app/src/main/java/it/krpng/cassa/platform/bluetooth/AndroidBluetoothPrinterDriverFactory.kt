@@ -7,15 +7,17 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
 /**
- * Factory for a production [AndroidBluetoothPrinterDriver] (D-058 / BT-004).
+ * Factory for a production [AndroidBluetoothPrinterDriver] (D-058 / D-059 / BT-004 / BT-005).
  *
  * No Hilt binding yet — no UI/PrinterService consumer in this task.
  * Wired when a later consumer (BT-006+ / print integration) needs it.
+ * Connect timeout defaults to [AndroidBluetoothPrinterDriver.DEFAULT_CONNECT_TIMEOUT_MS].
  */
 object AndroidBluetoothPrinterDriverFactory {
     fun create(
         context: Context,
         ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        connectTimeoutMs: Long = AndroidBluetoothPrinterDriver.DEFAULT_CONNECT_TIMEOUT_MS,
     ): AndroidBluetoothPrinterDriver {
         val appContext = context.applicationContext
         val permissionManager = AndroidBluetoothPermissionManagerFactory.create(appContext)
@@ -31,6 +33,7 @@ object AndroidBluetoothPrinterDriverFactory {
             permissionManager = permissionManager,
             gateway = gateway,
             ioDispatcher = ioDispatcher,
+            connectTimeoutMs = connectTimeoutMs,
         )
     }
 }

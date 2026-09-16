@@ -481,6 +481,28 @@ class DefaultPrinterServiceTest {
             assertEquals(0, driver.disconnectAttempts)
         }
 
+    @Test
+    fun `CancellationException from connect is rethrown not mapped to Unknown`() =
+        kotlinx.coroutines.runBlocking {
+            val driver = CancellingConnectDriver()
+            val service =
+                service(
+                    MutableOrderRepository(draftOrder()),
+                    StaticPrinterProfileProvider(testProfile()),
+                    driver,
+                )
+
+            try {
+                service.printDraft(DRAFT_ID)
+                org.junit.Assert.fail("expected CancellationException")
+            } catch (_: kotlinx.coroutines.CancellationException) {
+                // D-059: structured concurrency preserved
+            }
+            assertEquals(1, driver.connectAttempts)
+            assertEquals(0, driver.printAttempts)
+            assertEquals(1, driver.disconnectAttempts)
+        }
+
     private fun service(
         orders: OrderRepository,
         profiles: PrinterProfileProvider,
@@ -549,6 +571,27 @@ class DefaultPrinterServiceTest {
         override suspend fun disconnect() {
             disconnectAttempts++
             throw IllegalStateException("disconnect cleanup boom")
+        }
+    }
+
+    /** Connect throws [kotlinx.coroutines.CancellationException] (D-059 structured concurrency). */
+    private class CancellingConnectDriver : PrinterDriver {
+        var connectAttempts = 0
+        var printAttempts = 0
+        var disconnectAttempts = 0
+
+        override suspend fun connect(profile: PrinterProfile): PrinterResult {
+            connectAttempts++
+            throw kotlinx.coroutines.CancellationException("connect cancelled")
+        }
+
+        override suspend fun print(data: ByteArray): PrinterResult {
+            printAttempts++
+            return PrinterResult.Success
+        }
+
+        override suspend fun disconnect() {
+            disconnectAttempts++
         }
     }
 

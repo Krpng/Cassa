@@ -7,18 +7,24 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
  * JVM unit tests for [AndroidBluetoothPrinterDriver] with a fake [BluetoothRfcommGateway]
- * (D-058 / BT-004). Exercises the real driver — not FakePrinterDriver.
+ * (D-058 / D-059 / BT-004 / BT-005). Exercises the real driver — not FakePrinterDriver.
  */
 class AndroidBluetoothPrinterDriverTest {
     @Test
@@ -184,7 +190,7 @@ class AndroidBluetoothPrinterDriverTest {
         }
 
     @Test
-    fun `write failure returns PrintFailed`() =
+    fun `write IOException returns ConnectionLost and disconnects`() =
         runBlocking {
             val gateway =
                 RecordingGateway(
@@ -194,12 +200,95 @@ class AndroidBluetoothPrinterDriverTest {
                 )
             val driver = driver(gateway = gateway)
             assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+            val sock = gateway.lastSocket!!
 
             assertEquals(
-                PrinterResult.Failure(PrinterError.PrintFailed),
+                PrinterResult.Failure(PrinterError.ConnectionLost),
                 driver.print(byteArrayOf(9)),
             )
-            assertTrue(driver.isConnected)
+            assertFalse(driver.isConnected)
+            assertTrue(sock.closed)
+        }
+
+    @Test
+    fun `flush IOException returns ConnectionLost and disconnects`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    flushThrows = IOException("flush failed"),
+                )
+            val driver = driver(gateway = gateway)
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+            val sock = gateway.lastSocket!!
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.ConnectionLost),
+                driver.print(byteArrayOf(9)),
+            )
+            assertFalse(driver.isConnected)
+            assertTrue(sock.closed)
+        }
+
+    @Test
+    fun `cleanup IOException does not mask ConnectionLost`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    writeThrows = IOException("write failed"),
+                    closeThrows = IOException("close boom"),
+                )
+            val driver = driver(gateway = gateway)
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.ConnectionLost),
+                driver.print(byteArrayOf(9)),
+            )
+            assertFalse(driver.isConnected)
+        }
+
+    @Test
+    fun `output stream acquisition failure returns ConnectionFailed and cleans up`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    outputStreamThrows = IOException("no stream"),
+                )
+            val driver = driver(gateway = gateway)
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.ConnectionFailed),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+            assertTrue(gateway.createdSockets.single().closed)
+        }
+
+    @Test
+    fun `mid-session SecurityException on write returns PermissionDenied and disconnects`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    writeThrowsSecurity = true,
+                )
+            val driver = driver(gateway = gateway)
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+            val sock = gateway.lastSocket!!
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.PermissionDenied),
+                driver.print(byteArrayOf(1)),
+            )
+            assertFalse(driver.isConnected)
+            assertTrue(sock.closed)
         }
 
     @Test
@@ -282,14 +371,441 @@ class AndroidBluetoothPrinterDriverTest {
             assertNull(gateway.pairingRequestedAddress)
         }
 
+    @Test
+    fun `production default connect timeout is 10000 ms`() {
+        val driver =
+            driver(gateway = RecordingGateway(enabled = true, bondedAddress = "AA:BB:CC:DD:EE:FF"))
+        assertEquals(10_000L, AndroidBluetoothPrinterDriver.DEFAULT_CONNECT_TIMEOUT_MS)
+        assertEquals(10_000L, driver.connectTimeoutMs)
+    }
+
+    @Test
+    fun `injected connect timeout is used`() {
+        val driver =
+            driver(
+                gateway = RecordingGateway(enabled = true, bondedAddress = "AA:BB:CC:DD:EE:FF"),
+                connectTimeoutMs = 42L,
+            )
+        assertEquals(42L, driver.connectTimeoutMs)
+    }
+
+    @Test
+    fun `connect succeeds before timeout`() =
+        runBlocking {
+            val gateway = RecordingGateway(enabled = true, bondedAddress = "AA:BB:CC:DD:EE:FF")
+            val driver =
+                driver(
+                    gateway = gateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 5_000L,
+                )
+
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+            assertTrue(driver.isConnected)
+        }
+
+    @Test
+    fun `connect IOException before timeout returns ConnectionFailed`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    connectThrows = IOException("refused"),
+                )
+            val driver =
+                driver(
+                    gateway = gateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 5_000L,
+                )
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.ConnectionFailed),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+            assertTrue(gateway.createdSockets.single().closed)
+        }
+
+    @Test
+    fun `timeout wins closes in-flight socket and returns Timeout not ConnectionFailed`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    blockConnectUntilClosed = true,
+                )
+            val driver =
+                driver(
+                    gateway = gateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 40L,
+                )
+
+            val result = driver.connect(profile("AA:BB:CC:DD:EE:FF"))
+
+            assertEquals(PrinterResult.Failure(PrinterError.Timeout), result)
+            assertFalse(driver.isConnected)
+            assertTrue(gateway.createdSockets.single().closed)
+            assertEquals(1, gateway.createdSockets.size)
+        }
+
+    @Test
+    fun `close-induced connect IOException after timeout win still Timeout`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    blockConnectUntilClosed = true,
+                )
+            val driver =
+                driver(
+                    gateway = gateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 40L,
+                )
+
+            // FakeSocket.connect throws IOException("closed by timeout") when released by close —
+            // driver must still map via timeoutWon flag, not exception message.
+            assertEquals(
+                PrinterResult.Failure(PrinterError.Timeout),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+        }
+
+    @Test
+    fun `timeout leaves DISCONNECTED and clears session without retry`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    blockConnectUntilClosed = true,
+                )
+            val driver =
+                driver(
+                    gateway = gateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 40L,
+                )
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.Timeout),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+            assertEquals(1, gateway.secureSocketUuids.size)
+
+            // No automatic retry/reconnect — second explicit connect creates a new attempt.
+            gateway.blockConnectUntilClosed = false
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+            assertEquals(2, gateway.secureSocketUuids.size)
+        }
+
+    @Test
+    fun `external CancellationException during connect is rethrown not Timeout`() =
+        runBlocking {
+            val entered = CountDownLatch(1)
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    blockConnectUntilClosed = true,
+                    onConnectEntered = { entered.countDown() },
+                )
+            val driver =
+                driver(
+                    gateway = gateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 5_000L,
+                )
+
+            val deferred =
+                async(Dispatchers.IO) {
+                    driver.connect(profile("AA:BB:CC:DD:EE:FF"))
+                }
+            assertTrue(entered.await(2, TimeUnit.SECONDS))
+            deferred.cancel(CancellationException("external cancel"))
+            try {
+                deferred.await()
+                fail("expected CancellationException")
+            } catch (_: CancellationException) {
+                // expected
+            }
+            assertFalse(driver.isConnected)
+            assertTrue(gateway.createdSockets.single().closed)
+        }
+
+    @Test
+    fun `CancellationException during print is rethrown`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    writeThrowsCancellation = true,
+                )
+            val driver = driver(gateway = gateway)
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+
+            try {
+                driver.print(byteArrayOf(1))
+                fail("expected CancellationException")
+            } catch (_: CancellationException) {
+                // expected — not mapped to Unknown / ConnectionLost
+            }
+        }
+
+    @Test
+    fun `no automatic print retry after ConnectionLost`() =
+        runBlocking {
+            val writeAttempts = AtomicInteger(0)
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    writeThrows = IOException("write failed"),
+                    onWrite = { writeAttempts.incrementAndGet() },
+                )
+            val driver = driver(gateway = gateway)
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.ConnectionLost),
+                driver.print(byteArrayOf(1)),
+            )
+            assertEquals(1, writeAttempts.get())
+        }
+
+    @Test
+    fun `zero connectTimeoutMs is rejected`() {
+        try {
+            driver(
+                gateway = RecordingGateway(enabled = true, bondedAddress = "AA:BB:CC:DD:EE:FF"),
+                connectTimeoutMs = 0L,
+            )
+            fail("expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("connectTimeoutMs"))
+        }
+    }
+
+    @Test
+    fun `negative connectTimeoutMs is rejected`() {
+        try {
+            driver(
+                gateway = RecordingGateway(enabled = true, bondedAddress = "AA:BB:CC:DD:EE:FF"),
+                connectTimeoutMs = -1L,
+            )
+            fail("expected IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("connectTimeoutMs"))
+        }
+    }
+
+    @Test
+    fun `timeout wins then connect returns success still Timeout without publishing session`() =
+        runBlocking {
+            // Deterministic order: connect blocks until close; timeout closes socket then
+            // connect returns SUCCESS (not IOException). Driver must still honor timeoutWon.
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    blockUntilClosedThenSucceed = true,
+                )
+            val driver =
+                driver(
+                    gateway = gateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 20L,
+                )
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.Timeout),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+            assertTrue(gateway.createdSockets.single().closed)
+            assertFalse(gateway.createdSockets.single().outputStreamRequested)
+        }
+
+    @Test
+    fun `post-scope timeout ownership cannot yield Success or ConnectionFailed`() =
+        runBlocking {
+            // Structural guarantee: after coroutineScope joins, timeout child is dead.
+            // Exact mid-check TOCTOU injection would need a production test hook — not added.
+            // Prove stable success path: connect completes, final ownership false, session published;
+            // and close-then-SUCCESS still maps to Timeout (ownership true before return).
+            val successGateway =
+                RecordingGateway(enabled = true, bondedAddress = "AA:BB:CC:DD:EE:FF")
+            val successDriver =
+                driver(
+                    gateway = successGateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 5_000L,
+                )
+            assertEquals(PrinterResult.Success, successDriver.connect(profile("AA:BB:CC:DD:EE:FF")))
+            assertTrue(successDriver.isConnected)
+            assertTrue(successGateway.createdSockets.single().outputStreamRequested)
+
+            val timeoutGateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    blockUntilClosedThenSucceed = true,
+                )
+            val timeoutDriver =
+                driver(
+                    gateway = timeoutGateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 20L,
+                )
+            assertEquals(
+                PrinterResult.Failure(PrinterError.Timeout),
+                timeoutDriver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(timeoutDriver.isConnected)
+            assertFalse(timeoutGateway.createdSockets.single().outputStreamRequested)
+        }
+
+    @Test
+    fun `Timeout primary preserved when cleanup close fails`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    blockConnectUntilClosed = true,
+                    closeThrows = IOException("close boom"),
+                )
+            val driver =
+                driver(
+                    gateway = gateway,
+                    ioDispatcher = Dispatchers.IO,
+                    connectTimeoutMs = 20L,
+                )
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.Timeout),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+        }
+
+    @Test
+    fun `ConnectionFailed primary preserved when cleanup close fails`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    connectThrows = IOException("refused"),
+                    closeThrows = IOException("close boom"),
+                )
+            val driver = driver(gateway = gateway)
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.ConnectionFailed),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+        }
+
+    @Test
+    fun `PermissionDenied primary preserved when cleanup close fails after write`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    writeThrowsSecurity = true,
+                    closeThrows = IOException("close boom"),
+                )
+            val driver = driver(gateway = gateway)
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.PermissionDenied),
+                driver.print(byteArrayOf(1)),
+            )
+            assertFalse(driver.isConnected)
+        }
+
+    @Test
+    fun `SecurityException during socket connect returns PermissionDenied`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    connectThrowsSecurity = true,
+                )
+            val driver = driver(gateway = gateway)
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.PermissionDenied),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+            assertTrue(gateway.createdSockets.single().closed)
+        }
+
+    @Test
+    fun `SecurityException during getOutputStream returns PermissionDenied`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    outputStreamThrowsSecurity = true,
+                )
+            val driver = driver(gateway = gateway)
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.PermissionDenied),
+                driver.connect(profile("AA:BB:CC:DD:EE:FF")),
+            )
+            assertFalse(driver.isConnected)
+            assertTrue(gateway.createdSockets.single().closed)
+        }
+
+    @Test
+    fun `SecurityException during flush returns PermissionDenied and disconnects`() =
+        runBlocking {
+            val gateway =
+                RecordingGateway(
+                    enabled = true,
+                    bondedAddress = "AA:BB:CC:DD:EE:FF",
+                    flushThrowsSecurity = true,
+                )
+            val driver = driver(gateway = gateway)
+            assertEquals(PrinterResult.Success, driver.connect(profile("AA:BB:CC:DD:EE:FF")))
+            val sock = gateway.lastSocket!!
+
+            assertEquals(
+                PrinterResult.Failure(PrinterError.PermissionDenied),
+                driver.print(byteArrayOf(1)),
+            )
+            assertFalse(driver.isConnected)
+            assertTrue(sock.closed)
+        }
+
     private fun driver(
         permissionsGranted: Boolean = true,
         gateway: BluetoothRfcommGateway,
+        ioDispatcher: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Unconfined,
+        connectTimeoutMs: Long = AndroidBluetoothPrinterDriver.DEFAULT_CONNECT_TIMEOUT_MS,
     ): AndroidBluetoothPrinterDriver =
         AndroidBluetoothPrinterDriver(
             permissionManager = FakePermissionManager(permissionsGranted),
             gateway = gateway,
-            ioDispatcher = Dispatchers.Unconfined,
+            ioDispatcher = ioDispatcher,
+            connectTimeoutMs = connectTimeoutMs,
         )
 
     private fun profile(id: String): PrinterProfile =
@@ -325,6 +841,18 @@ class AndroidBluetoothPrinterDriverTest {
         private val bondedAddress: String?,
         private val connectThrows: IOException? = null,
         private val writeThrows: IOException? = null,
+        private val flushThrows: IOException? = null,
+        private val outputStreamThrows: IOException? = null,
+        private val closeThrows: IOException? = null,
+        private val writeThrowsSecurity: Boolean = false,
+        private val flushThrowsSecurity: Boolean = false,
+        private val writeThrowsCancellation: Boolean = false,
+        private val connectThrowsSecurity: Boolean = false,
+        private val outputStreamThrowsSecurity: Boolean = false,
+        var blockConnectUntilClosed: Boolean = false,
+        var blockUntilClosedThenSucceed: Boolean = false,
+        private val onConnectEntered: (() -> Unit)? = null,
+        private val onWrite: (() -> Unit)? = null,
     ) : BluetoothRfcommGateway {
         val secureSocketUuids = mutableListOf<UUID>()
         val createdSockets = mutableListOf<FakeSocket>()
@@ -344,7 +872,23 @@ class AndroidBluetoothPrinterDriverTest {
 
                         override fun createSecureSppSocket(uuid: UUID): BluetoothRfcommSocketHandle {
                             secureSocketUuids += uuid
-                            val socket = FakeSocket(connectThrows, writeThrows)
+                            val socket =
+                                FakeSocket(
+                                    connectThrows = connectThrows,
+                                    writeThrows = writeThrows,
+                                    flushThrows = flushThrows,
+                                    outputStreamThrows = outputStreamThrows,
+                                    closeThrows = closeThrows,
+                                    writeThrowsSecurity = writeThrowsSecurity,
+                                    flushThrowsSecurity = flushThrowsSecurity,
+                                    writeThrowsCancellation = writeThrowsCancellation,
+                                    connectThrowsSecurity = connectThrowsSecurity,
+                                    outputStreamThrowsSecurity = outputStreamThrowsSecurity,
+                                    blockConnectUntilClosed = { blockConnectUntilClosed },
+                                    blockUntilClosedThenSucceed = { blockUntilClosedThenSucceed },
+                                    onConnectEntered = onConnectEntered,
+                                    onWrite = onWrite,
+                                )
                             createdSockets += socket
                             lastSocket = socket
                             return socket
@@ -357,31 +901,68 @@ class AndroidBluetoothPrinterDriverTest {
     private class FakeSocket(
         private val connectThrows: IOException?,
         private val writeThrows: IOException?,
+        private val flushThrows: IOException?,
+        private val outputStreamThrows: IOException?,
+        private val closeThrows: IOException?,
+        private val writeThrowsSecurity: Boolean,
+        private val flushThrowsSecurity: Boolean,
+        private val writeThrowsCancellation: Boolean,
+        private val connectThrowsSecurity: Boolean,
+        private val outputStreamThrowsSecurity: Boolean,
+        private val blockConnectUntilClosed: () -> Boolean,
+        private val blockUntilClosedThenSucceed: () -> Boolean,
+        private val onConnectEntered: (() -> Unit)?,
+        private val onWrite: (() -> Unit)?,
     ) : BluetoothRfcommSocketHandle {
         val written = ByteArrayOutputStream()
         var flushed: Boolean = false
         var closed: Boolean = false
+        var outputStreamRequested: Boolean = false
         private var connected: Boolean = false
+        private val release = CountDownLatch(1)
 
         override fun connect() {
+            onConnectEntered?.invoke()
+            if (blockUntilClosedThenSucceed()) {
+                // Wait until timeout (or cancel) closes us, then return SUCCESS.
+                release.await()
+                connected = true
+                return
+            }
+            if (blockConnectUntilClosed()) {
+                release.await()
+                throw IOException("closed by timeout")
+            }
+            if (connectThrowsSecurity) throw SecurityException("denied")
             if (connectThrows != null) throw connectThrows
             connected = true
         }
 
         override fun getOutputStream(): OutputStream {
+            outputStreamRequested = true
             check(connected) { "not connected" }
+            if (outputStreamThrowsSecurity) throw SecurityException("denied")
+            if (outputStreamThrows != null) throw outputStreamThrows
             return object : OutputStream() {
                 override fun write(b: Int) {
+                    onWrite?.invoke()
+                    if (writeThrowsCancellation) throw CancellationException("print cancelled")
+                    if (writeThrowsSecurity) throw SecurityException("denied")
                     if (writeThrows != null) throw writeThrows
                     written.write(b)
                 }
 
                 override fun write(b: ByteArray, off: Int, len: Int) {
+                    onWrite?.invoke()
+                    if (writeThrowsCancellation) throw CancellationException("print cancelled")
+                    if (writeThrowsSecurity) throw SecurityException("denied")
                     if (writeThrows != null) throw writeThrows
                     written.write(b, off, len)
                 }
 
                 override fun flush() {
+                    if (flushThrowsSecurity) throw SecurityException("denied")
+                    if (flushThrows != null) throw flushThrows
                     if (writeThrows != null) throw writeThrows
                     flushed = true
                 }
@@ -394,6 +975,8 @@ class AndroidBluetoothPrinterDriverTest {
 
         override fun close() {
             closed = true
+            release.countDown()
+            if (closeThrows != null) throw closeThrows
         }
     }
 }
