@@ -25,6 +25,7 @@ class SettingsScreenTest {
             MaterialTheme {
                 SettingsScreen(
                     state = SettingsUiState.Loading,
+                    printerState = PrinterSettingsUiState.Loading,
                     onBack = {},
                     onNumberingModeSelected = {},
                     onRetrySave = {},
@@ -44,6 +45,7 @@ class SettingsScreenTest {
             MaterialTheme {
                 SettingsScreen(
                     state = SettingsUiState.Loaded(NumberingMode.RANDOM),
+                    printerState = PrinterSettingsUiState.Loading,
                     onBack = {},
                     onNumberingModeSelected = {},
                     onRetrySave = {},
@@ -72,6 +74,7 @@ class SettingsScreenTest {
             MaterialTheme {
                 SettingsScreen(
                     state = state.value,
+                    printerState = PrinterSettingsUiState.Loading,
                     onBack = {},
                     onNumberingModeSelected = { selected = it },
                     onRetrySave = { retries += 1 },
@@ -109,6 +112,7 @@ class SettingsScreenTest {
             MaterialTheme {
                 SettingsScreen(
                     state = SettingsUiState.Loaded(NumberingMode.SEQUENTIAL),
+                    printerState = PrinterSettingsUiState.Loading,
                     onBack = {},
                     onNumberingModeSelected = { selected = it },
                     onRetrySave = {},

@@ -55,7 +55,7 @@ Questa matrice collega requisiti, backlog e test.
 | Bluetooth RFCOMM/SPP driver | BT-004 **COMPLETE** (D-058; `82cc98f`; Q1-A secure) | unit + PHONE+NETUM hardware PASS |
 | Timeout/disconnect/error mapping | BT-005 **COMPLETE** (D-059; `3aad082`; connect 10_000 ms; Q2-A connect-only) | unit + PHONE+NETUM (normal + local BT-off → ConnectionLost) |
 | NETUM ESC/POS calibration | HW-001 **COMPLETE** (D-060 capabilities + D-061 physical freeze; READY TO COMMIT) | PHONE+NETUM WIDTH/FORMAT/CODEPAGE/FEED + ORDER_PREVIEW evidence |
-| Printer settings/test | BT-006 **READY** (D-062); BT-007 **NOT STARTED** | ViewModel/PHONE after BT-006; PRINT-T027 + testPrint in BT-007 |
+| Printer settings/test | BT-006 **COMPLETE** (D-062); BT-007 **NOT STARTED** / **NEXT** | focused JVM 38 PASS; Samsung manual 1–8 PASS; PRINT-T027 + testPrint in BT-007 |
 | One copy/mutex | PRINT-007 | PRINT-T009/T024 |
 | Non-fiscal | PRINT spec/release | manual review |
 | Privacy/min permissions | QA-006/007/008 | release checklist |

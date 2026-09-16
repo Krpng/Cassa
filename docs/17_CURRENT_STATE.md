@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BT-006 READY (D-062 FROZEN); HW-001 COMPLETE (`3d05c91`); BT-001..005 COMPLETE
+NEXT: M9 — BT-007 NEXT; BT-006 COMPLETE; HW-001 COMPLETE (`3d05c91`); BT-001..006 COMPLETE; M9 7/14
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1503,3 +1503,37 @@ gradle_executed: NO
 ```
 
 **READY FOR IMPLEMENTATION.** Do not start **BT-007** in this freeze.
+
+## 46. BT-006 COMPLETE (2026-09-16) — Printer settings UI
+
+```yaml
+task: BT-006
+status: COMPLETE
+decision: D-062 FROZEN
+base_HEAD: 33991dc
+M8: COMPLETE
+M9: 7/14 COMPLETE
+BT-001..BT-005: COMPLETE
+HW-001: COMPLETE
+BT-006: COMPLETE
+BT-007: NEXT / NOT STARTED
+title: Printer settings UI + concrete PrinterProfileProvider
+code_review: PASS Critical 0 / Major 0
+permission_fix_review: PASS Critical 0 / Major 0
+focused_JVM: 38 PASS
+assembleDebug: PASS
+assembleDebugAndroidTest: PASS
+manual_Samsung_SM_S931B: tests 1-8 PASS
+permission_revoke_non_requestable_recovery: PASS
+bluetooth_off_on_resume: PASS
+stale_selection: PASS
+reassociation_ON_RESUME: PASS
+PrinterProfileProvider: PASS (D-061 + selected id + PricePrintMode)
+PricePrintMode_UI: PASS
+discovery: NONE
+test_print: BT-007
+schema: DB_v2 UNCHANGED
+migration: NONE
+```
+
+**BT-006 COMPLETE.** Next: **BT-007** (test print UI) when authorized. Do not start BT-007 without explicit authorization.

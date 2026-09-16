@@ -10,9 +10,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -20,45 +23,80 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.activity.ComponentActivity
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.domain.model.NumberingMode
+import it.krpng.cassa.domain.model.PricePrintMode
 import it.krpng.cassa.feature.common.CassaBackButton
 
 @Composable
 fun SettingsRoute(
     onBack: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
+    printerViewModel: PrinterSettingsViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
+    val activity = context as? ComponentActivity
+    val shouldShowRationale: (String) -> Boolean = { permission ->
+        activity?.shouldShowRequestPermissionRationale(permission) == true
+    }
+
+    // First ON_RESUME = enter load; later resumes reload after system Bluetooth / app settings.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        printerViewModel.refresh(shouldShowRationale)
+    }
+
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
+    val printerState = printerViewModel.uiState.collectAsStateWithLifecycle().value
     SettingsScreen(
         state = state,
+        printerState = printerState,
         onBack = onBack,
         onNumberingModeSelected = viewModel::selectNumberingMode,
         onRetrySave = viewModel::retrySave,
         onRetryLoad = viewModel::retryLoad,
+        onPrinterRetryLoad = { printerViewModel.refresh(shouldShowRationale) },
+        onPrinterRetryPermission = printerViewModel::retryPermission,
+        onPrinterPermissionResult = printerViewModel::onPermissionResult,
+        onSelectPrinter = printerViewModel::selectPrinter,
+        onClearPrinter = printerViewModel::clearPrinter,
+        onSelectPricePrintMode = printerViewModel::selectPricePrintMode,
+        onPrinterRetryPersistence = printerViewModel::retryPersistence,
     )
 }
 
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
+    printerState: PrinterSettingsUiState,
     onBack: () -> Unit,
     onNumberingModeSelected: (NumberingMode) -> Unit,
     onRetrySave: () -> Unit,
     onRetryLoad: () -> Unit,
+    onPrinterRetryLoad: () -> Unit = {},
+    onPrinterRetryPermission: () -> Unit = {},
+    onPrinterPermissionResult: ((String) -> Boolean) -> Unit = {},
+    onSelectPrinter: (String) -> Unit = {},
+    onClearPrinter: () -> Unit = {},
+    onSelectPricePrintMode: (PricePrintMode) -> Unit = {},
+    onPrinterRetryPersistence: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .safeDrawingPadding()
-            .padding(24.dp),
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
     ) {
         CassaBackButton(onClick = onBack)
         Text(
@@ -101,6 +139,21 @@ fun SettingsScreen(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(24.dp))
+
+        PrinterSettingsSection(
+            state = printerState,
+            onRetryLoad = onPrinterRetryLoad,
+            onRetryPermission = onPrinterRetryPermission,
+            onPermissionResult = onPrinterPermissionResult,
+            onSelectPrinter = onSelectPrinter,
+            onClearPrinter = onClearPrinter,
+            onSelectPricePrintMode = onSelectPricePrintMode,
+            onRetryPersistence = onPrinterRetryPersistence,
+        )
     }
 }
 
