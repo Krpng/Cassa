@@ -944,6 +944,140 @@ Bonded listing (BT-002); permission UI; discovery/SCAN/location; Bluetooth enabl
 **Open questions blocking BT-003:**
 NONE.
 
+### D-058 BT-004 RFCOMM/SPP printer driver contract freeze (2026-09-16)
+After BT-003 COMPLETE (`e44c3e4`): **BT-004 = READY FOR IMPLEMENTATION**.
+
+**Owns:** Android Bluetooth Classic **RFCOMM/SPP** transport implementing existing domain `PrinterDriver` for real hardware (printing spec §2 / §22; architecture §20 / §22; backlog BT-004). Connect / write already-encoded bytes / disconnect+cleanup. Bonded-only. Reuse BT-001 permission gate. No discovery, pairing, SCAN, location, UI, NETUM profile calibration, retry/reconnect orchestration, or `PrinterService` redesign.
+
+**Does not own:** receipt compose/encode; numbering; order mutations; settings/testPrint UI (BT-006/007); HW-001 calibration values; full PRINT-T021 product UX; Accept+print wiring (PRINT-020+).
+
+#### Transport (FROZEN)
+- Bluetooth **Classic** RFCOMM / **Serial Port Profile (SPP)**.
+- Pipeline remains: `… → EscPosEncoder → PrinterDriver → Bluetooth SPP → printer`.
+- No NETUM vendor SDK; no domain check for string `"NETUM"`.
+
+#### SPP UUID (FROZEN — explicit)
+- Docs/code did not previously pin a UUID.
+- **D-058 freezes** the Bluetooth SIG well-known SPP UUID:
+  `00001101-0000-1000-8000-00805F9B34FB`
+- Used exclusively with `BluetoothDevice.createRfcommSocketToServiceRecord(SPP_UUID)`.
+- Do **not** invent vendor-specific UUIDs without hardware evidence.
+
+#### Selected printer resolution (FROZEN)
+- Persistence SoT remains BT-003 `selected_printer_id` in `printer_preferences`.
+- Domain `PrinterDriver.connect(profile)` already receives `PrinterProfile` (D-048/D-053).
+- **Canonical RFCOMM address** = `PrinterProfile.id`, which **must** equal `BondedBluetoothDevice.id` / `selected_printer_id` when a concrete `PrinterProfileProvider` is wired (later M9 / not invented NETUM defaults here).
+- BT-004 driver **does not** read DataStore / `PrinterSettingsRepository` directly (keeps preferences SoT out of transport; matches D-054 service/provider split).
+- Missing active profile (`PrinterProfileProvider.getActiveProfile() == null`) → already `PrintResult.Failure(PrinterNotConfigured)` at **PrinterService** (D-054).
+- Driver `connect` with blank/missing `profile.id` → `PrinterResult.Failure(PrinterNotConfigured)`.
+- Driver resolves `BluetoothDevice` from the adapter’s **bonded** set by address equality with `profile.id`. **No** discovery / `createBond()`.
+
+#### Selected id no longer bonded (FROZEN)
+- Stale selection remains in DataStore (D-057); BT-004 does **not** auto-clear.
+- If address is nonblank but **not** present in bonded devices → `PrinterResult.Failure(PrinterError.ConnectionFailed)`.
+- **Not** `PrinterNotConfigured` (preference/profile identity may still exist; UX “connessione fallita” vs “non configurata” — UX §20).
+
+#### Permission (FROZEN)
+- Reuse **BT-001** `BluetoothPermissionManager` (API 31+ `BLUETOOTH_CONNECT`; pre-31 no CONNECT runtime prompt).
+- Driver/platform gateway is permission-gated (same pattern as BT-002 provider): if required runtime permissions missing → `PrinterResult.Failure(PermissionDenied)`.
+- Catch `SecurityException` on bonded/socket APIs → `PermissionDenied`.
+- **No** `BLUETOOTH_SCAN`; **no** location permission.
+- Do **not** duplicate API-level policy outside `BluetoothRuntimePermissionPolicy` / BT-001.
+
+#### BluetoothDisabled ownership (FROZEN → BT-004)
+- D-055/D-056 deferred adapter enabled / `BluetoothDisabled` to BT-004/005.
+- **BT-004 owns** pre-connect check: if adapter present and `isEnabled == false` → `PrinterResult.Failure(BluetoothDisabled)` (PRINT-T021 disabled path starts here).
+- BT-005 does **not** own the enabled check.
+
+#### Adapter unavailable / null (FROZEN)
+- `BluetoothAdapter == null` (or equivalent “no adapter”) on the connect path → `PrinterResult.Failure(BluetoothDisabled)`.
+- Do **not** surface BT-002 local `BondedDevicesError.BluetoothUnavailable` through `PrinterDriver`.
+- Rationale: no usable adapter ≡ operator cannot print over BT; existing `PrinterError` set; no new error type in BT-004.
+
+#### Q1 — RFCOMM socket mode (RESOLVED — Q1-A SECURE)
+- **BT-004 uses secure RFCOMM only:**
+  `BluetoothDevice.createRfcommSocketToServiceRecord(SPP_UUID)`
+  with SPP UUID `00001101-0000-1000-8000-00805F9B34FB`.
+- **Do not** call `createInsecureRfcommSocketToServiceRecord(...)` in BT-004.
+- **Automatic secure → insecure fallback = NOT ALLOWED** (no dual-try / silent retry with insecure).
+- If secure socket fails on real hardware: report **physical incompatibility**; do **not** silently retry insecure.
+- Any move to insecure requires an **explicit contract revision** based on **PHONE + NETUM** hardware evidence.
+- Secure RFCOMM choice remains **NEEDS HARDWARE VALIDATION** — gate runs **after BT-004 implementation** with PHONE + NETUM (establish secure SPP connection, send minimal already-encoded ESC/POS-safe payload, verify printer receives raw bytes). Not HW-001/HW-002 calibration or 10 consecutive prints.
+
+#### Driver state semantics (FROZEN — align Fake / D-053)
+- Binary internal state only: **DISCONNECTED** | **CONNECTED**. No new public `PrinterState` domain type.
+- Initial = DISCONNECTED.
+- `connect` while CONNECTED → `Success`, remain CONNECTED (**idempotent**).
+- `connect` Success → CONNECTED; Failure → DISCONNECTED.
+- `disconnect` CONNECTED→DISCONNECTED; already DISCONNECTED → no-op (**idempotent**); prefer no throw.
+- `print` while DISCONNECTED → `Failure(ConnectionLost)`; do not write.
+- `print` receives **already-encoded** `ByteArray` only — no compose/encode/charset/feed mutation; no append of extra newlines/cut beyond payload bytes.
+
+#### Byte write / flush (FROZEN)
+- Write payload to socket `OutputStream` as-is.
+- **`flush()` required** after write before returning Success (implementation necessity; not a formatter concern).
+- Partial write / IOException during write → preliminary `PrintFailed` or `ConnectionLost` per observable disconnect; **refined uncertain-outcome / timeout classification = BT-005**.
+
+#### Connect / disconnect cleanup (FROZEN)
+- Socket created and owned by the driver (or its minimal Android gateway).
+- After `connect` attempted: resources closed on `disconnect` / failure paths (stream + socket), deterministic best-effort close.
+- Connect failure after socket construction → close and `ConnectionFailed` (or `BluetoothDisabled` / `PermissionDenied` when those gates apply).
+- Close failures during cleanup: do not invent `DisconnectFailed`; follow D-054 service finally semantics when called via PrinterService (cleanup must not erase a more specific primary failure).
+
+#### Timeout / ConnectionLost / retry boundary (FROZEN)
+| Concern | Owner |
+|---------|-------|
+| PermissionDenied | **BT-004** (BT-001 gate) |
+| PrinterNotConfigured | **BT-004** (blank profile.id) + **PrinterService/Provider** (null profile, D-054) |
+| BluetoothDisabled (disabled + null adapter) | **BT-004** |
+| Device not bonded / socket create/connect failure (no timeout) | **BT-004** → `ConnectionFailed` |
+| Raw write IOException (no timeout wrapper) | **BT-004** preliminary → `PrintFailed` or `ConnectionLost` if socket already dead |
+| Connect/write **timeout enforcement** | **BT-005** → `Timeout` |
+| Connection-loss classification + uncertain paper UX | **BT-005** |
+| Retry / reconnect algorithm / multi-attempt | **BT-005** or later (not BT-004) |
+
+BT-004 = raw connect/write/close transport + gates above. BT-005 = hardened timing + loss/uncertain mapping + reconnect policy.
+
+#### Threading (FROZEN)
+- Security §8: Bluetooth I/O on **Dispatchers.IO** (or injected IO `CoroutineDispatcher`).
+- `PrinterDriver` remains `suspend`; blocking RFCOMM must not run on Main.
+- Prefer single IO hop in driver/gateway; avoid redundant double-dispatch if caller already provides IO context — still **safe** to `withContext(io)` inside driver.
+
+#### Concurrency (FROZEN)
+- **No** extra Mutex inside the RFCOMM driver.
+- Job serialization remains **PrinterService** per-instance Mutex (D-054).
+- Driver need not be thread-safe beyond what a single serialized session requires.
+
+#### PrinterProfileProvider / NETUM profile (FROZEN out of BT-004)
+- BT-004 needs transport identity (`profile.id` address) + SPP UUID + **secure** socket factory (Q1-A).
+- Does **not** freeze/invent `charsPerLine` / `codePage` / `feedLines` / cutter / `ESC t` — **HW-001**.
+- Concrete hardware `PrinterProfileProvider` assembly remains later M9 (may be stubbed in tests/manual harness only).
+
+#### Testability (FROZEN)
+- Minimal Android gateway/factory for `BluetoothAdapter` / `BluetoothDevice` / `BluetoothSocket` / `OutputStream` (same spirit as BT-002 gateway) — **not** a general-purpose Bluetooth framework.
+- JVM/unit coverage without hardware at least: missing/blank id → PrinterNotConfigured; permission denied; device not bonded → ConnectionFailed; adapter null/disabled → BluetoothDisabled; secure socket create/connect success; byte write + flush; disconnect cleanup; **no** discovery APIs; **no** insecure socket path.
+
+#### Manual / physical (FROZEN)
+- **Manual hardware test required: YES**
+- Class: **PHONE + NETUM**
+- Timing: **after BT-004 implementation**
+- Scope BT-004: prove **secure** RFCOMM/SPP connect + raw byte transport to real NETUM.
+- **Not** HW-001 (chars/codepage/feed calibration) and **not** HW-002 (10 consecutive prints).
+- Physical payload: use M8 synthetic test document path — `DefaultPrinterService.testPrintDocument()` + existing `EscPosEncoder` + a **test** `PrinterProfile` (temporary values allowed only for spike/harness; not product defaults). Do **not** invent a second business formatter. Driver-under-test still only writes the encoded bytes.
+
+#### Security (FROZEN)
+- Address local-only; no backend/analytics/cloud.
+- No automatic production logging of MAC/address or receipt bytes (security §6).
+
+#### Schema
+- Room **v2 unchanged**; migration **NONE**; no `print_jobs`.
+
+#### Out of scope
+Discovery; pairing/`createBond`; `BLUETOOTH_SCAN`; location; settings/testPrint UI; STAMPA enable; Accept+print; retry UX; reconnect; insecure RFCOMM; secure→insecure fallback; HW calibration; NETUM-specific code pages; concrete production `PrinterProfileProvider` defaults; PrinterService Mutex redesign; new `PrinterError` variants.
+
+#### Open questions blocking BT-004
+NONE.
+
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
 Latest reimport rule says same product name updates even if category changes.

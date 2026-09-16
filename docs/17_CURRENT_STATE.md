@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001/002 COMPLETE; BT-003 READY — D-057)
+NEXT: M9 — BLUETOOTH / NETUM (M8 COMPLETE; BT-001/002/003 COMPLETE; BT-004 READY — D-058 Q1-A secure)
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1042,7 +1042,7 @@ NEXT: M8 — PRINT CORE / FAKE PRINTER
 PRINT-001: COMPLETE (581f27d / D-048)
 PRINT-002: COMPLETE (c0ce4e7 / D-049)
 PRINT-003: COMPLETE (bb71f72 / D-050)
-first_M8_task_next: M8 COMPLETE; BT-001/002 COMPLETE; BT-003 READY (D-057)
+first_M8_task_next: M8 COMPLETE; BT-001/002/003 COMPLETE; BT-004 READY (D-058 Q1-A secure)
 ```
 
 Do **not** start M8 implementation beyond authorized PRINT-001 until explicitly authorized.
@@ -1330,40 +1330,57 @@ migration: NONE
 
 **FINAL:** BT-002 COMPLETE on `d97cb49`.
 
-## 40. BT-003 CONTRACT FREEZE (2026-09-16) — READY
+## 40. BT-003 CONTRACT FREEZE (2026-09-16) — COMPLETE
 
 ```yaml
 decision: D-057
 status: FROZEN
 HEAD_at_freeze_docs: d97cb49
+implementation_commit: e44c3e4
 M8: COMPLETE
-M9: 2/14 COMPLETE
+M9: 3/14 COMPLETE
 BT-001: COMPLETE
 BT-002: COMPLETE
-BT-003: READY FOR IMPLEMENTATION
+BT-003: COMPLETE
 title: Persist selected printer
-owns:
-  - selected_printer_id in existing printer_preferences DataStore
-  - PrinterSettingsRepository get/observe/set/clear String?
-  - null = unconfigured (not PrinterNotConfigured at persistence layer)
-  - blank/whitespace id rejected; no bonded validation on set
-  - stale selection preserved after external unpair
-  - coexistence with PricePrintMode DETAILED default
-excludes:
-  - Bluetooth stack / listing / isEnabled / RFCOMM / print
-  - deviceName persistence (optional schema field not owned by BT-003)
-  - concrete PrinterProfileProvider / NETUM physical profile
-  - settings UI / STAMPA enable / Room schema
 blocking_open_questions: NONE
 manual: NO
 samsung: NO
 netum: NO
 schema: DB_v2 UNCHANGED
 migration: NONE
-BT-004+: NOT STARTED
 ```
 
-**FINAL REFINEMENT:** Open questions blocking BT-003: **NONE**.
+**FINAL:** BT-003 COMPLETE on `e44c3e4`.
 
-Do **not** implement BT-003 until explicitly authorized.
-Do **not** start BT-004+ / NETUM hardware work in BT-003.
+## 41. BT-004 CONTRACT FREEZE (2026-09-16) — READY
+
+```yaml
+decision: D-058
+status: FROZEN
+HEAD_at_freeze_docs: e44c3e4
+M8: COMPLETE
+M9: 3/14 COMPLETE
+BT-001: COMPLETE
+BT-002: COMPLETE
+BT-003: COMPLETE
+BT-004: READY FOR IMPLEMENTATION
+title: RFCOMM/SPP printer driver
+rfcomm_mode: SECURE
+api: createRfcommSocketToServiceRecord
+spp_uuid: 00001101-0000-1000-8000-00805F9B34FB
+insecure: NOT_USED
+secure_to_insecure_fallback: NOT_ALLOWED
+hardware_validation: YES — AFTER IMPLEMENTATION — PHONE + NETUM
+hw_001_calibration: DEFERRED
+blocking_open_questions: NONE
+schema: DB_v2 UNCHANGED
+migration: NONE
+BT-005+: NOT STARTED
+```
+
+**FINAL REFINEMENT:** Q1 resolved as **Q1-A SECURE**. Open questions blocking BT-004: **NONE**.
+
+Do **not** implement BT-004 until explicitly authorized.
+Do **not** start BT-005 until BT-004 is COMPLETE.
+Do **not** use insecure RFCOMM or secure→insecure fallback without an explicit contract revision after PHONE + NETUM evidence.

@@ -48,11 +48,12 @@ Questa matrice collega requisiti, backlog e test.
 | PrinterService + Mutex | PRINT-007 **COMPLETE** (D-054; `cee8162`) | PRINT-T009/T020/T022/T024/T027 + service T023/T025 + Q6b PASS |
 | Bluetooth runtime permissions | BT-001 **COMPLETE** (D-055; `345dce6`) | unit permission matrix; PRINT-T021 partial (PermissionDenied path only) |
 | List bonded Bluetooth devices | BT-002 **COMPLETE** (D-056; `d97cb49`) | unit PASS; PHONE ONLY androidTest PASS |
-| Persist selected printer id | BT-003 **READY** (D-057) | JVM DataStore unit when implemented |
+| Persist selected printer id | BT-003 **COMPLETE** (D-057; `e44c3e4`) | JVM DataStore unit PASS |
 | Draft print | PRINT-004/007/020 | PRINT-T001/T025 |
 | Final print | PRINT-004/007/021 | PRINT-T002..014 |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |
-| Bluetooth transport | BT-004..005 | PRINT-T021 full (disabled) + HW |
+| Bluetooth RFCOMM/SPP driver | BT-004 **READY** (D-058; Q1-A secure) | unit + PHONE+NETUM after impl |
+| Timeout/disconnect/error mapping | BT-005 | PRINT-T021 full + loss/uncertain |
 | Printer settings/test | BT-006/007 | PRINT-T027 HW/UI + PRINT-007 service |
 | One copy/mutex | PRINT-007 | PRINT-T009/T024 |
 | Non-fiscal | PRINT spec/release | manual review |

@@ -450,7 +450,7 @@ Demo M7 (COMPLETE):
 
 ## M8 — Printing foundation — IN PROGRESS
 
-> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49`). Next: **BT-003** (D-057 FROZEN — READY).
+> PRINT-001..007 **COMPLETE** (`cee8162` tip). M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49`). BT-003 COMPLETE (`e44c3e4` / D-057). Next: **BT-004** (D-058 FROZEN — **READY**; secure RFCOMM Q1-A).
 
 ### PRINT-001 [P0] Printer contracts/models — COMPLETE (D-048)
 > Complete on `581f27d`. Pure contracts/models only.
@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). Next authorized task: **BT-003** Persist selected printer — **READY** (D-057). Do not start BT-004+ until BT-003 is COMPLETE and authorized.
+> M8 COMPLETE. BT-001 COMPLETE (`345dce6`). BT-002 COMPLETE (`d97cb49` / D-056). BT-003 COMPLETE (`e44c3e4` / D-057). Next authorized task: **BT-004** RFCOMM/SPP driver — **READY FOR IMPLEMENTATION** (D-058 FROZEN; Q1-A secure RFCOMM). Do not start BT-005 until BT-004 is COMPLETE.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -574,7 +574,7 @@ Demo M7 (COMPLETE):
 
 **Not owned:** persistence (BT-003); RFCOMM/BluetoothDisabled/`isEnabled` (BT-004/005); settings UI / name fallback (BT-006); STAMPA; NETUM.
 
-### BT-003 [P1] Persist selected printer — READY FOR IMPLEMENTATION (D-057)
+### BT-003 [P1] Persist selected printer — COMPLETE (`e44c3e4` / D-057)
 > Persist / read / observe / clear selected bonded printer **identity** in existing `printer_preferences` DataStore. No Bluetooth stack, RFCOMM, UI, NETUM profile, or concrete PrinterProfileProvider.
 
 **Depends on:** BT-002 COMPLETE (`d97cb49`); PRINT-003 DataStore (`printer_preferences` / D-050). Contract: **D-057**.
@@ -594,9 +594,25 @@ Demo M7 (COMPLETE):
 
 **Not owned:** bonded listing; RFCOMM/BluetoothDisabled (BT-004/005); settings UI (BT-006); NETUM/HW profile; PrinterService.
 
-### BT-004 [P1] RFCOMM/SPP driver
+### BT-004 [P1] RFCOMM/SPP driver — READY FOR IMPLEMENTATION (D-058)
+> Real Bluetooth Classic RFCOMM/SPP `PrinterDriver` transport: resolve bonded device from `PrinterProfile.id`, **secure** connect via `createRfcommSocketToServiceRecord(SPP_UUID)`, write encoded bytes, disconnect/cleanup. Bonded-only; reuse BT-001 permissions; own `BluetoothDisabled` gate.
+
+**Depends on:** BT-003 COMPLETE (`e44c3e4`). Contract: **D-058 FROZEN**.
+
+**Owns (AC):** see **D-058**. Summary:
+1. SPP UUID: `00001101-0000-1000-8000-00805F9B34FB`.
+2. **Q1-A SECURE only** — `createRfcommSocketToServiceRecord`; **no** insecure API; **no** secure→insecure automatic fallback.
+3. Address from `PrinterProfile.id` (driver does not read DataStore); not bonded → `ConnectionFailed`; blank id → `PrinterNotConfigured`.
+4. PermissionDenied via BT-001; BluetoothDisabled for disabled + null adapter.
+5. Fake-aligned connect/print/disconnect semantics; flush after write; IO dispatcher; no driver Mutex.
+6. Manual **after implementation**: **PHONE + NETUM** minimal secure RFCOMM proof (not HW-001/HW-002). Secure choice = NEEDS HARDWARE VALIDATION; insecure requires explicit contract revision if incompatible.
+
+**Blocking open questions:** NONE.
+
+**Not owned:** timeout enforcement / uncertain ConnectionLost UX / retry/reconnect (BT-005); settings/testPrint UI; concrete NETUM `PrinterProfileProvider` defaults; discovery/SCAN/location; Room.
 
 ### BT-005 [P1] Timeout/disconnect/error mapping
+> Hardened timeout, connection-loss/uncertain outcome mapping, reconnect/retry policy on top of BT-004 transport. Do not start until BT-004 COMPLETE.
 
 ### BT-006 [P1] Printer settings UI
 

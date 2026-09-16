@@ -351,6 +351,10 @@ Driver:
 - timeout;
 - close socket in finally.
 
+SPP UUID (D-058): `00001101-0000-1000-8000-00805F9B34FB`.
+RFCOMM socket (D-058 Q1-A): **secure only** — `createRfcommSocketToServiceRecord(SPP_UUID)`.
+Insecure RFCOMM / secure→insecure fallback: **NOT ALLOWED** in BT-004 (contract revision required if hardware proves insecure necessary).
+
 Non bloccare main thread.
 
 ## 23. ESC/POS encoder

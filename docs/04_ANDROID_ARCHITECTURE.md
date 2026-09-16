@@ -325,7 +325,7 @@ Motivo:
 - AcceptOrder deve leggere un valore coerente nel perimetro DB.
 
 ### DataStore — device preferences
-- selectedPrinter identifier (**BT-003 / D-057 READY** — `selected_printer_id` in `printer_preferences`; address = `BondedBluetoothDevice.id`);
+- selectedPrinter identifier (**BT-003 / D-057 COMPLETE** — `selected_printer_id` in `printer_preferences`; address = `BondedBluetoothDevice.id`);
 - paper width/profile;
 - charsPerLine calibrato;
 - codePage;
@@ -424,7 +424,7 @@ La UI disabilita i pulsanti mentre stampa, ma la protezione reale è anche nel s
 
 ## 22. Bluetooth MVP
 
-Preferenza (**D-055..D-057 — BT-001/002 COMPLETE; BT-003 READY**):
+Preferenza (**D-055..D-058 — BT-001/002/003 COMPLETE; BT-004 READY**):
 - pairing nel sistema Android;
 - app seleziona un device già bonded;
 - discovery **OUT OF SCOPE** for MVP unless a later task explicitly adds it.
@@ -441,7 +441,7 @@ Android 12+ (API 31+):
 Pre-Android 12:
 - no runtime `BLUETOOTH_CONNECT` prompt; legacy install-time `BLUETOOTH` (maxSdk 30) as needed for bonded strategy.
 
-`BluetoothPermissionManager` = **BT-001 COMPLETE**. Bonded list = **BT-002 COMPLETE (D-056)**. Selected printer identity in `printer_preferences` (`selected_printer_id`) = **BT-003 READY (D-057)** — extends PRINT-003 DataStore; no Bluetooth validation on write; stale selection preserved. Adapter enabled / `PrinterError.BluetoothDisabled` = **BT-004/005**. RFCOMM = **BT-004**. Concrete `PrinterProfileProvider` remains later M9 (not BT-003).
+`BluetoothPermissionManager` = **BT-001 COMPLETE**. Bonded list = **BT-002 COMPLETE (D-056)**. Selected printer identity in `printer_preferences` (`selected_printer_id`) = **BT-003 COMPLETE (D-057)**. Adapter enabled / null adapter / `PrinterError.BluetoothDisabled` = **BT-004** (D-058). RFCOMM/SPP driver = **BT-004 READY (D-058)** — SPP UUID frozen; **Q1-A secure** `createRfcommSocketToServiceRecord` only; no insecure; no secure→insecure fallback. Timeout/reconnect/uncertain loss = **BT-005**. Concrete `PrinterProfileProvider` remains later M9 (not BT-003/004 transport).
 
 ## 23. Error model
 
