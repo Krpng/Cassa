@@ -2241,6 +2241,127 @@ Production; tests; Gradle; hardware; commit/push; total implementation; 2× wrap
 **D-066 FROZEN.** Next: implement DRAFT total derivation in `DefaultReceiptComposer` (+ regression), then 2× style-aware wrapping, then resume PRINT-020 hardware closure.
 
 
+### D-067 Scale-aware receipt layout width (2026-09-17) — FROZEN
+
+**Task:** M9 receipt layout under D-065 `DOUBLE_BOTH` (docs-only freeze).
+**Status:** **FROZEN** — **READY FOR IMPLEMENTATION**.
+**Depends on:** D-060 (`PrintTextScale` / `GS !`); D-061 (`charsPerLine=42` NORMAL calibration); D-065 (all business lines `DOUBLE_BOTH`); D-051 / `ReceiptTextLayout` + `DefaultReceiptComposer`; D-066 (totals unchanged).
+**Base HEAD (docs freeze point):** `2ac8233` (D-065 + D-066 production on main). PRINT-020 remains **UNCOMMITTED**.
+
+#### Purpose (FROZEN)
+
+Hardware at `DOUBLE_BOTH` is physically 2×, but composition still lays out with `charsPerLine=42` **before** applying `textScale`, so separators/section titles (e.g. FRITTURA) wrap badly on paper (~half physical capacity).
+
+Fix layout correctness under existing 2× base scale. **Do not** change D-065 scale choice, D-066 totals, receipt content hierarchy, or `PrinterProfile.charsPerLine`.
+
+#### Audit facts (FROZEN)
+
+Current pipeline:
+
+```text
+profile.charsPerLine (42)
+  → ReceiptTextLayout.effectiveWidth(charsPerLine)   // = max(charsPerLine, 1) — NOT scale-aware
+  → banners / sectionTitleLine / center / wrap / linesWithOptionalPrice / totalSeparator
+  → PrintableLine(...)  // alignment default LEFT; BOZZA centered via textual spaces
+  → lines.map { copy(textScale = DOUBLE_BOTH) }     // D-065 AFTER layout  ← defect root
+```
+
+- Encoder (`DefaultEscPosEncoder`) only emits `GS !` / `ESC a` from already-composed lines — **not** owner of wrap.
+- Business receipts never set `PrintAlignment.CENTER/RIGHT`; centering/right-price use **textual** padding in `ReceiptTextLayout`.
+- Existing wrap/price algorithm in `ReceiptTextLayout` is already correct **once supplied the right width** (word-wrap; hard-split oversized tokens; price complete once; continuation lines do not repeat price).
+
+#### Horizontal scale multiplier (FROZEN)
+
+Consistent with D-060 `GS !`:
+
+| PrintTextScale | GS ! | horizontal multiplier |
+|----------------|------|------------------------|
+| `NORMAL` | `0x00` | 1 |
+| `DOUBLE_HEIGHT` | `0x10` | 1 |
+| `DOUBLE_WIDTH` | `0x01` | 2 |
+| `DOUBLE_BOTH` | `0x11` | 2 |
+
+```text
+layoutWidth(baseCharsPerLine, textScale) =
+  max(1, floor(baseCharsPerLine / horizontalScaleMultiplier(textScale)))
+```
+
+With calibrated profile `charsPerLine=42`:
+
+| Scale | layoutWidth |
+|-------|-------------|
+| NORMAL | 42 |
+| DOUBLE_HEIGHT | 42 |
+| DOUBLE_WIDTH | 21 |
+| DOUBLE_BOTH | 21 |
+
+#### Ownership (FROZEN)
+
+- **Owner:** `ReceiptTextLayout` (+ `DefaultReceiptComposer` choosing layout width from the scale it will emit).
+- **Not owner:** `PrinterProfile` mutation; encoder; ViewModel; `PrinterService`; AcceptancePreview.
+
+Business composer must compute layout width for **`DOUBLE_BOTH`** (D-065) **before** wrapping/centering/separators/price placement, then still assign `textScale=DOUBLE_BOTH` on every business line.
+
+Generic API preferred (not hardcoded `21`):
+
+```text
+horizontalScaleMultiplier(textScale)
+layoutWidth(baseCharsPerLine, textScale)  // never 0 for positive base
+```
+
+#### Separators / headers / rows (FROZEN)
+
+Under business `DOUBLE_BOTH` + profile 42 → width **21**:
+
+- Banner/`=` and total `-` separators: length = layout width (no 42-char wrap on paper).
+- Section titles (`PIZZE` / `FRITTURA` / `BIBITE`): `sectionTitleLine(title, 21)` — short titles stay one physical line; wording/emphasis unchanged.
+- `BOZZA` / displayNumber: existing textual `center(..., 21)`; `PrintAlignment` remains LEFT (no double-centering with `ESC a`).
+- Product/price: reuse `linesWithOptionalPrice` / wrap at width 21 — no money truncation; price once; wrap product text; preserve qty/`+`/`-`/`NOTA:` prefixes.
+- Notes / additions / removals / general note: same wrap helpers at layout width.
+
+#### Unchanged (FROZEN)
+
+- **D-065:** all business lines `DOUBLE_BOTH`.
+- **D-066:** DRAFT total = `fromPersistedItems`; FINAL = `order.total`.
+- **PrinterProfile:** `charsPerLine=42` (and all other D-061 physical fields).
+- Transport / Bluetooth / Room / schema / migrations / PRINT-020 UI.
+- No typography hierarchy redesign.
+
+#### Required automated tests (FROZEN)
+
+- A–E multiplier/layoutWidth: 42×{NORMAL,HEIGHT,WIDTH,BOTH} → {42,42,21,21}; width never 0
+- F separator ≤ 21 under DOUBLE_BOTH
+- G `FRITTURA` one composed line at width 21
+- H `BOZZA` centered without >21 overflow
+- I–K long product wrap ≤21; full text; price complete once
+- L additions/removals/notes ≤21
+- M `TOTALE` ≤21
+- N D-066 `22,50` still PASS
+- O FINAL frozen-total still PASS
+- P all business lines still `DOUBLE_BOTH`
+- Q BT-007 / technical NORMAL documents unaffected
+
+#### Physical acceptance (FROZEN) — next DRAFT paper after impl
+
+PASS: visible 2×; BOZZA readable; section headings not split by wrong 42 layout; separators no unintended second physical line; product/price readable; no money loss; TOTALE correct (not 0,00); longer vertical receipt OK.
+
+#### Still deferred POST-M9
+
+Per-section sizes; title/total hierarchy polish; spacing/feed fine tuning; aesthetic refinements after real-use.
+
+#### Out of scope of this freeze task
+
+Production; tests; Gradle; hardware; commit/push; PRINT-020; PRINT-021+.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### Readiness
+
+**D-067 FROZEN — READY FOR IMPLEMENTATION.** PRINT-020 hardware closure blocked only until D-067 impl + paper retest.
+
+
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
 Latest reimport rule says same product name updates even if category changes.

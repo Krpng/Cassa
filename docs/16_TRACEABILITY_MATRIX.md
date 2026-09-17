@@ -49,9 +49,10 @@ Questa matrice collega requisiti, backlog e test.
 | Bluetooth runtime permissions | BT-001 **COMPLETE** (D-055; `345dce6`) | unit permission matrix; PRINT-T021 partial (PermissionDenied path only) |
 | List bonded Bluetooth devices | BT-002 **COMPLETE** (D-056; `d97cb49`) | unit PASS; PHONE ONLY androidTest PASS |
 | Persist selected printer id | BT-003 **COMPLETE** (D-057; `e44c3e4`) | JVM DataStore unit PASS |
-| Draft print | PRINT-020 **IMPLEMENTED / UNCOMMITTED** (D-064); HW **BLOCKED** on D-066 (+ wrap next) | ViewModel A–W PASS; paper after D-066 + wrap |
-| M9 business receipt base text scale | **D-065 FROZEN** + **IMPLEMENTED / UNCOMMITTED** (`DOUBLE_BOTH`) | composer unit PASS; paper after total+wrap |
-| Draft printable total source | **D-066 FROZEN** (DRAFT=`fromPersistedItems`; FINAL=`order.total`) | composer regression 14+6+2.50→22,50 |
+| Draft print | PRINT-020 **IMPLEMENTED / UNCOMMITTED** (D-064); HW **BLOCKED** on D-067 + paper retest | ViewModel A–W PASS; paper after D-067 |
+| M9 business receipt base text scale | **D-065 IMPLEMENTED + COMMITTED** (`2ac8233`; `DOUBLE_BOTH`) | composer unit PASS |
+| Draft printable total source | **D-066 IMPLEMENTED + COMMITTED** (`2ac8233`) | composer regression 14+6+2.50→22,50 PASS |
+| Scale-aware receipt layout width | **D-067 FROZEN** (42÷2=21 under DOUBLE_BOTH; profile stays 42) | layoutWidth A–Q + paper |
 | Final print | PRINT-004/007/021 | PRINT-T002..014 |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |
 | Bluetooth RFCOMM/SPP driver | BT-004 **COMPLETE** (D-058; `82cc98f`; Q1-A secure) | unit + PHONE+NETUM hardware PASS |

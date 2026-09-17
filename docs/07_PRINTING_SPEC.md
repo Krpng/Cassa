@@ -56,9 +56,22 @@ Default test:
 - `supportsCut = false`
 - `cutCommandVariant = null`
 
-Preferenza tipografica M9 (non nel profilo): base business **DOUBLE_BOTH** — **D-065 FROZEN** (production `DefaultReceiptComposer` must emit `textScale=DOUBLE_BOTH` for business receipt lines). Raffinamento gerarchia / wrapping effettivo 2× / spacing / feed: **DEFERRED POST-M9**.
+Preferenza tipografica M9 (non nel profilo): base business **DOUBLE_BOTH** — **D-065 FROZEN** + IMPLEMENTED. Layout width must be scale-aware (**D-067 FROZEN**). Raffinamento gerarchia tipografica / spacing / feed: **DEFERRED POST-M9**.
 
-`charsPerLine = 42` resta la larghezza di layout calibrata a font **NORMAL**. Il wrap attuale non è style-aware: con DOUBLE_BOTH la capacità orizzontale fisica è circa metà → limitazione nota M9 (D-065), non risolta cambiando `charsPerLine`.
+`charsPerLine = 42` resta la larghezza calibrata a font **NORMAL** sul `PrinterProfile`. **Non** impostare 21 sul profilo.
+
+Larghezza di layout effettiva (**D-067**):
+
+```text
+horizontalScaleMultiplier(NORMAL)         = 1
+horizontalScaleMultiplier(DOUBLE_HEIGHT)  = 1
+horizontalScaleMultiplier(DOUBLE_WIDTH)   = 2
+horizontalScaleMultiplier(DOUBLE_BOTH)    = 2
+
+layoutWidth = max(1, floor(charsPerLine / multiplier))
+```
+
+Con profilo 42 + business `DOUBLE_BOTH` → layout width **21** (separatori, wrap, center, price placement) **prima** di assegnare `textScale`. Owner: `ReceiptTextLayout` / composer layout — **non** encoder, **non** PrinterProfile.
 
 PrinterProfile **non** possiede stili business (font titolo/item/totale, allineamenti receipt, textScale): quelli vivono in `PrintableDocument` / layout.
 

@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **8/14**. **PRINT-020** IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS (**D-064**). **D-065** FROZEN + IMPLEMENTED / UNCOMMITTED (`DOUBLE_BOTH`). **D-066 FROZEN** (DRAFT printable total = `fromPersistedItems`). HW draft-print **BLOCKED** until D-066 impl, then 2× wrap (now in M9 scope), then paper close. Do not start PRINT-021+ / HW-002 until authorized.
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **8/14**. **PRINT-020** IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS (**D-064**). **D-065** + **D-066** IMPLEMENTED + COMMITTED (`2ac8233`). **D-067 FROZEN** (scale-aware layout width under DOUBLE_BOTH). HW draft-print **BLOCKED** until D-067 impl + paper retest. Do not start PRINT-021+ / HW-002 until authorized.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -688,11 +688,11 @@ Demo M7 (COMPLETE):
 
 **Not owned:** PRINT-020..024; HW-002; receipt typography / DOUBLE_BOTH application; discovery/pairing; transport/timeout changes; physical profile editor; Room/migrations; BT-006 permission-attempt persistence Minor.
 
-### PRINT-020 [P1] PrintDraft integration — IMPLEMENTED / UNCOMMITTED (D-064); HW BLOCKED (D-066 + wrap)
+### PRINT-020 [P1] PrintDraft integration — IMPLEMENTED / UNCOMMITTED (D-064); HW BLOCKED (D-067)
 > Cashier **Acceptance Preview → `STAMPA BOZZA`** invokes existing `PrinterService.printDraft(orderId)`. Read-only vs order/business persistence.
 
-**Status:** **IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS**. Contract: **D-064 FROZEN**. Hardware draft-print: **BLOCKED until D-066 implemented**, then **2× style-aware wrapping** (hardware-confirmed; now in M9 scope before PRINT-020 close), then paper validation.
-**Depends on:** BT-007 COMPLETE (`b026dbb`); PRINT-007 `printDraft` + Mutex (D-054); BT-006 `PrinterProfileProvider`. Base scale: **D-065**. DRAFT TOTALE source: **D-066**.
+**Status:** **IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS**. Contract: **D-064 FROZEN**. Hardware draft-print: **BLOCKED until D-067 implemented** + paper retest.
+**Depends on:** BT-007 COMPLETE (`b026dbb`); PRINT-007 `printDraft` + Mutex (D-054); BT-006 `PrinterProfileProvider`. Base scale: **D-065**. DRAFT TOTALE: **D-066**. Layout width: **D-067**.
 
 **Owns (AC) — D-064 FROZEN:**
 1. Button **`STAMPA BOZZA`** on existing Acceptance Preview action area (with ANNULLA/ACCETTA); no new NavHost destination.
@@ -701,33 +701,31 @@ Demo M7 (COMPLETE):
 4. Header **`BOZZA`** / no `displayNumber`; draft remains DRAFT; no numbering mutation.
 5. Success: transient **Bozza inviata alla stampante**; map `PrinterError` per D-064; no auto-retry; no PRINT-024 accepted uncertainty copy.
 6. Orthogonal print phase on `AcceptancePreviewViewModel`.
-7. JVM ViewModel tests A–W (D-064); Samsung+NETUM manual **after D-066 + wrap**.
+7. JVM ViewModel tests A–W (D-064); Samsung+NETUM manual **after D-067**.
 
-**Blocking open questions:** NONE for integration. Hardware closure blocked on **D-066 impl** then **2× wrap**.
+**Blocking open questions:** NONE for integration. Hardware closure blocked on **D-067**.
 
 **Not owned:** PRINT-021..024; HW-002; `ACCETTA E STAMPA`; NewOrder editor print; discovery/pairing; transport; schema/migrations.
 
-### D-065 [P0] M9 business receipt base text scale — FROZEN; IMPLEMENTED / UNCOMMITTED
+### D-065 [P0] M9 business receipt base text scale — COMPLETE (`2ac8233`)
 > Production business receipts (`DefaultReceiptComposer`) use `PrintableLine.textScale = DOUBLE_BOTH`. Not a `PrinterProfile` field. `charsPerLine=42` unchanged.
 
-**Status:** **CONTRACT FROZEN** + **production IMPLEMENTED / UNCOMMITTED** / code review PASS.
-**Depends on:** D-061 preference; D-060 scale capability; PRINT-004 composer.
+**Status:** **COMPLETE** on `2ac8233`.
 
-**Owns (delivered in working tree):** assign `DOUBLE_BOTH` to existing composer lines; preserve content/emphasis/alignment/pricing.
+### D-066 [P0] Draft printable total source — COMPLETE (`2ac8233`)
+> DRAFT `TOTALE` = `CalculateOrderTotal.fromPersistedItems(order.items).orderTotal`. FINAL keeps `order.total`. No Room write.
 
-**Not owned:** PrinterProfile changes; charsPerLine→21; style-aware wrap (see D-066 follow-on / wrap task); PRINT-021+; HW-002; transport.
+**Status:** **COMPLETE** on `2ac8233`.
 
-### D-066 [P0] Draft printable total source — FROZEN (docs); IMPLEMENTATION NEXT
-> DRAFT `TOTALE` = `CalculateOrderTotal.fromPersistedItems(order.items).orderTotal`. FINAL keeps `order.total`. No Room write. Acceptance Preview parity.
+### D-067 [P0] Scale-aware receipt layout width — FROZEN; IMPLEMENTATION NEXT
+> Layout width = `max(1, floor(charsPerLine / horizontalScaleMultiplier(textScale)))`. Business DOUBLE_BOTH + profile 42 → **21**. Reuse existing `ReceiptTextLayout` wrap/price helpers. Do not change profile `charsPerLine`.
 
 **Status:** **CONTRACT FROZEN**. Implementation **NOT STARTED** (this freeze was docs-only).
-**Depends on:** ORD-022; D-051 amended by this decision; PRINT-020 path.
+**Depends on:** D-065; D-060; `ReceiptTextLayout` / `DefaultReceiptComposer`.
 
-**Owns (when implemented):** `DefaultReceiptComposer` DRAFT total derivation + regression (ZERO aggregate + non-zero items → correct TOTALE e.g. 22,50).
+**Owns (when implemented):** scale-aware layoutWidth helpers; composer uses DOUBLE_BOTH width before wrap; separators/headers/rows fit; tests A–Q; then PRINT-020 paper retest.
 
-**Not owned:** syncing `orders.totalCents` on print; FINAL recalculation; 2× wrapping (next after this impl); PRINT-021+.
-
-**Then:** 2× style-aware wrapping (hardware-confirmed; **IN M9 SCOPE** before PRINT-020 closure).
+**Not owned:** PrinterProfile edits; encoder wrap; typography hierarchy; PRINT-021+; feed/spacing polish.
 
 ### PRINT-021 [P1] PrintAccepted integration
 

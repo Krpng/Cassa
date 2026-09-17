@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — D-066 IMPL (DRAFT printable total) then 2x wrap then PRINT-020 HW close; M9 8/14; PRINT-020+D-065 UNCOMMITTED
+NEXT: M9 — D-067 IMPL (scale-aware layout width) then PRINT-020 HW retest/close; M9 8/14; PRINT-020 UNCOMMITTED
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1681,3 +1681,39 @@ hardware: NOT RUN
 ```
 
 **D-066 FROZEN.** Next: implement DRAFT total in `DefaultReceiptComposer` + regression test; then 2× style-aware wrapping; then PRINT-020 hardware closure. Do not start PRINT-021+ / HW-002 without authorization.
+
+## 52. D-067 SCALE-AWARE RECEIPT LAYOUT WIDTH (2026-09-17) — FROZEN
+
+```yaml
+decision: D-067
+status: FROZEN
+base_HEAD: 2ac8233
+M9: 8/14 COMPLETE
+D-065: IMPLEMENTED + COMMITTED (DOUBLE_BOTH)
+D-066: IMPLEMENTED + COMMITTED (DRAFT fromPersistedItems / FINAL order.total)
+PrinterProfile_charsPerLine: 42 UNCHANGED
+layout_owner: ReceiptTextLayout (+ DefaultReceiptComposer)
+encoder_owner: NO
+horizontal_multiplier:
+  NORMAL: 1
+  DOUBLE_HEIGHT: 1
+  DOUBLE_WIDTH: 2
+  DOUBLE_BOTH: 2
+effective_width_at_42:
+  NORMAL: 42
+  DOUBLE_HEIGHT: 42
+  DOUBLE_WIDTH: 21
+  DOUBLE_BOTH: 21
+business_receipt_layout_width: 21
+algorithm: reuse existing wrap/price helpers with corrected width
+alignment: textual center/right-price; PrintAlignment LEFT unchanged
+D-065: UNCHANGED
+D-066: UNCHANGED
+PRINT-020: BLOCKED UNTIL D-067 IMPLEMENTATION + HARDWARE RETEST
+production_changed_this_freeze: NO
+tests_changed_this_freeze: NO
+gradle: NOT RUN
+hardware: NOT RUN
+```
+
+**D-067 FROZEN — READY FOR IMPLEMENTATION.** Do not start PRINT-021+ / HW-002 without authorization.
