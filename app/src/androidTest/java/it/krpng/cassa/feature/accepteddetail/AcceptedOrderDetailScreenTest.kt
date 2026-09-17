@@ -72,6 +72,22 @@ class AcceptedOrderDetailScreenTest {
     }
 
     @Test
+    fun print024ConnectionLostWarningVisible() {
+        setContent(
+            contentState(),
+            acceptedPrintState = AcceptedPrintUiState.Error(
+                "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+            ),
+        )
+        composeRule.onNodeWithText(
+            "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
+        composeRule.onNodeWithText("RIPROVA STAMPA").assertDoesNotExist()
+    }
+
+    @Test
     fun archT023RistampaAbsent() {
         setContent(contentState())
         composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()

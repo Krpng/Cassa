@@ -467,7 +467,7 @@ class AcceptancePreviewViewModelTest {
     fun `PRINT020 J ConnectionLost maps expected feedback`() = runTest(mainDispatcher) {
         assertMappedDraftPrintError(
             PrinterError.ConnectionLost,
-            "Connessione interrotta durante la stampa",
+            "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
         )
     }
 
@@ -991,6 +991,10 @@ class AcceptancePreviewViewModelTest {
                 PrinterError.PrintFailed,
                 "Ordine accettato. Impossibile stampare l'ordine",
             )
+            assertMappedAutoPrintAfterAcceptError(
+                PrinterError.ConnectionLost,
+                "Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+            )
         }
 
     @Test
@@ -1352,6 +1356,130 @@ class AcceptancePreviewViewModelTest {
             assertEquals(listOf(DRAFT_ID, DRAFT_ID), printer.printAcceptedIds)
             assertEquals(0, repository.acceptCalls)
         }
+
+    // --- PRINT-024 / D-071 uncertain ConnectionLost microcopy ---
+
+    @Test
+    fun `PRINT024 DRAFT ConnectionLost maps uncertain copy without retry`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(result = PrintResult.Failure(PrinterError.ConnectionLost))
+            val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.runDraftPrint()
+            advanceUntilIdle()
+
+            assertEquals(1, printer.printDraftCalls)
+            assertEquals(0, printer.printAcceptedCalls)
+            assertEquals(
+                "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+                (viewModel.draftPrintUiState.value as DraftPrintUiState.Error).message,
+            )
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Ready)
+
+            advanceUntilIdle()
+            testScheduler.advanceTimeBy(60_000)
+            advanceUntilIdle()
+            assertEquals(1, printer.printDraftCalls)
+            assertEquals(0, printer.printAcceptedCalls)
+        }
+
+    @Test
+    fun `PRINT024 manual Accepted ConnectionLost maps uncertain copy without AcceptOrder`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(result = PrintResult.Failure(PrinterError.ConnectionLost))
+            val repository =
+                FakeOrderRepository(acceptedOrder(displayNumber = "042", totalCents = 1_400))
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+            val before = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(0, printer.printDraftCalls)
+            assertEquals(0, repository.acceptCalls)
+            assertEquals(
+                "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+                (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+            )
+            val after = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+            assertEquals(before.orderId, after.orderId)
+            assertEquals(before.displayNumber, after.displayNumber)
+            assertEquals(before.total, after.total)
+
+            viewModel.consumeAcceptedPrintFeedback()
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+        }
+
+    @Test
+    fun `PRINT024 PRINT022 auto ConnectionLost uses accepted prefix and no retry`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(result = PrintResult.Failure(PrinterError.ConnectionLost))
+            val repository = acceptingRepository()
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+
+            assertEquals(1, repository.acceptCalls)
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(
+                "Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+                (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+            )
+            val accepted = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+            assertEquals(DRAFT_ID, accepted.orderId)
+            assertEquals("001", accepted.displayNumber)
+
+            advanceUntilIdle()
+            testScheduler.advanceTimeBy(60_000)
+            viewModel.retry()
+            advanceUntilIdle()
+            repository.emitOrder(repository.orderSnapshot())
+            advanceUntilIdle()
+            viewModel.consumeAcceptedPrintFeedback()
+            advanceUntilIdle()
+
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(1, repository.acceptCalls)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+        }
+
+    @Test
+    fun `PRINT024 definite errors retain existing wording`() = runTest(mainDispatcher) {
+        assertMappedDraftPrintError(
+            PrinterError.BluetoothDisabled,
+            "Bluetooth disattivato",
+        )
+        assertMappedDraftPrintError(
+            PrinterError.PrinterNotConfigured,
+            "Nessuna stampante selezionata",
+        )
+        assertMappedDraftPrintError(
+            PrinterError.PermissionDenied,
+            "Autorizzazione Bluetooth necessaria",
+        )
+        assertMappedDraftPrintError(
+            PrinterError.ConnectionFailed,
+            "Impossibile connettersi alla stampante",
+        )
+        assertMappedAutoPrintAfterAcceptError(
+            PrinterError.BluetoothDisabled,
+            "Ordine accettato. Bluetooth disattivato",
+        )
+        assertMappedAutoPrintAfterAcceptError(
+            PrinterError.PrinterNotConfigured,
+            "Ordine accettato. Nessuna stampante selezionata",
+        )
+    }
 
     private suspend fun kotlinx.coroutines.test.TestScope.assertMappedAutoPrintAfterAcceptError(
         error: PrinterError,

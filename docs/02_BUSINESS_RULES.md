@@ -761,13 +761,13 @@ Ordine rimane `ACCEPTED`.
 - production change not required (ALREADY FUNCTIONALLY SATISFIED); targeted tests PASS; hardware BT-off→on retry PASS;
 - esito fisico incerto (`ConnectionLost`, ecc.) → **PRINT-024**.
 
-**PRINT-024 / D-071 FROZEN (uncertain physical outcome microcopy):**
+**PRINT-024 / D-071 COMPLETE (uncertain physical outcome microcopy):**
 - **only** `PrinterError.ConnectionLost` is uncertain (D-059 write/flush after CONNECTED; treat all ConnectionLost as uncertain UX);
 - DRAFT / manual ACCEPTED: `Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`;
 - PRINT-022 auto: `Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`;
 - definite errors unchanged; no auto-retry; no business mutation; no new retry CTA; PRINT-023 remains explicit STAMPA;
 - BT-007 test-print ConnectionLost out of scope;
-- production change = ViewModel mapping strings only.
+- production change = ViewModel mapping strings only; JVM/build evidence PASS; real ConnectionLost fault injection NOT REQUIRED.
 
 ## 21. Ristampa (azione) / label UI `STAMPA`
 

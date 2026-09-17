@@ -539,7 +539,7 @@ Se ordine già accettato (**PRINT-023 / D-070 COMPLETE** — funzionalmente sodd
 - nessun dialog obbligatorio `[RIPROVA] [CHIUDI]` dedicato alla stampa Accepted (pattern storico superseduto);
 - hardware: BT-off failure → BT-on explicit retry PASS (same order/number; one FINAL; no BOZZA).
 
-Se outcome fisico incerto (**PRINT-024 / D-071 FROZEN** — `PrinterError.ConnectionLost` only):
+Se outcome fisico incerto (**PRINT-024 / D-071 COMPLETE** — `PrinterError.ConnectionLost` only):
 
 ```text
 Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.

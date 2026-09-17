@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-024 implementation (D-071 FROZEN); M9 12/14; PRINT-023 COMPLETE
+NEXT: M9 — HW-002 (10 consecutive prints); M9 13/14; PRINT-024 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -2071,4 +2071,44 @@ gradle: NOT RUN
 hardware: NOT RUN
 ```
 
-**D-071 FROZEN — PRINT-024 READY FOR IMPLEMENTATION.** Do not start HW-002 until authorized.
+**D-071 FROZEN.** See §61 for PRINT-024 final closure evidence.
+
+## 61. PRINT-024 FINAL CLOSURE (2026-09-17) — COMPLETE
+
+```yaml
+task: PRINT-024
+status: COMPLETE
+contract: D-071 FROZEN
+base_HEAD: 859d9cf
+M9: 13/14 COMPLETE
+code_review: PASS — Critical 0 / Major 0 / Minor 1 accepted
+uncertain_error: PrinterError.ConnectionLost ONLY
+DRAFT_copy: "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo."
+ACCEPTED_manual_copy: "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo."
+PRINT022_auto_copy: "Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo."
+definite_errors: UNCHANGED
+success_copy: UNCHANGED
+automatic_retry: NO
+retry_CTA: NONE
+PRINT-023_explicit_STAMPA: PRESERVED
+business_mutation: NONE
+production_files:
+  - AcceptancePreviewViewModel (ConnectionLost mapping only)
+  - AcceptedOrderDetailViewModel (ConnectionLost mapping only)
+PrinterError: UNCHANGED
+PrinterService: UNCHANGED
+PrinterDriver: UNCHANGED
+transport: UNCHANGED
+focused_AcceptancePreviewViewModel: 63 PASS
+focused_AcceptedOrderDetailViewModel: 40 PASS
+assembleDebug: PASS
+assembleDebugAndroidTest: PASS
+connected_UI: NOT RUN — no ADB device
+hardware_ConnectionLost_fault_injection: NOT REQUIRED
+remaining_M9:
+  - HW-002
+schema: DB_v2 UNCHANGED
+migration: NONE
+```
+
+**PRINT-024 COMPLETE.** Next authorized task: **HW-002** (10 consecutive physical prints). Do not start HW-002 without explicit authorization.

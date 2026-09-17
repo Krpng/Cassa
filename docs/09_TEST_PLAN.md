@@ -844,12 +844,12 @@ Bluetooth disabled.
 ### PRINT-T022
 Connection lost, Accepted remains.
 
-### PRINT-T022b (PRINT-024 / D-071)
+### PRINT-T022b (PRINT-024 / D-071) — COMPLETE
 `ConnectionLost` → uncertain microcopy:
 - DRAFT: `Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
 - manual ACCEPTED: same base copy
 - PRINT-022 auto: `Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
-Definite errors (BluetoothDisabled / PrinterNotConfigured / PermissionDenied / ConnectionFailed) retain existing wording. No auto-retry. Business state unchanged.
+Definite errors (BluetoothDisabled / PrinterNotConfigured / PermissionDenied / ConnectionFailed) retain existing wording. No auto-retry. Business state unchanged. Evidence: ViewModel 63+40 PASS; builds PASS.
 
 ### PRINT-T023
 Retry same number.

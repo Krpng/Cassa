@@ -552,14 +552,14 @@ nuovo tap esplicito **`STAMPA`**
 - **PRINT-023 COMPLETE** (targeted regression PASS; Bluetooth OFF→ON hardware retry PASS — production change not required);
 - esito incerto → **PRINT-024 / D-071** (`ConnectionLost` only).
 
-## 26sexies. Uncertain physical print outcome (PRINT-024 / D-071) — READY
+## 26sexies. Uncertain physical print outcome (PRINT-024 / D-071) — COMPLETE
 
 Solo `PrinterError.ConnectionLost` → microcopy incerto:
 
 - DRAFT / manual ACCEPTED: `Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
 - PRINT-022 auto: `Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
 
-Errori pre-print definitivi invariati. Nessun auto-retry. Nessun nuovo tipo `PrinterError`. Mapping solo nei ViewModel print esistenti. Fault injection hardware ConnectionLost **non** richiesto (Fake/unit sufficienti; HW-002 = stampe normali ripetute).
+Errori pre-print definitivi invariati. Nessun auto-retry. Nessun nuovo tipo `PrinterError`. Mapping solo nei ViewModel print esistenti. **PRINT-024 COMPLETE** (JVM 63+40 PASS; builds PASS; code review PASS). Fault injection hardware ConnectionLost **non** richiesto (Fake/unit sufficienti; HW-002 = stampe normali ripetute).
 
 ## 27. Hardware validation NETUM
 

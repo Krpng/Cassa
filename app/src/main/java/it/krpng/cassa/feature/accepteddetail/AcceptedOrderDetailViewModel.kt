@@ -430,7 +430,7 @@ class AcceptedOrderDetailViewModel @Inject constructor(
             PrinterError.ConnectionFailed ->
                 "Impossibile connettersi alla stampante"
             PrinterError.ConnectionLost ->
-                "Connessione interrotta durante la stampa"
+                "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo."
             PrinterError.Timeout ->
                 "Timeout di connessione alla stampante"
             PrinterError.PrintFailed,

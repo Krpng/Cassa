@@ -561,7 +561,7 @@ class AcceptedOrderDetailViewModelTest {
     fun `PRINT021 F maps ConnectionLost`() = runTest(mainDispatcher) {
         assertMappedAcceptedPrintError(
             PrinterError.ConnectionLost,
-            "Connessione interrotta durante la stampa",
+            "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
         )
     }
 
@@ -788,6 +788,58 @@ class AcceptedOrderDetailViewModelTest {
 
         assertEquals(1, printer.printAcceptedCalls)
         assertTrue(viewModel.uiState.value is AcceptedOrderDetailUiState.Content)
+    }
+
+    // --- PRINT-024 / D-071 uncertain ConnectionLost microcopy ---
+
+    @Test
+    fun `PRINT024 ConnectionLost maps uncertain copy without retry`() = runTest(mainDispatcher) {
+        val printer =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.ConnectionLost))
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+        val before = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printer.printAcceptedCalls)
+        assertEquals(listOf(ORDER_ID), printer.printAcceptedIds)
+        assertEquals(
+            "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+            (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+        )
+        val after = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+        assertEquals(before.orderId, after.orderId)
+        assertEquals(before.displayNumber, after.displayNumber)
+        assertEquals(before.total, after.total)
+
+        viewModel.consumeAcceptedPrintFeedback()
+        advanceUntilIdle()
+        testScheduler.advanceTimeBy(60_000)
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+        assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+    }
+
+    @Test
+    fun `PRINT024 definite errors retain existing wording`() = runTest(mainDispatcher) {
+        assertMappedAcceptedPrintError(
+            PrinterError.BluetoothDisabled,
+            "Bluetooth disattivato",
+        )
+        assertMappedAcceptedPrintError(
+            PrinterError.PrinterNotConfigured,
+            "Nessuna stampante selezionata",
+        )
+        assertMappedAcceptedPrintError(
+            PrinterError.PermissionDenied,
+            "Autorizzazione Bluetooth necessaria",
+        )
+        assertMappedAcceptedPrintError(
+            PrinterError.ConnectionFailed,
+            "Impossibile connettersi alla stampante",
+        )
     }
 
     private suspend fun kotlinx.coroutines.test.TestScope.assertMappedAcceptedPrintError(

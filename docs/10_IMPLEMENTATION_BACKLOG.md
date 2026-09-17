@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **12/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**). **PRINT-022 COMPLETE** (**D-069**). **PRINT-023 COMPLETE** (**D-070** — ALREADY FUNCTIONALLY SATISFIED; tests + hardware PASS). **PRINT-024** contract **D-071 FROZEN** — READY FOR IMPLEMENTATION. **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). Remaining formal: PRINT-024 implementation, HW-002. Do not start HW-002 until authorized.
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **13/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**). **PRINT-022 COMPLETE** (**D-069**). **PRINT-023 COMPLETE** (**D-070**). **PRINT-024 COMPLETE** (**D-071** — ConnectionLost uncertain microcopy). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). Remaining formal: **HW-002 ONLY**. Do not start HW-002 until authorized.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -797,19 +797,19 @@ Demo M7 (COMPLETE):
 
 **Not owned:** new production UI/CTA; PRINT-024 uncertainty copy; automatic retry; Room writes; PrinterService/composer changes; HW-002.
 
-### PRINT-024 [P1] uncertain outcome microcopy — READY (D-071 FROZEN)
+### PRINT-024 [P1] uncertain outcome microcopy — COMPLETE (D-071)
 > Operator microcopy when physical print outcome is uncertain after `PrinterError.ConnectionLost` (D-059 write/flush loss). No transport changes. No automatic retry.
 
-**Status:** **CONTRACT FROZEN (D-071)** — **READY FOR IMPLEMENTATION**. Production change = ViewModel ConnectionLost string mapping only.
+**Status:** **COMPLETE**. Contract: **D-071 FROZEN**. Code review PASS (Critical 0 / Major 0 / Minor 1 accepted). Production = ViewModel ConnectionLost string mapping only. Focused ViewModel tests: AcceptancePreview **63 PASS**; AcceptedOrderDetail **40 PASS**. `assembleDebug` / `assembleDebugAndroidTest` PASS. Connected UI NOT RUN (no ADB). Real ConnectionLost hardware fault injection **NOT REQUIRED**.
 **Depends on:** BT-005 / D-059 COMPLETE; PRINT-020..023 COMPLETE.
 
-**Owns (AC) — D-071 FROZEN:**
+**Owns (AC) — D-071 FROZEN — delivered:**
 1. Only `ConnectionLost` → uncertain microcopy; definite pre-print/encoder errors unchanged.
 2. DRAFT / manual ACCEPTED: `Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
 3. PRINT-022 auto: `Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
 4. Reuse existing transient Error feedback + 3s consume; no dialog / special CTA; PRINT-023 explicit STAMPA preserved.
 5. No new `PrinterError`; no PrinterService/Driver/Bluetooth/Room changes; BT-007 test-print wording out of scope.
-6. Focused tests A–Q; real ConnectionLost hardware fault injection **NOT REQUIRED**.
+6. Focused tests A–Q PASS; real ConnectionLost hardware fault injection **NOT REQUIRED**.
 
 **Blocking open questions:** NONE.
 

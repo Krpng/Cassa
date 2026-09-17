@@ -374,6 +374,51 @@ class AcceptancePreviewScreenTest {
         composeRule.onNodeWithText("RIPROVA STAMPA").assertDoesNotExist()
     }
 
+    @Test
+    fun print024DraftConnectionLostWarningVisible() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = readyState(),
+                    draftPrintState = DraftPrintUiState.Error(
+                        "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText(
+            "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA BOZZA").assertIsEnabled()
+        composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
+    }
+
+    @Test
+    fun print024PostAcceptConnectionLostWarningVisible() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = acceptedState(),
+                    acceptedPrintState = AcceptedPrintUiState.Error(
+                        "Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText(
+            "Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.",
+        ).assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertIsEnabled()
+        composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
+        composeRule.onNodeWithText("RIPROVA STAMPA").assertDoesNotExist()
+    }
+
     private fun readyState(): AcceptancePreviewUiState.Ready =
         AcceptancePreviewUiState.Ready(
             draftId = "draft-1",
