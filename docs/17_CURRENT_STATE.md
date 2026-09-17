@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — D-065 IMPL (DOUBLE_BOTH base) then PRINT-020 hardware; M9 8/14; PRINT-020 UNCOMMITTED
+NEXT: M9 — D-066 IMPL (DRAFT printable total) then 2x wrap then PRINT-020 HW close; M9 8/14; PRINT-020+D-065 UNCOMMITTED
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1638,7 +1638,7 @@ M9: 8/14 COMPLETE
 production_business_receipt_textScale: DOUBLE_BOTH
 PrinterProfile_scale_field: NO
 charsPerLine: 42 UNCHANGED
-effective_2x_wrapping: DEFERRED POST-M9 (layout not style-aware today)
+effective_2x_wrapping: NEXT AFTER D-066 TOTAL FIX — IN M9 SCOPE (hardware confirmed)
 receipt_contents: UNCHANGED
 pricing: UNCHANGED
 alignment_emphasis: UNCHANGED
@@ -1647,11 +1647,37 @@ accepted_receipt: IN SCOPE FOR FUTURE PRINT-021
 PrinterProfile: UNCHANGED (D-061)
 transport: UNCHANGED
 PRINT-020_implementation: UNCHANGED / UNCOMMITTED
-PRINT-020_hardware_test: PAUSED UNTIL D-065 IMPLEMENTED
+PRINT-020_hardware_test: BLOCKED UNTIL D-066 IMPLEMENTED (+ wrap next)
 production_changed_this_freeze: NO
 tests_changed_this_freeze: NO
 gradle: NOT RUN
 hardware: NOT RUN
 ```
 
-**D-065 FROZEN.** Next: implement base `DOUBLE_BOTH` in `DefaultReceiptComposer` (minimal; no redesign), then resume PRINT-020 hardware draft-print validation. Do not start PRINT-021+ / HW-002 without explicit authorization.
+**D-065** production DOUBLE_BOTH is already implemented uncommitted. Hardware draft-print remains blocked on **D-066** (DRAFT TOTALE source) then 2× wrapping.
+
+## 51. D-066 DRAFT PRINTABLE TOTAL SOURCE (2026-09-17) — FROZEN
+
+```yaml
+decision: D-066
+status: FROZEN
+base_HEAD: 1c8df1e
+M9: 8/14 COMPLETE
+DRAFT_printed_total: CalculateOrderTotal.fromPersistedItems(order.items).orderTotal
+FINAL_printed_total: order.total
+menu_catalog_recalc: NO
+persist_draft_total_before_print: NO
+draft_business_mutation: NONE
+acceptance_preview_parity: FROZEN
+money: INTEGER_CENTS
+regression_example: "14,00 + 6,00 + 2,50 = 22,50 with order.total=ZERO"
+D-065: UNCHANGED
+effective_2x_wrapping: NEXT AFTER TOTAL FIX — IN M9 SCOPE (hardware confirmed)
+PRINT-020: BLOCKED UNTIL D-066 IMPLEMENTED
+production_changed_this_freeze: NO
+tests_changed_this_freeze: NO
+gradle: NOT RUN
+hardware: NOT RUN
+```
+
+**D-066 FROZEN.** Next: implement DRAFT total in `DefaultReceiptComposer` + regression test; then 2× style-aware wrapping; then PRINT-020 hardware closure. Do not start PRINT-021+ / HW-002 without authorization.

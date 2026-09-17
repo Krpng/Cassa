@@ -383,15 +383,19 @@ After PRINT-003 COMPLETE (`bb71f72`): **PRINT-004 = READY FOR IMPLEMENTATION**.
 - Charset/`€` glyph encoding remains PRINT-005 / hardware calibration — not PRINT-004.
 
 #### Prices
-- Amounts from snapshot only (`finalUnitPrice`, addition `chargedPrice`, `order.total`).
+- Amounts from snapshot only (`finalUnitPrice`, addition `chargedPrice`; order total per **D-066**).
 - Shown amounts are **quantity-extended** when a line price is printed (`unit * quantity`).
 - **DETAILED:**
   - Main item shows extended final unit price using **DETAILED price placement** below.
   - Addition prices shown only if: DETAILED + no manual override on item (`manualUnitPrice == null`) + `automaticExtrasPricingSnapshot == true` + extended charged > 0; else addition line without price.
   - Charged €0 addition: print `+ Name` without `0,00`.
   - Removals never priced.
-- **TOTAL_ONLY:** no item/addition line prices; still print total from `order.total`.
-- Total always printed for DRAFT and FINAL from `order.total` snapshot (§15), using the money format above (right-aligned with `TOTALE` on its line within `charsPerLine` when it fits; otherwise wrap label then dedicated right-aligned amount line — same fit rule as price placement).
+- **TOTAL_ONLY:** no item/addition line prices; still print order total (source per **D-066**).
+- Total always printed for DRAFT and FINAL (§15), using the money format above (right-aligned with `TOTALE` on its line within `charsPerLine` when it fits; otherwise wrap label then dedicated right-aligned amount line — same fit rule as price placement).
+- **D-066 FROZEN (supersedes DRAFT use of stale `order.total`):**
+  - `PrintKind.DRAFT` → `CalculateOrderTotal.fromPersistedItems(order.items).orderTotal` (ORD-022 parity with Acceptance Preview; **not** authoritative `Order.total` / `orders.totalCents` while DRAFT).
+  - `PrintKind.FINAL` → frozen accepted `order.total`.
+  - Still **no** recalculation from live menu/catalog. Draft print remains business **read-only** (no write of `orders.totalCents`).
 
 #### DETAILED price placement (deterministic; character-based only)
 Applies to priced main lines and priced addition lines. Removals have no price.
@@ -2164,6 +2168,77 @@ Production code; tests; Gradle; hardware; commit/push; PRINT-020 behavior change
 #### Readiness
 
 **D-065 FROZEN.** Next authorized step after this docs freeze: **implement** D-065 base scale in `DefaultReceiptComposer` (minimal), then resume PRINT-020 hardware draft-print validation.
+
+
+### D-066 Draft printable total source (2026-09-17) — FROZEN
+
+**Task:** PRINT-020 / PRINT-004 addendum — DRAFT receipt TOTALE source (docs-only freeze).
+**Status:** **FROZEN**.
+**Depends on:** ORD-022 (live DRAFT total SoT = persisted items); D-051 / PRINT-004 (`DefaultReceiptComposer`); D-064 / PRINT-020 (`printDraft`); Acceptance Preview total via `CalculateOrderTotal.fromPersistedItems`.
+**Base HEAD (docs freeze point):** `1c8df1e` (D-065 docs on main). Working tree may still hold UNCOMMITTED PRINT-020 + D-065 production.
+
+#### Purpose (FROZEN)
+
+Resolve D-051 literal wording that printed **both** DRAFT and FINAL totals from `order.total`, which conflicts with ORD-022: while `status == DRAFT`, `orders.totalCents` / `Order.total` may remain `Money.ZERO` / stale and is **not** the live total SoT.
+
+Hardware evidence: DRAFT line item prices correct; printed `TOTALE 0,00`; Acceptance Preview total correct.
+
+#### Printed total source (FROZEN)
+
+| Kind | Authoritative printed TOTALE |
+|------|------------------------------|
+| `PrintKind.DRAFT` | `CalculateOrderTotal.fromPersistedItems(order.items).orderTotal` |
+| `PrintKind.FINAL` | `order.total` (frozen at acceptance; immutable) |
+
+#### Semantics (FROZEN)
+
+- **Do not recalculate from menu/catalog** — still true.
+- DRAFT total uses only persisted order-item snapshots (`finalUnitPriceCents`, `quantity`, charged additions as already modeled). No live product/menu lookup.
+- Money = integer cents only. No `Double`/`Float`.
+- Same DRAFT persisted snapshot ⇒ Acceptance Preview `orderTotal` **==** printed DRAFT `TOTALE` (same `CalculateOrderTotal.fromPersistedItems` semantics).
+
+#### Business read-only (FROZEN)
+
+Printing a draft **MUST NOT**:
+
+- write/synchronize `orders.totalCents` / `Order.total`;
+- accept the order;
+- allocate `displayNumber`;
+- mutate `numbering_state`;
+- mutate items / draft.
+
+PRINT-020 remains a business **read-only** operation.
+
+#### FINAL unchanged (FROZEN)
+
+`PrintKind.FINAL` keeps accepted `order.total`. No recomputation for accepted/reprint.
+
+#### Required regression (FROZEN)
+
+```text
+DRAFT, order.total = Money.ZERO
+items (qty 1): 14,00 + 6,00 + 2,50
+→ printed TOTALE = 22,50
+→ status remains DRAFT; displayNumber null; no persistence mutation; line content unchanged
+```
+
+#### Relationship to wrapping / D-065 (FROZEN — record only)
+
+- D-065 `DOUBLE_BOTH` base scale: **UNCHANGED** by this addendum.
+- Hardware-confirmed 2× wrapping issue (FRITTURA/separators; ~half NORMAL capacity): **CONFIRMED**.
+- Status: **NEXT IMMEDIATELY AFTER DRAFT TOTAL FIX** — now **IN M9 SCOPE** before PRINT-020 closure. Do **not** implement wrapping in this freeze or in the total-fix-only task unless separately authorized.
+
+#### Out of scope of this freeze task
+
+Production; tests; Gradle; hardware; commit/push; total implementation; 2× wrapping implementation; PRINT-021+.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### Readiness
+
+**D-066 FROZEN.** Next: implement DRAFT total derivation in `DefaultReceiptComposer` (+ regression), then 2× style-aware wrapping, then resume PRINT-020 hardware closure.
 
 
 ### R-001 Product uniqueness

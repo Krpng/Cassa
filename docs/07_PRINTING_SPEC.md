@@ -268,7 +268,14 @@ Sempre in finale e bozza:
 TOTALE                        35,00
 ```
 
-Valore da snapshot/order total, non ricalcolato dal menu corrente.
+**Non** ricalcolare dal menu/catalogo corrente.
+
+Sorgente autoritativa (**D-066 FROZEN**):
+
+- **DRAFT** (`PrintKind.DRAFT`): `CalculateOrderTotal.fromPersistedItems(order.items).orderTotal` — stessa semantica dell’Acceptance Preview (ORD-022). **Non** usare `Order.total` / `orders.totalCents` stale come SoT mentre lo status è DRAFT.
+- **FINAL** (`PrintKind.FINAL`): `order.total` congelato all’accettazione.
+
+La stampa bozza **non** scrive `orders.totalCents`.
 
 ## 16. Feed/cut
 

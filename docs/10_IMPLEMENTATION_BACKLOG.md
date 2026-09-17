@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **8/14**. **PRINT-020** IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS (**D-064**). **D-065 FROZEN** (business receipt base `DOUBLE_BOTH`). PRINT-020 hardware draft-print **PAUSED** until D-065 implementation. Do not start PRINT-021+ / HW-002 until authorized.
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **8/14**. **PRINT-020** IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS (**D-064**). **D-065** FROZEN + IMPLEMENTED / UNCOMMITTED (`DOUBLE_BOTH`). **D-066 FROZEN** (DRAFT printable total = `fromPersistedItems`). HW draft-print **BLOCKED** until D-066 impl, then 2× wrap (now in M9 scope), then paper close. Do not start PRINT-021+ / HW-002 until authorized.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -688,11 +688,11 @@ Demo M7 (COMPLETE):
 
 **Not owned:** PRINT-020..024; HW-002; receipt typography / DOUBLE_BOTH application; discovery/pairing; transport/timeout changes; physical profile editor; Room/migrations; BT-006 permission-attempt persistence Minor.
 
-### PRINT-020 [P1] PrintDraft integration — IMPLEMENTED / UNCOMMITTED (D-064); HW PAUSED (D-065)
+### PRINT-020 [P1] PrintDraft integration — IMPLEMENTED / UNCOMMITTED (D-064); HW BLOCKED (D-066 + wrap)
 > Cashier **Acceptance Preview → `STAMPA BOZZA`** invokes existing `PrinterService.printDraft(orderId)`. Read-only vs order/business persistence.
 
-**Status:** **IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS**. Contract: **D-064 FROZEN**. Hardware draft-print: **PAUSED until D-065 implemented** (composer still NORMAL on deployed APK).
-**Depends on:** BT-007 COMPLETE (`b026dbb`); PRINT-007 `printDraft` + Mutex (D-054); BT-006 `PrinterProfileProvider`. Base scale for paper validation: **D-065**.
+**Status:** **IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS**. Contract: **D-064 FROZEN**. Hardware draft-print: **BLOCKED until D-066 implemented**, then **2× style-aware wrapping** (hardware-confirmed; now in M9 scope before PRINT-020 close), then paper validation.
+**Depends on:** BT-007 COMPLETE (`b026dbb`); PRINT-007 `printDraft` + Mutex (D-054); BT-006 `PrinterProfileProvider`. Base scale: **D-065**. DRAFT TOTALE source: **D-066**.
 
 **Owns (AC) — D-064 FROZEN:**
 1. Button **`STAMPA BOZZA`** on existing Acceptance Preview action area (with ANNULLA/ACCETTA); no new NavHost destination.
@@ -701,21 +701,33 @@ Demo M7 (COMPLETE):
 4. Header **`BOZZA`** / no `displayNumber`; draft remains DRAFT; no numbering mutation.
 5. Success: transient **Bozza inviata alla stampante**; map `PrinterError` per D-064; no auto-retry; no PRINT-024 accepted uncertainty copy.
 6. Orthogonal print phase on `AcceptancePreviewViewModel`.
-7. JVM ViewModel tests A–W (D-064); Samsung+NETUM manual **after D-065 implementation** + review.
+7. JVM ViewModel tests A–W (D-064); Samsung+NETUM manual **after D-066 + wrap**.
 
-**Blocking open questions:** NONE for integration. Hardware validation blocked on **D-065 impl**.
+**Blocking open questions:** NONE for integration. Hardware closure blocked on **D-066 impl** then **2× wrap**.
 
-**Not owned:** PRINT-021..024; HW-002; `ACCETTA E STAMPA`; NewOrder editor print; receipt hierarchy redesign beyond D-065 base scale; discovery/pairing; transport; schema/migrations.
+**Not owned:** PRINT-021..024; HW-002; `ACCETTA E STAMPA`; NewOrder editor print; discovery/pairing; transport; schema/migrations.
 
-### D-065 [P0] M9 business receipt base text scale — FROZEN (docs); IMPLEMENTATION NEXT
-> Production business receipts (`DefaultReceiptComposer`) must use `PrintableLine.textScale = DOUBLE_BOTH`. Not a `PrinterProfile` field. `charsPerLine=42` unchanged. Effective 2× wrapping deferred.
+### D-065 [P0] M9 business receipt base text scale — FROZEN; IMPLEMENTED / UNCOMMITTED
+> Production business receipts (`DefaultReceiptComposer`) use `PrintableLine.textScale = DOUBLE_BOTH`. Not a `PrinterProfile` field. `charsPerLine=42` unchanged.
 
-**Status:** **CONTRACT FROZEN**. Implementation **NOT STARTED** (this freeze was docs-only).
+**Status:** **CONTRACT FROZEN** + **production IMPLEMENTED / UNCOMMITTED** / code review PASS.
 **Depends on:** D-061 preference; D-060 scale capability; PRINT-004 composer.
 
-**Owns (when implemented):** assign `DOUBLE_BOTH` to existing composer lines; preserve content/emphasis/alignment/pricing; update composer unit expectations; then resume PRINT-020 hardware draft-print.
+**Owns (delivered in working tree):** assign `DOUBLE_BOTH` to existing composer lines; preserve content/emphasis/alignment/pricing.
 
-**Not owned:** PrinterProfile changes; charsPerLine→21; advanced wrap; PRINT-021+; HW-002; transport.
+**Not owned:** PrinterProfile changes; charsPerLine→21; style-aware wrap (see D-066 follow-on / wrap task); PRINT-021+; HW-002; transport.
+
+### D-066 [P0] Draft printable total source — FROZEN (docs); IMPLEMENTATION NEXT
+> DRAFT `TOTALE` = `CalculateOrderTotal.fromPersistedItems(order.items).orderTotal`. FINAL keeps `order.total`. No Room write. Acceptance Preview parity.
+
+**Status:** **CONTRACT FROZEN**. Implementation **NOT STARTED** (this freeze was docs-only).
+**Depends on:** ORD-022; D-051 amended by this decision; PRINT-020 path.
+
+**Owns (when implemented):** `DefaultReceiptComposer` DRAFT total derivation + regression (ZERO aggregate + non-zero items → correct TOTALE e.g. 22,50).
+
+**Not owned:** syncing `orders.totalCents` on print; FINAL recalculation; 2× wrapping (next after this impl); PRINT-021+.
+
+**Then:** 2× style-aware wrapping (hardware-confirmed; **IN M9 SCOPE** before PRINT-020 closure).
 
 ### PRINT-021 [P1] PrintAccepted integration
 
