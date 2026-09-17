@@ -505,9 +505,33 @@ Invoca `PrinterService.printAccepted(orderId)`.
 - nessuna auto-retry;
 - tipografia/layout: **D-065** / **D-067** (non ownership di PRINT-021);
 - **PRINT-021 COMPLETE** (Samsung+NETUM hardware PASS);
-- **non** accept+print (**PRINT-022**);
+- **non** accept+print (**PRINT-022** / **D-069** — contract frozen separately);
 - **non** retry UX dedicata (**PRINT-023**);
 - **non** uncertain-outcome microcopy (**PRINT-024**).
+
+## 26quater. Accept then automatic FINAL print (PRINT-022 / D-069)
+
+Acceptance Preview Ready:
+
+`ACCETTA` (nessuna nuova destinazione; nessuna CTA separata `ACCETTA E STAMPA` in questo task).
+
+Sequenza obbligatoria:
+
+```text
+AcceptOrder transaction
+ -> COMMIT
+ -> AcceptOrderResult.Accepted(orderId=…)
+ -> PrinterService.printAccepted(orderId)
+```
+
+- PrintKind = FINAL; header = frozen `displayNumber` (non BOZZA); total = `order.total`;
+- D-065 / D-067 invariati via path esistente;
+- zero print su fallimento accept;
+- fallimento print → ACCEPTED resta; feedback `Ordine accettato. ` + errore mappato;
+- successo print → `Ordine inviato alla stampante`;
+- one-shot sul path comando; **no** auto-print da observation Accepted;
+- riuso `acceptedPrintJob` / `AcceptedPrintUiState` (blocca STAMPA manuale concorrente);
+- **non** PRINT-023 / **non** PRINT-024.
 
 ## 27. Hardware validation NETUM
 

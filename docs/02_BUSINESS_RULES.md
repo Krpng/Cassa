@@ -740,10 +740,21 @@ In **M6**, dopo successo: restare sulla schermata `ACCEPTED` read-only. CTA stam
 
 Ordine rimane `ACCEPTED`.
 
-UI:
+**PRINT-022 / D-069 (accept then automatic FINAL print):**
+- sequenza obbligatoria: AcceptOrder commit → poi `PrinterService.printAccepted(orderId)`;
+- nessuna stampa dentro la transazione Room;
+- nessun precheck stampante prima di `ACCETTA` (accettazione ammessa senza stampante);
+- fallimento stampa **non** annulla l'accettazione / non riusa numeri / non ri-accetta;
+- feedback: `Ordine accettato. ` + messaggio errore stampante mappato (allineato PRINT-021);
+- **nessun** CTA `[RIPROVA]` in PRINT-022 (→ PRINT-023);
+- **nessuna** microcopy di esito incerto in PRINT-022 (→ PRINT-024);
+- dopo Idle, `STAMPA` manuale PRINT-021 resta disponibile (azione ordinaria Accepted, non workflow retry dedicato).
+
+**PRINT-023 (fuori scope qui) — retry dedicato:**
+UI storica di riferimento:
 `Impossibile stampare. [RIPROVA] [CHIUDI]`.
 
-Retry:
+Retry (quando in scope):
 - usa stesso order ID;
 - stesso displayNumber;
 - stessi snapshot;

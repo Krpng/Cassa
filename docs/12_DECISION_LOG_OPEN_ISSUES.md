@@ -2524,6 +2524,185 @@ Production; tests; Gradle; hardware; commit/push; PRINT-022+.
 **D-068 FROZEN — PRINT-021 READY FOR IMPLEMENTATION.**
 
 
+### D-069 PRINT-022 Accept commit before automatic final print (2026-09-17) — FROZEN
+
+**Task:** PRINT-022 — Accept and print after commit
+**Status:** **FROZEN** — **PRINT-022 READY FOR IMPLEMENTATION**.
+**Base HEAD:** `c5f4135` (PRINT-021 COMPLETE).
+**Depends on:** AcceptOrder Room transaction COMPLETE; PRINT-007 `printAccepted` + Mutex (D-054); PRINT-021 COMPLETE (`AcceptedPrintUiState` / manual `STAMPA`); D-065/D-066/D-067 COMPLETE.
+**Docs-only freeze:** no production/test code changes in this decision.
+
+#### Audit facts (current architecture — FROZEN)
+
+1. `AcceptOrder` → `OrderRepository.acceptOrder` → `transactionRunner.runInTransaction { acceptOrderInsideTransaction }` → returns **after** Room commit.
+2. Success payload already includes authoritative id:
+
+```kotlin
+AcceptOrderResult.Accepted(
+    orderId: String,          // same DRAFT id promoted to ACCEPTED
+    displayNumber: String,
+    total: Money,
+    acceptedAt: Instant,
+    businessDate: LocalDate,
+    numberingMode: NumberingMode,
+    numberingCycle: Int?,
+)
+```
+
+3. Current `AcceptancePreviewViewModel.accept()` on success only calls `observeOrder(forceReload = true)` — **no** print. Manual FINAL print is PRINT-021 (`runAcceptedPrint` → `printAccepted`).
+4. Orthogonal `acceptedPrintJob` / `AcceptedPrintUiState` already block concurrent manual `STAMPA` while Printing.
+
+#### Purpose (FROZEN)
+
+On explicit **`ACCETTA`** from Acceptance Preview Ready:
+
+```text
+ACCETTA
+→ AcceptOrder (Room transaction)
+→ COMMIT success → AcceptOrderResult.Accepted
+→ ONLY THEN PrinterService.printAccepted(result.orderId)
+→ Accepted UI (observation)
+```
+
+PRD capability “ACCETTA E STAMPA” is delivered as this post-commit automatic FINAL print on **`ACCETTA`**. PRINT-022 does **not** add a separate `ACCETTA E STAMPA` CTA.
+
+#### Ordering invariant (FROZEN)
+
+`printAccepted` MUST NEVER run:
+
+- before AcceptOrder returns success;
+- inside the acceptance Room transaction;
+- before `displayNumber` / status ACCEPTED are persisted;
+- against DRAFT state;
+- when AcceptOrder returns any failure.
+
+#### Acceptance is authoritative (FROZEN)
+
+If accept succeeds and print fails:
+
+- order **remains ACCEPTED**;
+- no rollback to DRAFT;
+- no delete;
+- no clear/reuse of `displayNumber`;
+- no backward `numbering_state` mutation;
+- no re-accept;
+- no replacement order.
+
+Business commit and physical print are separate outcomes.
+
+#### Exact accepted id (FROZEN)
+
+```kotlin
+printerService.printAccepted(result.orderId)  // AcceptOrderResult.Accepted.orderId
+```
+
+Do **not** derive id from `displayNumber`, `sourceOrderId`, draft-slot after mutation, UI text, or a broad query.
+
+#### One-shot command path — no observer auto-print (FROZEN)
+
+Automatic print starts **exactly once** as a direct consequence of the successful ACCETTA command result (same command path / post-success branch).
+
+MUST NOT trigger merely because Compose/ViewModel observes `AcceptancePreviewUiState.Accepted` (recomposition, restore, re-observation, navigation return).
+
+**No** `LaunchedEffect` / collector auto-print from Accepted state.
+
+One successful ACCETTA → at most one automatic `printAccepted` attempt. No retry loop. Preserve existing `acceptJob` double-tap guard for acceptance.
+
+#### Printer precheck (FROZEN)
+
+**NONE before ACCETTA.** Do not require configured printer / Bluetooth / connection before acceptance. Acceptance must succeed offline from the printer; then one print attempt handles `PrinterError`.
+
+#### Reuse PRINT-021 print concurrency (FROZEN)
+
+Prefer existing `acceptedPrintJob` + `AcceptedPrintUiState` for the automatic attempt:
+
+- while auto-print `PRINTING` / job active → manual Accepted `STAMPA` disabled (no concurrent second job);
+- after job completes to Idle → PRINT-021 manual `STAMPA` remains available (ordinary accepted print; **not** PRINT-023 retry workflow);
+- DRAFT `STAMPA BOZZA` / PRINT-020 unchanged;
+- do not invent a second print concurrency system.
+
+#### Success UX (FROZEN)
+
+Acceptance already transitions to Accepted UI (displayNumber visible) without a separate accept-success toast.
+
+On automatic print **Success**: reuse PRINT-021 transient **`Ordine inviato alla stampante`** (consume after display). Prefer this over a second conflicting message.
+
+#### Print-failure-after-accept UX (FROZEN)
+
+Distinguish accept failure (“ordine non accettato”) from print failure after accept.
+
+Transient Italian feedback:
+
+**`"Ordine accettato. " + <PRINT-021 mapped PrinterError message>`**
+
+Examples:
+
+- `Ordine accettato. Nessuna stampante selezionata`
+- `Ordine accettato. Impossibile stampare l'ordine`
+
+**No** PRINT-023 `[RIPROVA]` CTA. **No** PRINT-024 uncertain-outcome instructions. User may later use ordinary PRINT-021 `STAMPA` when Idle.
+
+#### Cancellation (FROZEN)
+
+**A — before accept commit:** preserve existing AcceptOrder / ViewModel cancellation (transaction rolls back or never committed; DRAFT unchanged; `CancellationException` rethrown).
+
+**B — after accept commit, during auto-print:** order remains ACCEPTED; print cancellation restores `AcceptedPrintUiState.Idle`; rethrow `CancellationException`; **no** fake Success/Error; **no** business rollback.
+
+#### Final receipt semantics (FROZEN — unchanged lower path)
+
+Same as PRINT-021: `PrintKind.FINAL`; not BOZZA; frozen `displayNumber`; total = `order.total` (D-066); D-065 DOUBLE_BOTH; D-067 scale-aware width; configured `PricePrintMode`. Do not duplicate composer/service logic in acceptance feature.
+
+#### Scope boundary (FROZEN)
+
+| Task | Ownership |
+|------|-----------|
+| PRINT-021 | Manual `STAMPA` on already ACCEPTED |
+| PRINT-022 | ACCETTA → commit → one automatic `printAccepted` |
+| PRINT-023 | Dedicated retry-same-order / RIPROVA workflow |
+| PRINT-024 | Uncertain physical outcome microcopy |
+
+#### Required focused tests (FROZEN)
+
+A. successful acceptance → exactly one `printAccepted` call
+B. `printAccepted` uses exact `AcceptOrderResult.Accepted.orderId`
+C. print only after AcceptOrder completes successfully
+D. acceptance failure → zero `printAccepted`
+E. print failure after accept does not undo Accepted state
+F. print failure does not call accept again
+G. print failure does not mutate numbering/`displayNumber`
+H. printer unavailable does not prevent acceptance attempt
+I. no printer precheck before acceptance
+J. automatic print success leaves normal Accepted state
+K. automatic print failure exposes frozen PRINT-022 feedback
+L. no automatic retry
+M. Accepted observer/recomposition does not trigger another print
+N. manual PRINT-021 `STAMPA` remains available after automatic job completes
+O. manual `STAMPA` cannot overlap while automatic print is in-flight
+P. DRAFT `STAMPA BOZZA` remains unaffected
+Q. Cancellation before commit preserves existing acceptance semantics
+R. Cancellation during post-commit print never rolls back accepted order
+S. PRINT-023 behavior absent
+T. PRINT-024 behavior absent
+
+#### Hardware acceptance (FROZEN — after impl; not this freeze)
+
+Given valid DRAFT: one `ACCETTA` → ACCEPTED + `displayNumber` once → exactly one automatic FINAL receipt; no BOZZA; assigned number visible; products/prices readable; total correct; DOUBLE_BOTH / scale-aware; order remains accepted; no second number; no duplicate order; no second automatic receipt; no crash.
+
+**Failure-path (if safely testable):** printer unavailable → acceptance still succeeds; print reports failure with PRINT-022 feedback; order remains accepted.
+
+#### Out of scope of this freeze task
+
+Production; tests; Gradle; hardware; commit/push; PRINT-023+; PrinterService/composer/profile/Bluetooth/Room changes.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### Readiness
+
+**D-069 FROZEN — PRINT-022 READY FOR IMPLEMENTATION.**
+
+
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
 Latest reimport rule says same product name updates even if category changes.

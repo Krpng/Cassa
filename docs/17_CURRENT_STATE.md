@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-022 (Accept and print after commit); M9 10/14; PRINT-021 COMPLETE
+NEXT: M9 — PRINT-022 (Accept and print after commit / D-069 FROZEN); M9 10/14; PRINT-021 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1843,4 +1843,52 @@ schema: DB_v2 UNCHANGED
 migration: NONE
 ```
 
-**PRINT-021 COMPLETE.** Next authorized task: **PRINT-022** (Accept and print after commit). Do not start PRINT-022+ / HW-002 without explicit authorization.
+**PRINT-021 COMPLETE.** Next authorized task: **PRINT-022** (Accept and print after commit / **D-069 FROZEN**). Do not start PRINT-022 implementation / PRINT-023+ / HW-002 without explicit authorization.
+
+## 56. PRINT-022 CONTRACT FREEZE (2026-09-17) — D-069 FROZEN
+
+```yaml
+decision: D-069
+status: FROZEN
+base_HEAD: c5f4135
+M9: 10/14 COMPLETE
+PRINT-021: COMPLETE
+PRINT-022: READY FOR IMPLEMENTATION
+title: Accept commit before automatic final print
+entry: AcceptancePreview Ready -> ACCETTA
+new_destination: NO
+separate_ACCETTA_E_STAMPA_CTA: NO (capability via ACCETTA post-commit auto-print)
+sequence: AcceptOrder transaction COMMIT -> AcceptOrderResult.Accepted -> printAccepted(result.orderId)
+API: PrinterService.printAccepted(orderId: String): PrintResult
+accepted_id_source: AcceptOrderResult.Accepted.orderId
+PrintKind: FINAL
+displayNumber: frozen accepted order.displayNumber
+total: frozen order.total (D-066)
+header: NOT BOZZA
+printer_precheck_before_accept: NONE
+acceptance_without_printer: YES
+acceptance_failure_prints: NO
+print_failure_rolls_back_acceptance: NO
+print_failure_changes_displayNumber: NO
+print_failure_changes_numbering: NO
+auto_print_attempts_per_successful_accept: 1
+observer_driven_auto_print: NO
+automatic_retry: NO
+PRINT-021_manual_STAMPA: PRESERVED
+concurrent_manual_STAMPA_during_auto_print: BLOCKED (reuse acceptedPrintJob / AcceptedPrintUiState)
+success_feedback: "Ordine inviato alla stampante"
+print_failure_after_accept_feedback: "Ordine accettato. " + PRINT-021 mapped PrinterError
+PRINT-023: OUT OF SCOPE
+PRINT-024: OUT OF SCOPE
+D-065: UNCHANGED
+D-066: UNCHANGED
+D-067: UNCHANGED
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed_this_freeze: NO
+tests_changed_this_freeze: NO
+gradle: NOT RUN
+hardware: NOT RUN
+```
+
+**D-069 FROZEN — READY FOR IMPLEMENTATION.** Do not implement PRINT-022 until explicitly authorized.

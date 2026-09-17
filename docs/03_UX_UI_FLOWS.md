@@ -492,6 +492,8 @@ System Back: chiude preview → torna al DRAFT; zero mutation; zero consumo.
 
 `ACCETTA`: esegue `AcceptOrder` atomico (business §18 / schema §16). Durante accept: CTA disabled/in-progress.
 
+**PRINT-022 / D-069:** dopo `AcceptOrderResult.Accepted` (commit riuscito), **una sola** chiamata automatica `PrinterService.printAccepted(result.orderId)` sul path del comando ACCETTA — mai da observer/`LaunchedEffect` su stato Accepted; mai dentro la transazione Room; nessun precheck stampante prima di ACCETTA. Fallimento stampa → ordine resta ACCEPTED; feedback `Ordine accettato. ` + errore stampante mappato. Successo stampa → feedback transient `Ordine inviato alla stampante` (come PRINT-021). Manuale post-accept `STAMPA` (PRINT-021) resta disponibile a Idle e resta bloccata durante auto-print.
+
 ## 10. Stato durante Accept
 
 Proteggere doppio tap:
@@ -515,9 +517,9 @@ Mostra:
 - `totalCents` snapshot;
 - data/ora su schermo se già prevista dall'UX esistente.
 
-CTA M6:
+CTA M6 / post-PRINT:
 
-- `[ STAMPA ]` — **presente ma DISABLED** fino all'integrazione PRINT successiva (nessuna simulazione stampa);
+- `[ STAMPA ]` — **PRINT-021 COMPLETE** su Accepted: `printAccepted(orderId)`; durante PRINT-022 auto-print in-flight resta disabled (stesso `AcceptedPrintUiState`);
 - `[ HOME ]` — torna Home;
 - `[ NUOVO ORDINE ]` — crea/apre un nuovo DRAFT tramite il flusso normale; il vecchio `ACCEPTED` **non** viene riutilizzato.
 
