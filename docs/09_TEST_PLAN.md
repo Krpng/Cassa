@@ -913,7 +913,7 @@ Manual:
 - [ ] long names
 - [ ] number large
 - [ ] feed
-- [ ] 10 consecutive prints (**HW-002 / D-072** — `STAMPA DI PROVA` × 10; 10/10; STOP on first failure)
+- [x] 10 consecutive prints (**HW-002 / D-072 COMPLETE** — `STAMPA DI PROVA` × 10; **10/10 PASS**)
 - [ ] printer off
 - [ ] reconnect/retry
 - [ ] connection loss behavior

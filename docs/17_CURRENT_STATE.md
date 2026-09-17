@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — HW-002 hardware (D-072 FROZEN; STAMPA DI PROVA × 10); M9 13/14; PRINT-024 COMPLETE
+NEXT: M10 — Hardening (NOT STARTED); M9 COMPLETE 14/14; HW-002 10/10 PASS
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -2143,4 +2143,55 @@ gradle: NOT RUN
 hardware: NOT RUN
 ```
 
-**D-072 FROZEN — HW-002 READY FOR HARDWARE EXECUTION.** M9 remains **13/14** until HW-002 hardware PASS.
+**D-072 FROZEN.** See §63 for HW-002 / M9 final closure evidence.
+
+## 63. HW-002 + M9 FINAL CLOSURE (2026-09-17) — COMPLETE
+
+```yaml
+task: HW-002
+status: COMPLETE
+contract: D-072 FROZEN
+base_HEAD: 26dc06c
+surface: Settings STAMPA DI PROVA
+printer: NETUM / BlueTooth Printer
+printerId: "66:32:12:31:E4:25"
+attempts: 10
+successful_attempts: 10/10
+explicit_actions: 10
+physical_outputs: 10
+Bluetooth_remained_ON: YES
+printer_remained_powered: YES
+app_restart: NO
+Bluetooth_toggle: NO
+configuration_changes: NO
+re_pairing: NO
+mid_sequence_recovery: NO
+deliberate_ConnectionLost: NO
+automatic_retry: NO
+business_mutation: NONE
+photos: NOT REQUIRED
+M9: 14/14 COMPLETE
+remaining_M9_tasks: NONE
+physical_printing_status: VALIDATED FOR M9
+BT-001: COMPLETE
+BT-002: COMPLETE
+BT-003: COMPLETE
+BT-004: COMPLETE
+BT-005: COMPLETE
+BT-006: COMPLETE
+BT-007: COMPLETE
+HW-001: COMPLETE
+PRINT-020: COMPLETE
+PRINT-021: COMPLETE
+PRINT-022: COMPLETE
+PRINT-023: COMPLETE
+PRINT-024: COMPLETE
+HW-002: COMPLETE
+production_changed_this_closure: NO
+tests_changed_this_closure: NO
+schema: DB_v2 UNCHANGED
+migration: NONE
+next_milestone: M10 — Hardening (NOT STARTED)
+```
+
+**HW-002 COMPLETE. M9 COMPLETE (14/14).** Next milestone: **M10** (NOT STARTED). Do not invent post-M9 printing scope.

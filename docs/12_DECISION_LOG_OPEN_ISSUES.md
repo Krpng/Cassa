@@ -3046,6 +3046,10 @@ Production; tests; Gradle; hardware execution; commit/push; changing profile/tra
 
 **D-072 FROZEN — HW-002 READY FOR HARDWARE EXECUTION.**
 
+#### Closure evidence (2026-09-17) — COMPLETE
+
+Hardware validation **PASS**: Settings → `STAMPA DI PROVA` × **10/10** on NETUM `66:32:12:31:E4:25`; Bluetooth ON entire sequence; printer powered; no app restart; no BT toggle; no re-pair; no settings change; no mid-sequence recovery; no deliberate ConnectionLost. **HW-002 COMPLETE.** **M9 14/14 COMPLETE.**
+
 
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
