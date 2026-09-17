@@ -2798,6 +2798,128 @@ Production; tests; Gradle; hardware; commit/push; PRINT-024; HW-002.
 **D-070 FROZEN — PRINT-023 READY FOR TEST/CLOSURE.**
 
 
+### D-071 PRINT-024 Uncertain physical print outcome messaging (2026-09-17) — FROZEN
+
+**Task:** PRINT-024 — Uncertain outcome microcopy
+**Status:** **FROZEN** — **PRINT-024 READY FOR IMPLEMENTATION**.
+**Base HEAD:** `82a3006` (PRINT-023 COMPLETE).
+**Depends on:** BT-005 / D-059 (`ConnectionLost` transport signal); PRINT-020/021/022/023 COMPLETE.
+**Docs-only freeze:** no production/test code changes in this decision.
+
+#### Purpose (FROZEN)
+
+Tell the cashier that the app **cannot confirm** whether a receipt physically printed after a transport loss mid-write, instruct them to **check the physical paper** before printing again, and keep retry as an **explicit user decision** (PRINT-023). Business order state is unaffected.
+
+Does **not** own: print queue, printer ACKs, persisted job history, automatic retry/reconnect, delivery confirmation protocol, transport/driver changes, HW-002.
+
+#### Uncertain vs definite classification (FROZEN)
+
+| `PrinterError` | Class | Evidence |
+|---|---|---|
+| `PrinterNotConfigured` | **Definite pre-print** | No connect/write; profile missing |
+| `PermissionDenied` | **Definite pre-print** | Connect/permission gate before usable write |
+| `BluetoothDisabled` | **Definite pre-print** | Adapter gate before usable write |
+| `ConnectionFailed` | **Definite pre-print** | Connect failed; no usable CONNECTED session |
+| `Timeout` | **Definite pre-print** | D-059 Q2-A **connect-only** timeout; no write timeout in MVP |
+| `UnsupportedEncoding` / `UnencodableCharacter` / `InvalidPrinterProfile` | **Definite pre-transport** | Encoder/profile failure before `PrinterDriver.print` |
+| `OrderNotFound` / `InvalidOrderState` | **Definite pre-transport** | Service validation before encode/write |
+| `ConnectionLost` | **UNCERTAIN physical outcome** | D-059: post-CONNECTED write/flush `IOException` → `ConnectionLost` + DISCONNECTED; bytes may have reached the printer fully/partially/not at all. Also used for print-while-DISCONNECTED (no write) — same typed signal; UX treats **all** `ConnectionLost` as uncertain (safe over-warning; no new error type). |
+| `PrintFailed` | **Definite application failure** (not broadened) | Real RFCOMM mid-write `IOException` maps to **`ConnectionLost`**, not `PrintFailed`. `PrintFailed` remains Fake/other; keep existing definite wording. |
+| `Unknown` | **Definite generic failure** (not broadened) | Unexpected service Throwable / cleanup-after-success path; no evidence it means mid-write uncertainty |
+
+**Only `ConnectionLost` receives PRINT-024 uncertain microcopy.**
+
+#### Frozen Italian microcopy (FROZEN)
+
+**Shared base (DRAFT PRINT-020 + manual ACCEPTED PRINT-021/023):**
+
+```text
+Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.
+```
+
+**PRINT-022 automatic post-accept (`afterSuccessfulAccept=true`):**
+
+```text
+Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.
+```
+
+Replaces current mapped ConnectionLost strings:
+- order contexts: `Connessione interrotta durante la stampa`
+- historical UX §12 block (`La connessione si è interrotta… / Verifica se la copia è uscita…`) — **superseded** by the frozen short copy above for order/draft print feedback.
+
+**MUST NOT** for `ConnectionLost`:
+- claim “Stampa fallita” / “Stampa riuscita” / “Nessuno scontrino stampato” as fact;
+- imply acceptance failed (PRINT-022);
+- use technical terms (IOException, RFCOMM, socket, flush, transport).
+
+**Definite-error copy:** **UNCHANGED** (BluetoothDisabled, PermissionDenied, PrinterNotConfigured, ConnectionFailed, Timeout, PrintFailed/encoder/order/Unknown generics as today).
+
+**BT-007 test-print ConnectionLost:** **OUT OF SCOPE** — keep existing settings wording (`Connessione interrotta durante la stampa di prova`). No order “check receipt” semantics on STAMPA DI PROVA.
+
+#### UX mechanism (FROZEN)
+
+- Reuse existing transient `DraftPrintUiState.Error` / `AcceptedPrintUiState.Error` + on-screen `Text` + existing **3s** auto-consume (`LaunchedEffect` delay).
+- **No** dialog, snackbar redesign, acknowledgement button, or special retry CTA.
+- **No** duration change required for M9: frozen short copy fits the existing 3s pattern.
+- Label remains **`STAMPA`** / **`STAMPA BOZZA`**; PRINT-023 explicit re-tap unchanged; **no automatic retry**.
+
+#### Business invariants (FROZEN)
+
+- DRAFT + uncertain print → remains DRAFT; no accept/numbering.
+- ACCEPTED manual / PRINT-023 → remains ACCEPTED; same id / displayNumber / snapshots / total.
+- PRINT-022 auto uncertain → remains ACCEPTED; AcceptOrder already committed; no rollback / re-accept / renumber.
+- Success → existing success feedback only; no uncertainty warning.
+
+#### Error-mapping ownership (FROZEN)
+
+**Minimal change:** update `ConnectionLost` branch only in existing private mappers:
+
+1. `AcceptancePreviewViewModel.mapDraftPrintError`
+2. `AcceptancePreviewViewModel.mapAcceptedPrintError` (shared by manual STAMPA + PRINT-022 prefix path)
+3. `AcceptedOrderDetailViewModel.mapAcceptedPrintError`
+
+**No** new `PrinterError` type. **No** PrinterService / Driver / Bluetooth / composer / profile / Room changes.
+Shared pure mapper: **not required** for PRINT-024 (duplication already accepted by PRINT-020/021); do not broaden refactor.
+
+#### Required focused tests (FROZEN — A–Q)
+
+A. DRAFT + `ConnectionLost` → frozen DRAFT uncertain copy
+B. manual ACCEPTED + `ConnectionLost` → frozen ACCEPTED uncertain copy
+C. PRINT-022 auto + `ConnectionLost` → frozen post-accept uncertain copy (includes `Ordine accettato.`)
+D–G. BluetoothDisabled / PrinterNotConfigured / PermissionDenied / ConnectionFailed retain existing definite wording
+H. Success retains existing success feedback
+I. no automatic retry after ConnectionLost
+J. feedback render/consume does not invoke print
+K. PRINT-023 manual STAMPA remains explicit only
+L–O. business state unchanged (DRAFT / ACCEPTED / displayNumber)
+P. consume feedback without another print
+Q. no uncertain copy for definite errors
+
+UI Compose: optional only if mapping visibility needs a tiny assertion; not required if ViewModel mapping tests cover copy.
+
+#### Hardware / fault injection (FROZEN)
+
+**Real ConnectionLost-at-write hardware fault injection: NOT REQUIRED for M9 PRINT-024 closure.**
+
+Reason: physical outcome is nondeterministic; deliberate BT/cable timing manipulation is unsafe/unreliable. Unit/Fake `ConnectionLost` mapping proofs are sufficient. HW-002 separately validates repeated **normal** physical prints.
+
+#### Classification
+
+**Production change needed: YES** — ViewModel error-mapping microcopy only (three mappers above).
+
+#### Out of scope of this freeze task
+
+Production; tests; Gradle; hardware; commit/push; HW-002; transport/retry policy changes.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### Readiness
+
+**D-071 FROZEN — PRINT-024 READY FOR IMPLEMENTATION.**
+
+
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
 Latest reimport rule says same product name updates even if category changes.

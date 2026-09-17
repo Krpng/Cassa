@@ -368,8 +368,9 @@ Non può garantire "exactly once" fisico se:
 
 Quindi su `ConnectionLost` durante write:
 - classificare outcome come incerto;
-- messaggio: verificare la carta prima di `RIPROVA`.
-
+- messaggio (**PRINT-024 / D-071**): `Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
+  (post-accept automatico: prefisso `Ordine accettato. `);
+- retry solo esplicito; nessun automatic retry.
 ## 21. Mutex
 
 `PrinterService` usa `Mutex`.
@@ -394,7 +395,7 @@ Insecure RFCOMM / secure→insecure fallback: **NOT ALLOWED** in BT-004 (contrac
 Timeout / disconnect / error mapping (**D-059 COMPLETE** / BT-005 `3aad082`):
 - Connect timeout default **10_000 ms**, injected at driver/transport (not PrinterProfile / DataStore / Room); close attempt socket to interrupt blocking `BluetoothSocket.connect()`; map to `PrinterError.Timeout`.
 - **Q2-A connect-only** — no explicit write/flush timeout in MVP (future contract revision required).
-- Write/flush `IOException` after CONNECTED → `ConnectionLost` (uncertain outcome §20); microcopy → PRINT-024.
+- Write/flush `IOException` after CONNECTED → `ConnectionLost` (uncertain outcome §20); microcopy → **PRINT-024 / D-071 FROZEN**.
 - No automatic print retry; no automatic reconnect algorithm; next explicit job reconnects via normal `PrinterService` lifecycle (D-054).
 
 Calibrazione profilo / formattazione testo (**D-060 FROZEN** / HW-001 READY): vedi §23–§24 / decision log D-060.
@@ -549,7 +550,16 @@ nuovo tap esplicito **`STAMPA`**
 - label **`STAMPA`** only (mai `RISTAMPA`);
 - nessuna persistenza job fallito;
 - **PRINT-023 COMPLETE** (targeted regression PASS; Bluetooth OFF→ON hardware retry PASS — production change not required);
-- esito incerto → **PRINT-024**.
+- esito incerto → **PRINT-024 / D-071** (`ConnectionLost` only).
+
+## 26sexies. Uncertain physical print outcome (PRINT-024 / D-071) — READY
+
+Solo `PrinterError.ConnectionLost` → microcopy incerto:
+
+- DRAFT / manual ACCEPTED: `Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
+- PRINT-022 auto: `Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.`
+
+Errori pre-print definitivi invariati. Nessun auto-retry. Nessun nuovo tipo `PrinterError`. Mapping solo nei ViewModel print esistenti. Fault injection hardware ConnectionLost **non** richiesto (Fake/unit sufficienti; HW-002 = stampe normali ripetute).
 
 ## 27. Hardware validation NETUM
 

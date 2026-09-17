@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-024 (uncertain outcome microcopy); M9 12/14; PRINT-023 COMPLETE
+NEXT: M9 — PRINT-024 implementation (D-071 FROZEN); M9 12/14; PRINT-023 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -2037,4 +2037,38 @@ schema: DB_v2 UNCHANGED
 migration: NONE
 ```
 
-**PRINT-023 COMPLETE.** Next authorized task: **PRINT-024** (uncertain physical outcome microcopy). Do not start HW-002 without explicit authorization.
+**PRINT-023 COMPLETE.** Next authorized task: **PRINT-024** (uncertain physical outcome microcopy / **D-071 FROZEN**). Do not start HW-002 without explicit authorization.
+
+## 60. PRINT-024 CONTRACT FREEZE (2026-09-17) — D-071 FROZEN
+
+```yaml
+decision: D-071
+status: FROZEN
+base_HEAD: 82a3006
+M9: 12/14 COMPLETE
+PRINT-023: COMPLETE
+PRINT-024: READY FOR IMPLEMENTATION
+title: Uncertain physical print outcome messaging
+uncertain_error: PrinterError.ConnectionLost ONLY
+definite_errors_unchanged: YES
+DRAFT_copy: "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo."
+ACCEPTED_manual_copy: "Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo."
+PRINT022_auto_copy: "Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo."
+UX: existing transient Error Text + 3s consume
+retry_CTA: NONE
+automatic_retry: NO
+PRINT-023_explicit_STAMPA: PRESERVED
+new_PrinterError: NO
+mapping_owner: AcceptancePreviewViewModel + AcceptedOrderDetailViewModel private mappers
+BT-007_test_print: OUT OF SCOPE
+hardware_ConnectionLost_fault_injection: NOT REQUIRED
+production_change_required: YES — microcopy mapping only
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed_this_freeze: NO
+tests_changed_this_freeze: NO
+gradle: NOT RUN
+hardware: NOT RUN
+```
+
+**D-071 FROZEN — PRINT-024 READY FOR IMPLEMENTATION.** Do not start HW-002 until authorized.

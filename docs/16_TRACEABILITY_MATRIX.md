@@ -56,6 +56,7 @@ Questa matrice collega requisiti, backlog e test.
 | Final / accepted manual print | PRINT-021 **COMPLETE** (D-068); Samsung+NETUM hardware PASS | ViewModel 33+40 PASS; UI PASS; paper PASS (001 / 28,00; no BOZZA) |
 | Accept+print after commit | PRINT-022 **COMPLETE** (D-069); Samsung+NETUM success + BT-off failure PASS | ViewModel 53 PASS; UI 11 PASS; paper PASS; no rollback on print fail |
 | Retry same accepted order | PRINT-023 **COMPLETE** (D-070; functionally satisfied via STAMPA re-tap; no production change) | ViewModel 38+59 PASS; BT-off→on hardware PASS; same id; no re-accept/renumber |
+| Uncertain physical print outcome microcopy | PRINT-024 **READY** (D-071 FROZEN; `ConnectionLost` only) | ViewModel mapping A–Q; no ConnectionLost fault injection required |
 | Bluetooth RFCOMM/SPP driver | BT-004 **COMPLETE** (D-058; `82cc98f`; Q1-A secure) | unit + PHONE+NETUM hardware PASS |
 | Timeout/disconnect/error mapping | BT-005 **COMPLETE** (D-059; `3aad082`; connect 10_000 ms; Q2-A connect-only) | unit + PHONE+NETUM (normal + local BT-off → ConnectionLost) |
 | NETUM ESC/POS calibration | HW-001 **COMPLETE** (D-060 capabilities + D-061 physical freeze; READY TO COMMIT) | PHONE+NETUM WIDTH/FORMAT/CODEPAGE/FEED + ORDER_PREVIEW evidence |

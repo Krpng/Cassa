@@ -539,12 +539,22 @@ Se ordine già accettato (**PRINT-023 / D-070 COMPLETE** — funzionalmente sodd
 - nessun dialog obbligatorio `[RIPROVA] [CHIUDI]` dedicato alla stampa Accepted (pattern storico superseduto);
 - hardware: BT-off failure → BT-on explicit retry PASS (same order/number; one FINAL; no BOZZA).
 
-Se outcome fisico incerto (**PRINT-024**, fuori scope PRINT-023):
+Se outcome fisico incerto (**PRINT-024 / D-071 FROZEN** — `PrinterError.ConnectionLost` only):
+
 ```text
-La connessione si è interrotta durante la stampa.
-Verifica se la copia è uscita prima di riprovare.
+Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.
 ```
-(nessuna implementazione PRINT-024 in questa chiusura.)
+
+Dopo PRINT-022 auto-print:
+
+```text
+Ordine accettato. Stampa non confermata. Controlla lo scontrino prima di stampare di nuovo.
+```
+
+- feedback transient esistente (`Error` + ~3s consume); nessun dialog / CTA dedicata;
+- retry = solo tap esplicito `STAMPA` / `STAMPA BOZZA` (PRINT-023);
+- nessun automatic retry; stato business invariato;
+- errori pre-print definitivi restano con wording attuale (BluetoothDisabled, PrinterNotConfigured, …).
 
 Se bozza:
 - feedback PRINT-020;
