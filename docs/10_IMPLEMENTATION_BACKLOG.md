@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **11/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**). **PRINT-022 COMPLETE** (**D-069**; Samsung+NETUM success-path + Bluetooth-disabled failure-path PASS). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). Remaining formal: PRINT-023, PRINT-024, HW-002. Do not start PRINT-023+ / HW-002 until authorized.
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **11/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**). **PRINT-022 COMPLETE** (**D-069**). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). **PRINT-023** contract **D-070 FROZEN** — ALREADY FUNCTIONALLY SATISFIED (explicit re-tap `STAMPA`); READY FOR TEST/CLOSURE. Remaining formal: PRINT-023..024, HW-002. Do not start PRINT-024 / HW-002 until authorized.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -775,7 +775,24 @@ Demo M7 (COMPLETE):
 
 **Not owned:** PRINT-023 dedicated retry workflow / RIPROVA CTA; PRINT-024 uncertain microcopy; receipt typography/layout; PrinterService/composer/profile changes; Bluetooth/transport; Room/schema/migrations; AcceptedOrderDetail auto-print.
 
-### PRINT-023 [P1] Retry same order
+### PRINT-023 [P1] Retry same order — READY (D-070 FROZEN; functionally satisfied)
+> Explicit user retry of printing the **same** already-ACCEPTED order after a prior print attempt completed/failed. Uses ordinary **`STAMPA`** → `PrinterService.printAccepted(sameOrderId)`. No new CTA, no `RISTAMPA`, no persisted retry state, no automatic retry.
+
+**Status:** **CONTRACT FROZEN (D-070)** — **ALREADY FUNCTIONALLY SATISFIED** by PRINT-021/022 orchestration. **READY FOR TEST/CLOSURE** (focused regression tests + hardware). No new production print path required.
+**Depends on:** PRINT-021 COMPLETE (`STAMPA` / `acceptedPrintJob` / `AcceptedPrintUiState`); PRINT-022 COMPLETE (post-accept auto failure leaves Accepted + manual `STAMPA` available).
+
+**Owns (AC) — D-070 FROZEN:**
+1. Retry = new explicit **`STAMPA`** after previous accepted-print job finished (Error/Success/Idle), on same Accepted Order Detail or AcceptancePreview Accepted surface.
+2. Call `printAccepted(exactSameAcceptedOrderId)` — same frozen `displayNumber` / snapshots / `order.total`; never AcceptOrder / renumber / duplicate.
+3. Blocked while `acceptedPrintJob` active / `Printing`; available again after completion.
+4. Label remains **`STAMPA`** (never `RISTAMPA` / no dedicated `RIPROVA STAMPA` print CTA). Historical UX §12 `[RIPROVA]` dialog superseded for PRINT-023 by STAMPA re-tap + transient error feedback.
+5. No persisted failed-print job; after navigation/restart, ordinary current-day Accepted `STAMPA` is sufficient.
+6. ConnectionLost / uncertain physical-outcome microcopy = **PRINT-024** (out of scope).
+7. Focused regression tests A–Q (D-070); definite-failure hardware (e.g. Bluetooth OFF → ON → STAMPA retry).
+
+**Blocking open questions:** NONE.
+
+**Not owned:** new production UI/CTA; PRINT-024 uncertainty copy; automatic retry; Room writes; PrinterService/composer changes; HW-002.
 
 ### PRINT-024 [P1] uncertain outcome microcopy
 

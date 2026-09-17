@@ -746,20 +746,22 @@ Ordine rimane `ACCEPTED`.
 - nessun precheck stampante prima di `ACCETTA` (accettazione ammessa senza stampante);
 - fallimento stampa **non** annulla l'accettazione / non riusa numeri / non ri-accetta;
 - feedback: `Ordine accettato. ` + messaggio errore stampante mappato (allineato PRINT-021);
-- **nessun** CTA `[RIPROVA]` in PRINT-022 (→ PRINT-023);
+- **nessun** CTA `[RIPROVA]` dedicato in PRINT-022;
 - **nessuna** microcopy di esito incerto in PRINT-022 (→ PRINT-024);
-- dopo Idle, `STAMPA` manuale PRINT-021 resta disponibile (azione ordinaria Accepted, non workflow retry dedicato);
+- dopo Idle / Error consumato, `STAMPA` manuale PRINT-021 resta disponibile sul **stesso** ordine Accepted (= retry funzionale; **PRINT-023 / D-070**);
 - hardware evidence: success-path NETUM PASS; Bluetooth-disabled failure-path PASS (ordine resta ACCEPTED / visibile in Ordini di oggi).
 
-**PRINT-023 (fuori scope qui) — retry dedicato:**
-UI storica di riferimento:
-`Impossibile stampare. [RIPROVA] [CHIUDI]`.
+**PRINT-023 / D-070 (retry stesso ordine Accepted):**
+- retry = nuovo tap esplicito **`STAMPA`** (mai `RISTAMPA` / mai CTA `RIPROVA STAMPA` dedicata) dopo che il job precedente è terminato;
+- stesso `orderId` / `displayNumber` / snapshot immutabili / `order.total`;
+- nessun AcceptOrder / numerazione / ordine duplicato;
+- nessuna auto-retry; bloccato mentre `Printing`;
+- nessun job fallito persistente: dopo navigazione/riavvio basta `STAMPA` su dettaglio Accepted current-day;
+- dialog storico `Impossibile stampare. [RIPROVA] [CHIUDI]` **superseded** da feedback transient + re-tap `STAMPA`;
+- esito fisico incerto (`ConnectionLost`, ecc.) → **PRINT-024**.
 
-Retry (quando in scope):
-- usa stesso order ID;
-- stesso displayNumber;
-- stessi snapshot;
-- nessuna nuova accettazione.
+**PRINT-024 (fuori scope qui) — uncertain outcome:**
+microcopy / istruzioni quando l'esito fisico è ambiguo.
 
 ## 21. Ristampa (azione) / label UI `STAMPA`
 

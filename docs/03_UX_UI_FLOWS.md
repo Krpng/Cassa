@@ -531,29 +531,25 @@ Nascondi / rimuovi dopo successo:
 
 ## 12. Stampa fallita
 
-Se ordine già accettato:
-```text
-Ordine A37 salvato.
+Se ordine già accettato (**PRINT-023 / D-070** — funzionalmente soddisfatto):
 
-Impossibile stampare.
+- feedback transient di errore stampante (PRINT-021 / PRINT-022 wording);
+- CTA stampa resta **`STAMPA`** (mai `RISTAMPA`);
+- dopo fine job (`Error`/`Success` → Idle), un nuovo tap esplicito `STAMPA` ritenta `printAccepted(stesso orderId)`;
+- nessun dialog obbligatorio `[RIPROVA] [CHIUDI]` dedicato alla stampa Accepted (pattern storico superseduto).
 
-[RIPROVA]
-[CHIUDI]
-```
-
-Se outcome fisico incerto:
+Se outcome fisico incerto (**PRINT-024**, fuori scope PRINT-023):
 ```text
 La connessione si è interrotta durante la stampa.
 Verifica se la copia è uscita prima di riprovare.
-
-[RIPROVA]
-[CHIUDI]
 ```
+(nessuna implementazione PRINT-024 in questo freeze.)
 
 Se bozza:
-- stesso pattern;
+- feedback PRINT-020;
 - nessun numero;
-- draft invariato.
+- draft invariato;
+- nuovo tap esplicito `STAMPA BOZZA` possibile a Idle.
 
 ## 13. Ordini di oggi
 

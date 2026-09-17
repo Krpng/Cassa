@@ -2703,6 +2703,101 @@ Production; tests; Gradle; hardware; commit/push; PRINT-023+; PrinterService/com
 **D-069 FROZEN — PRINT-022 READY FOR IMPLEMENTATION.**
 
 
+### D-070 PRINT-023 Explicit retry of same accepted order (2026-09-17) — FROZEN
+
+**Task:** PRINT-023 — Retry same order
+**Status:** **FROZEN** — **ALREADY FUNCTIONALLY SATISFIED** — **READY FOR TEST/CLOSURE**.
+**Base HEAD:** `f1c0418` (PRINT-022 COMPLETE).
+**Depends on:** PRINT-021 COMPLETE; PRINT-022 COMPLETE.
+**Docs-only freeze:** no production/test code changes in this decision.
+
+#### Audit facts (current architecture — FROZEN)
+
+1. **AcceptedOrderDetail:** `runAcceptedPrint()` → `printAccepted(content.orderId)`; guarded by `acceptedPrintJob?.isActive` + `Printing`; on Error/Success, UI enables `STAMPA` again (`!isPrinting`); second explicit tap starts a new job with the same id.
+2. **AcceptancePreview Accepted:** same via `launchAcceptedPrint(accepted.orderId, afterSuccessfulAccept=false)`; shared job with PRINT-022 auto-print.
+3. **After PRINT-022 auto failure:** Error feedback with `Ordine accettato. …` prefix; after job ends, manual `STAMPA` available (proven by existing PRINT022 P/Q tests); no AcceptOrder / renumber.
+4. **Label:** production CTA is always **`STAMPA`**; `RISTAMPA` asserted absent in UI tests.
+5. **RIPROVA** buttons elsewhere are load/settings retries, not print reprint CTAs.
+6. No persisted failed-print entity; Accepted order remains printable from Today Orders detail after navigation/restart.
+
+#### Purpose (FROZEN)
+
+Define PRINT-023 as the **contract** that an explicit subsequent **`STAMPA`** on the same ACCEPTED order is the supported retry mechanism — already delivered by PRINT-021/022. No new production path.
+
+#### Retry semantics (FROZEN)
+
+```text
+prior accepted-print job completed (Error or Success → Idle)
++ new explicit STAMPA
+→ PrinterService.printAccepted(sameAcceptedOrderId)
+```
+
+MUST:
+- same order id / displayNumber / frozen snapshots / order.total
+- one tap → one job
+- blocked while Printing
+- business read-only
+
+MUST NOT:
+- AcceptOrder again
+- allocate/reuse numbers
+- duplicate order / mutate sourceOrderId
+- automatic retry / timer / observer reprint
+- introduce `RISTAMPA` or dedicated `RIPROVA STAMPA` print CTA
+- persist failed print jobs
+- implement PRINT-024 uncertainty microcopy
+
+#### Historical UX supersession (FROZEN)
+
+UX §12 / business §20 historical dialog `Impossibile stampare. [RIPROVA] [CHIUDI]` is **superseded** for PRINT-023 by:
+
+transient printer error feedback + re-enabled **`STAMPA`**.
+
+Uncertainty wording (“Verifica se la copia è uscita…”) remains **PRINT-024**.
+
+#### Required focused tests (FROZEN — A–Q)
+
+A. first accepted print fails
+B. same accepted order remains available
+C. second explicit STAMPA invokes printAccepted again
+D. second call uses exact same orderId
+E. displayNumber unchanged
+F. AcceptOrder not invoked again
+G. numbering not touched
+H. no duplicate order created
+I. retry cannot start while first print active
+J. retry available after first job Error
+K. retry available after PRINT-022 automatic failure
+L. successful retry → normal success feedback
+M. failed retry does not auto-retry again
+N. observer/recomposition does not trigger retry
+O. navigation/reload of Accepted does not auto-print
+P. DRAFT PRINT-020 unchanged
+Q. PRINT-024 uncertainty UX absent
+
+#### Hardware acceptance (FROZEN — after tests; not this freeze)
+
+Definite pre-print failure path: Accepted order + known displayNumber → Bluetooth OFF → STAMPA fails, order remains → Bluetooth ON → STAMPA once on SAME order → exactly one FINAL receipt; same number/total; no BOZZA; no new order/number; no extra auto print; no crash.
+
+#### Classification (FROZEN)
+
+**Production change needed: NO — ALREADY FUNCTIONALLY SATISFIED.**
+
+PRINT-023 remaining work = focused regression tests + hardware + closure docs (when authorized).
+
+#### Out of scope of this freeze task
+
+Production; tests; Gradle; hardware; commit/push; PRINT-024; HW-002.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### Readiness
+
+**D-070 FROZEN — PRINT-023 READY FOR TEST/CLOSURE.**
+
+
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
 Latest reimport rule says same product name updates even if category changes.

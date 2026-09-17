@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-023 (Retry same order); M9 11/14; PRINT-022 COMPLETE
+NEXT: M9 — PRINT-023 (Retry same order / D-070 FROZEN; functionally satisfied); M9 11/14; PRINT-022 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1939,4 +1939,51 @@ schema: DB_v2 UNCHANGED
 migration: NONE
 ```
 
-**PRINT-022 COMPLETE.** Next authorized task: **PRINT-023** (Retry same order). Do not start PRINT-023+ / HW-002 without explicit authorization.
+**PRINT-022 COMPLETE.** Next authorized task: **PRINT-023** (Retry same order / **D-070 FROZEN** — functionally satisfied; test/closure). Do not start PRINT-024 / HW-002 without explicit authorization.
+
+## 58. PRINT-023 CONTRACT FREEZE (2026-09-17) — D-070 FROZEN
+
+```yaml
+decision: D-070
+status: FROZEN
+base_HEAD: f1c0418
+M9: 11/14 COMPLETE
+PRINT-022: COMPLETE
+PRINT-023: READY FOR TEST/CLOSURE
+classification: ALREADY FUNCTIONALLY SATISFIED
+title: Explicit retry of same accepted order via STAMPA
+mechanism: PRINT-021 STAMPA re-tap after prior accepted-print job completed
+surfaces:
+  - AcceptedOrderDetail -> STAMPA -> printAccepted(content.orderId)
+  - AcceptancePreview Accepted -> STAMPA -> printAccepted(accepted.orderId)
+new_CTA: NO
+label: STAMPA
+forbidden_labels: [RISTAMPA, RIPROVA STAMPA]
+historical_RIPROVA_dialog: SUPERSEDED for PRINT-023 by STAMPA re-tap
+same_order_id: YES
+same_displayNumber: YES
+same_immutable_snapshots: YES
+AcceptOrder_on_retry: NO
+numbering_mutation: NONE
+duplicate_order: NONE
+automatic_retry: NO
+blocked_while_printing: YES (acceptedPrintJob / Printing)
+available_after_failure: YES
+available_after_PRINT-022_auto_failure: YES
+available_after_navigation_reload: YES (ordinary Accepted STAMPA; no persisted retry state)
+persisted_retry_state: NO
+PRINT-024: OUT OF SCOPE (ConnectionLost uncertainty deferred)
+PrintKind: FINAL
+D-065: UNCHANGED
+D-066: UNCHANGED
+D-067: UNCHANGED
+production_change_required: NO
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed_this_freeze: NO
+tests_changed_this_freeze: NO
+gradle: NOT RUN
+hardware: NOT RUN
+```
+
+**D-070 FROZEN — PRINT-023 READY FOR TEST/CLOSURE.** Do not implement new production print UX. Do not start PRINT-024 / HW-002 until authorized.

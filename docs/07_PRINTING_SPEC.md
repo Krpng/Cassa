@@ -532,7 +532,23 @@ AcceptOrder transaction
 - one-shot sul path comando; **no** auto-print da observation Accepted;
 - riuso `acceptedPrintJob` / `AcceptedPrintUiState` (blocca STAMPA manuale concorrente);
 - **PRINT-022 COMPLETE** (success-path + Bluetooth-disabled failure-path hardware PASS);
-- **non** PRINT-023 / **non** PRINT-024.
+- dopo fallimento, re-tap `STAMPA` = retry stesso ordine (**PRINT-023 / D-070**, no new CTA);
+- **non** PRINT-024.
+
+## 26quinquies. Retry same accepted order (PRINT-023 / D-070) — functionally satisfied
+
+Dopo un tentativo di stampa Accepted completato (manuale PRINT-021 o automatico PRINT-022):
+
+nuovo tap esplicito **`STAMPA`**
+→ `PrinterService.printAccepted(stesso orderId)`
+
+- stesso `displayNumber` / snapshot / `order.total`; PrintKind FINAL; non BOZZA;
+- D-065 / D-067 invariati;
+- bloccato durante `Printing`; disponibile dopo Error/Success/Idle;
+- nessuna auto-retry; nessun AcceptOrder; nessuna numerazione;
+- label **`STAMPA`** only (mai `RISTAMPA`);
+- nessuna persistenza job fallito;
+- esito incerto → **PRINT-024**.
 
 ## 27. Hardware validation NETUM
 
