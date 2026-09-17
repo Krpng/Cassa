@@ -187,6 +187,12 @@ class AcceptancePreviewViewModel @Inject constructor(
                     is AcceptOrderResult.Accepted -> {
                         // Room is source of truth; observation maps ACCEPTED → Accepted UI.
                         observeOrder(forceReload = true)
+                        // D-069 / PRINT-022: one automatic FINAL print after committed accept.
+                        // Trigger is command-result only — not observation of Accepted state.
+                        launchAcceptedPrint(
+                            acceptedOrderId = result.orderId,
+                            afterSuccessfulAccept = true,
+                        )
                     }
                     AcceptOrderResult.OrderNotFound ->
                         _uiState.value = AcceptancePreviewUiState.NotFound
@@ -263,14 +269,28 @@ class AcceptancePreviewViewModel @Inject constructor(
     /**
      * Explicit STAMPA action for already ACCEPTED order (D-068 / PRINT-021).
      * One tap → at most one [PrinterService.printAccepted] while a job is active.
+     * Shares [acceptedPrintJob] / [AcceptedPrintUiState] with PRINT-022 auto-print.
      */
     fun runAcceptedPrint() {
-        if (acceptedPrintJob?.isActive == true) return
-        if (_acceptedPrintUiState.value is AcceptedPrintUiState.Printing) return
         val accepted = _uiState.value as? AcceptancePreviewUiState.Accepted ?: return
         if (accepted.isCreatingNewOrder || newOrderJob?.isActive == true) return
+        launchAcceptedPrint(
+            acceptedOrderId = accepted.orderId,
+            afterSuccessfulAccept = false,
+        )
+    }
 
-        val acceptedOrderId = accepted.orderId
+    /**
+     * Shared accepted-print job for PRINT-021 (manual) and PRINT-022 (post-accept auto).
+     * [afterSuccessfulAccept] only affects failure microcopy; success copy is shared.
+     */
+    private fun launchAcceptedPrint(
+        acceptedOrderId: String,
+        afterSuccessfulAccept: Boolean,
+    ) {
+        if (acceptedPrintJob?.isActive == true) return
+        if (_acceptedPrintUiState.value is AcceptedPrintUiState.Printing) return
+
         acceptedPrintJob =
             viewModelScope.launch {
                 _acceptedPrintUiState.value = AcceptedPrintUiState.Printing
@@ -278,16 +298,30 @@ class AcceptancePreviewViewModel @Inject constructor(
                     when (val result = printerService.printAccepted(acceptedOrderId)) {
                         PrintResult.Success ->
                             _acceptedPrintUiState.value = AcceptedPrintUiState.Success()
-                        is PrintResult.Failure ->
+                        is PrintResult.Failure -> {
+                            val mapped = mapAcceptedPrintError(result.error)
                             _acceptedPrintUiState.value =
-                                AcceptedPrintUiState.Error(mapAcceptedPrintError(result.error))
+                                AcceptedPrintUiState.Error(
+                                    if (afterSuccessfulAccept) {
+                                        "Ordine accettato. $mapped"
+                                    } else {
+                                        mapped
+                                    },
+                                )
+                        }
                     }
                 } catch (e: CancellationException) {
                     _acceptedPrintUiState.value = AcceptedPrintUiState.Idle
                     throw e
                 } catch (_: Exception) {
                     _acceptedPrintUiState.value =
-                        AcceptedPrintUiState.Error("Impossibile stampare l'ordine")
+                        AcceptedPrintUiState.Error(
+                            if (afterSuccessfulAccept) {
+                                "Ordine accettato. Impossibile stampare l'ordine"
+                            } else {
+                                "Impossibile stampare l'ordine"
+                            },
+                        )
                 }
             }
     }

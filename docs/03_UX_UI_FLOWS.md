@@ -492,7 +492,7 @@ System Back: chiude preview → torna al DRAFT; zero mutation; zero consumo.
 
 `ACCETTA`: esegue `AcceptOrder` atomico (business §18 / schema §16). Durante accept: CTA disabled/in-progress.
 
-**PRINT-022 / D-069:** dopo `AcceptOrderResult.Accepted` (commit riuscito), **una sola** chiamata automatica `PrinterService.printAccepted(result.orderId)` sul path del comando ACCETTA — mai da observer/`LaunchedEffect` su stato Accepted; mai dentro la transazione Room; nessun precheck stampante prima di ACCETTA. Fallimento stampa → ordine resta ACCEPTED; feedback `Ordine accettato. ` + errore stampante mappato. Successo stampa → feedback transient `Ordine inviato alla stampante` (come PRINT-021). Manuale post-accept `STAMPA` (PRINT-021) resta disponibile a Idle e resta bloccata durante auto-print.
+**PRINT-022 / D-069 COMPLETE:** dopo `AcceptOrderResult.Accepted` (commit riuscito), **una sola** chiamata automatica `PrinterService.printAccepted(result.orderId)` sul path del comando ACCETTA — mai da observer/`LaunchedEffect` su stato Accepted; mai dentro la transazione Room; nessun precheck stampante prima di ACCETTA. Fallimento stampa → ordine resta ACCEPTED; feedback `Ordine accettato. ` + errore stampante mappato. Successo stampa → feedback transient `Ordine inviato alla stampante` (come PRINT-021). Manuale post-accept `STAMPA` (PRINT-021) resta disponibile a Idle e resta bloccata durante auto-print. Hardware: success-path NETUM PASS; failure-path Bluetooth disabled PASS (no rollback).
 
 ## 10. Stato durante Accept
 

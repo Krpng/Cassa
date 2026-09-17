@@ -332,6 +332,27 @@ class AcceptancePreviewScreenTest {
         composeRule.onNodeWithText("STAMPA").assertIsEnabled()
     }
 
+    @Test
+    fun acceptedPrintFailureAfterAcceptMessageIsVisible() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = acceptedState(),
+                    acceptedPrintState = AcceptedPrintUiState.Error(
+                        "Ordine accettato. Nessuna stampante selezionata",
+                    ),
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Ordine accettato. Nessuna stampante selezionata")
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertIsEnabled()
+        composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
+    }
+
     private fun readyState(): AcceptancePreviewUiState.Ready =
         AcceptancePreviewUiState.Ready(
             draftId = "draft-1",

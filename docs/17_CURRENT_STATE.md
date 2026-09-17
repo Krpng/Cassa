@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-022 (Accept and print after commit / D-069 FROZEN); M9 10/14; PRINT-021 COMPLETE
+NEXT: M9 — PRINT-023 (Retry same order); M9 11/14; PRINT-022 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1851,9 +1851,9 @@ migration: NONE
 decision: D-069
 status: FROZEN
 base_HEAD: c5f4135
-M9: 10/14 COMPLETE
+M9: 11/14 COMPLETE
 PRINT-021: COMPLETE
-PRINT-022: READY FOR IMPLEMENTATION
+PRINT-022: COMPLETE
 title: Accept commit before automatic final print
 entry: AcceptancePreview Ready -> ACCETTA
 new_destination: NO
@@ -1885,10 +1885,58 @@ D-066: UNCHANGED
 D-067: UNCHANGED
 schema: DB_v2 UNCHANGED
 migration: NONE
-production_changed_this_freeze: NO
-tests_changed_this_freeze: NO
-gradle: NOT RUN
-hardware: NOT RUN
+hardware_NETUM_success: PASS
+hardware_BT_disabled_failure: PASS
 ```
 
-**D-069 FROZEN — READY FOR IMPLEMENTATION.** Do not implement PRINT-022 until explicitly authorized.
+PRINT-022 closed under D-069. See §57 for closure evidence.
+
+## 57. PRINT-022 FINAL CLOSURE (2026-09-17) — COMPLETE
+
+```yaml
+task: PRINT-022
+status: COMPLETE
+contract: D-069 FROZEN
+base_HEAD: ac39ec3
+M9: 11/14 COMPLETE
+code_review: PASS — Critical 0 / Major 0 / Minor 1 accepted
+focused_tests_preview_VM: 53 PASS
+connected_UI_Samsung: 11 PASS
+assembleDebug: PASS
+assembleDebugAndroidTest: PASS
+hardware_success_path: PASS
+automatic_FINAL_physical_print: PASS
+automatic_print_count: 1
+manual_STAMPA_required: NO
+BOZZA: ABSENT
+receipt_content: PASS
+D-065_DOUBLE_BOTH: PASS
+D-067_scale_aware_layout: PASS
+no_second_automatic_receipt: PASS
+no_crash: PASS
+hardware_failure_path: PASS
+failure_condition: Bluetooth disabled before ACCETTA
+acceptance_still_succeeds: YES
+order_visible_in_Ordini_di_oggi: YES
+displayNumber_assigned_preserved: YES
+print_failure_reported: YES
+order_remains_ACCEPTED: YES
+print_failure_rollback: NO
+print_failure_changes_numbering: NO
+second_acceptance: NO
+automatic_retry: NO
+printer_precheck_before_accept: NONE
+observer_driven_auto_print: NO
+accepted_id_source: AcceptOrderResult.Accepted.orderId
+API: PrinterService.printAccepted(orderId)
+PRINT-020: PRESERVED
+PRINT-021: PRESERVED
+remaining_M9:
+  - PRINT-023
+  - PRINT-024
+  - HW-002
+schema: DB_v2 UNCHANGED
+migration: NONE
+```
+
+**PRINT-022 COMPLETE.** Next authorized task: **PRINT-023** (Retry same order). Do not start PRINT-023+ / HW-002 without explicit authorization.

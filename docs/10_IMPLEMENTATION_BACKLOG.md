@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **10/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**; Samsung+NETUM hardware PASS). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). **PRINT-022** contract **D-069 FROZEN** — READY FOR IMPLEMENTATION. Remaining formal: PRINT-022..024, HW-002. Do not implement PRINT-022+ / HW-002 until authorized.
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **11/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**). **PRINT-022 COMPLETE** (**D-069**; Samsung+NETUM success-path + Bluetooth-disabled failure-path PASS). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). Remaining formal: PRINT-023, PRINT-024, HW-002. Do not start PRINT-023+ / HW-002 until authorized.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -750,10 +750,10 @@ Demo M7 (COMPLETE):
 
 **Not owned:** PRINT-022 (`ACCETTA E STAMPA` / auto-print after accept commit); PRINT-023 dedicated retry workflow; PRINT-024 uncertain microcopy; receipt typography/layout; PrinterProfile; Bluetooth/transport; Room/schema/migrations; historical order access.
 
-### PRINT-022 [P1] Accept and print after commit — READY (D-069 FROZEN)
+### PRINT-022 [P1] Accept and print after commit — COMPLETE (D-069)
 > After successful explicit **`ACCETTA`**, once the AcceptOrder Room transaction has committed, invoke exactly one `PrinterService.printAccepted(exactAcceptedOrderId)`. Business acceptance remains authoritative if print fails.
 
-**Status:** **CONTRACT FROZEN (D-069)** — **READY FOR IMPLEMENTATION**. Not started.
+**Status:** **COMPLETE**. Contract: **D-069 FROZEN**. Code review PASS (Critical 0 / Major 0 / Minor 1 accepted). Focused ViewModel tests **53 PASS**. Connected Samsung UI `AcceptancePreviewScreenTest` **11 PASS**. `assembleDebug` / `assembleDebugAndroidTest` PASS. Samsung+NETUM success-path hardware **PASS**. Bluetooth-disabled failure-path hardware **PASS**.
 **Depends on:** ACCEPT-003+ AcceptOrder COMPLETE; PRINT-007 `printAccepted` + Mutex (D-054); PRINT-021 COMPLETE (AcceptedPrintUiState / manual STAMPA); D-065/D-066/D-067 COMPLETE.
 
 **Owns (AC) — D-069 FROZEN:**
@@ -765,7 +765,11 @@ Demo M7 (COMPLETE):
 6. Print failure: order stays ACCEPTED; no rollback / renumber / re-accept; feedback `"Ordine accettato. " +` PRINT-021 mapped printer error (no PRINT-023 RIPROVA CTA; no PRINT-024 uncertainty copy).
 7. Print success: reuse PRINT-021 transient **`Ordine inviato alla stampante`**; screen remains normal Accepted.
 8. Reuse `acceptedPrintJob` / `AcceptedPrintUiState` so manual PRINT-021 `STAMPA` cannot overlap while auto-print is in-flight; after Idle, manual STAMPA remains available.
-9. Focused JVM tests A–T (D-069); Samsung+NETUM hardware after implementation.
+9. Focused JVM tests A–T (D-069); Samsung+NETUM hardware **PASS**.
+
+**Hardware closure evidence:**
+- Success-path: one ACCETTA → ACCEPTED → exactly one automatic FINAL receipt; no BOZZA; products/prices/total readable; DOUBLE_BOTH / scale-aware; no duplicate auto-print; no crash; no manual STAMPA required.
+- Failure-path: Bluetooth disabled before ACCETTA → acceptance still succeeds; print failure reported; order remains ACCEPTED; visible in Ordini di oggi; displayNumber assigned/preserved; no rollback / renumber / retry.
 
 **Blocking open questions:** NONE.
 

@@ -862,6 +862,318 @@ class AcceptancePreviewViewModelTest {
         assertEquals(0, printer.printAcceptedCalls)
     }
 
+    // --- PRINT-022 accept then automatic FINAL print (D-069) ---
+
+    @Test
+    fun `PRINT022 A B successful accept calls printAccepted once with exact orderId`() =
+        runTest(mainDispatcher) {
+            val printer = FakePrinterService(result = PrintResult.Success)
+            val repository = acceptingRepository()
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+
+            assertEquals(1, repository.acceptCalls)
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(listOf(DRAFT_ID), printer.printAcceptedIds)
+            assertEquals(0, printer.printDraftCalls)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+        }
+
+    @Test
+    fun `PRINT022 C printAccepted only after AcceptOrder completes`() = runTest(mainDispatcher) {
+        val acceptGate = CompletableDeferred<Unit>()
+        val printGate = CompletableDeferred<Unit>()
+        val printer =
+            FakePrinterService(
+                result = PrintResult.Success,
+                acceptedBlockUntil = printGate,
+            )
+        val repository = acceptingRepository().apply {
+            acceptBlock = { acceptGate.await() }
+        }
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+        assertEquals(1, repository.acceptCalls)
+        assertEquals(0, printer.printAcceptedCalls)
+        assertTrue((viewModel.uiState.value as AcceptancePreviewUiState.Ready).isAccepting)
+
+        acceptGate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+        assertEquals(AcceptedPrintUiState.Printing, viewModel.acceptedPrintUiState.value)
+        assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+
+        printGate.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Success)
+    }
+
+    @Test
+    fun `PRINT022 D T acceptance failure zero printAccepted`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val repository = FakeOrderRepository(draft()).apply {
+            acceptResult = AcceptOrderResult.PersistenceFailure
+        }
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+
+        assertEquals(1, repository.acceptCalls)
+        assertEquals(0, printer.printAcceptedCalls)
+        assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Ready)
+        assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+    }
+
+    @Test
+    fun `PRINT022 E F G H print failure after accept keeps Accepted and one accept one print`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(
+                    result = PrintResult.Failure(PrinterError.PrinterNotConfigured),
+                )
+            val repository = acceptingRepository()
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+
+            assertEquals(1, repository.acceptCalls)
+            assertEquals(1, printer.printAcceptedCalls)
+            val accepted = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+            assertEquals("001", accepted.displayNumber)
+            assertEquals(DRAFT_ID, accepted.orderId)
+            val error = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error
+            assertEquals(
+                "Ordine accettato. Nessuna stampante selezionata",
+                error.message,
+            )
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(1, repository.acceptCalls)
+        }
+
+    @Test
+    fun `PRINT022 I J automatic success keeps Accepted and PRINT021 success feedback`() =
+        runTest(mainDispatcher) {
+            val printer = FakePrinterService(result = PrintResult.Success)
+            val viewModel = viewModel(acceptingRepository(), printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+            val success = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Success
+            assertEquals("Ordine inviato alla stampante", success.message)
+        }
+
+    @Test
+    fun `PRINT022 K automatic mapped printer errors use Ordine accettato prefix`() =
+        runTest(mainDispatcher) {
+            assertMappedAutoPrintAfterAcceptError(
+                PrinterError.BluetoothDisabled,
+                "Ordine accettato. Bluetooth disattivato",
+            )
+            assertMappedAutoPrintAfterAcceptError(
+                PrinterError.ConnectionFailed,
+                "Ordine accettato. Impossibile connettersi alla stampante",
+            )
+            assertMappedAutoPrintAfterAcceptError(
+                PrinterError.PrintFailed,
+                "Ordine accettato. Impossibile stampare l'ordine",
+            )
+        }
+
+    @Test
+    fun `PRINT022 L unexpected automatic print failure uses Ordine accettato prefix`() =
+        runTest(mainDispatcher) {
+            val printer = FakePrinterService(throwOnPrintAccepted = true)
+            val viewModel = viewModel(acceptingRepository(), printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+            val error = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error
+            assertEquals("Ordine accettato. Impossibile stampare l'ordine", error.message)
+            assertEquals(1, printer.printAcceptedCalls)
+        }
+
+    @Test
+    fun `PRINT022 M N observer reload does not trigger another automatic print`() =
+        runTest(mainDispatcher) {
+            val printer = FakePrinterService(result = PrintResult.Success)
+            val repository = acceptingRepository()
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+
+            viewModel.retry()
+            advanceUntilIdle()
+            repository.emitOrder(repository.orderSnapshot())
+            advanceUntilIdle()
+
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(1, repository.acceptCalls)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+        }
+
+    @Test
+    fun `PRINT022 O concurrent manual STAMPA blocked while automatic print in flight`() =
+        runTest(mainDispatcher) {
+            val printGate = CompletableDeferred<Unit>()
+            val printer =
+                FakePrinterService(
+                    result = PrintResult.Success,
+                    acceptedBlockUntil = printGate,
+                )
+            val viewModel = viewModel(acceptingRepository(), printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+            assertEquals(AcceptedPrintUiState.Printing, viewModel.acceptedPrintUiState.value)
+            assertEquals(1, printer.printAcceptedCalls)
+
+            viewModel.runAcceptedPrint()
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+
+            printGate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+        }
+
+    @Test
+    fun `PRINT022 P Q manual STAMPA after auto print keeps PRINT021 wording`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(
+                    result = PrintResult.Failure(PrinterError.PrinterNotConfigured),
+                )
+            val viewModel = viewModel(acceptingRepository(), printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(
+                "Ordine accettato. Nessuna stampante selezionata",
+                (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+            )
+
+            viewModel.consumeAcceptedPrintFeedback()
+            assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+            assertEquals(2, printer.printAcceptedCalls)
+            assertEquals(
+                "Nessuna stampante selezionata",
+                (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+            )
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+        }
+
+    @Test
+    fun `PRINT022 R S DRAFT STAMPA BOZZA unchanged and no auto accepted print`() =
+        runTest(mainDispatcher) {
+            val printer = FakePrinterService(result = PrintResult.Success)
+            val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.runDraftPrint()
+            advanceUntilIdle()
+
+            assertEquals(1, printer.printDraftCalls)
+            assertEquals(0, printer.printAcceptedCalls)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Ready)
+        }
+
+    @Test
+    fun `PRINT022 U Cancellation before AcceptOrder success — no print`() =
+        runTest(mainDispatcher) {
+            val printer = FakePrinterService(result = PrintResult.Success)
+            val repository = acceptingRepository().apply {
+                acceptBlock = { throw CancellationException("accept cancelled") }
+            }
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+
+            assertEquals(1, repository.acceptCalls)
+            assertEquals(0, printer.printAcceptedCalls)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Ready)
+            assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+        }
+
+    @Test
+    fun `PRINT022 V Cancellation during post-commit print keeps Accepted Idle`() =
+        runTest(mainDispatcher) {
+            val printer = FakePrinterService(throwAcceptedCancellation = true)
+            val repository = acceptingRepository()
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+
+            assertEquals(1, repository.acceptCalls)
+            assertEquals(1, printer.printAcceptedCalls)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+            assertEquals(
+                "001",
+                (viewModel.uiState.value as AcceptancePreviewUiState.Accepted).displayNumber,
+            )
+            assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+        }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.assertMappedAutoPrintAfterAcceptError(
+        error: PrinterError,
+        expectedMessage: String,
+    ) {
+        val printer = FakePrinterService(result = PrintResult.Failure(error))
+        val viewModel = viewModel(acceptingRepository(), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+        val state = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error
+        assertEquals(expectedMessage, state.message)
+    }
+
+    private fun acceptingRepository(): FakeOrderRepository =
+        FakeOrderRepository(draft()).apply {
+            acceptResult = AcceptOrderResult.Accepted(
+                orderId = DRAFT_ID,
+                displayNumber = "001",
+                total = Money.ofCents(700),
+                acceptedAt = NOW,
+                businessDate = LocalDate.parse("2026-09-14"),
+                numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
+                numberingCycle = null,
+            )
+            emitAcceptedOnAccept = true
+        }
+
     private suspend fun kotlinx.coroutines.test.TestScope.assertMappedDraftPrintError(
         error: PrinterError,
         expectedMessage: String,
