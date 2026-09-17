@@ -2362,6 +2362,168 @@ Production; tests; Gradle; hardware; commit/push; PRINT-020; PRINT-021+.
 **D-067 FROZEN — READY FOR IMPLEMENTATION.** PRINT-020 hardware closure blocked only until D-067 impl + paper retest.
 
 
+### D-068 PRINT-021 Accepted order manual print integration (2026-09-17) — FROZEN
+
+**Task:** PRINT-021 — PrintAccepted integration
+**Status:** **FROZEN** — **PRINT-021 READY FOR IMPLEMENTATION**.
+**Base HEAD:** `0dd79f7` (PRINT-020 COMPLETE).
+**Depends on:** PRINT-007 `PrinterService.printAccepted` + Mutex (D-054 COMPLETE); BT-006 `PrinterProfileProvider`; BT-004/005; D-065/D-066/D-067 COMPLETE; ARCH-004 Accepted Order Detail; post-accept Accepted CTAs (ACCEPT-007).
+**Docs-only freeze:** no production/test code changes in this decision.
+
+#### Purpose (FROZEN)
+
+Deliver cashier-facing **manual print of an ALREADY ACCEPTED** current-business-day order via existing:
+
+```kotlin
+suspend fun printAccepted(orderId: String): PrintResult
+```
+
+Enable the existing UI label **`STAMPA`** (never `RISTAMPA`). Business **read-only** (no accept, numbering, mutation, duplicate creation).
+
+Does **not** own accept-and-print (PRINT-022), dedicated retry UX (PRINT-023), uncertain-outcome microcopy (PRINT-024), or receipt typography/layout (D-065/D-067 already COMPLETE).
+
+#### Existing service (FROZEN — audit fact)
+
+`DefaultPrinterService.printAccepted` already:
+
+1. whole-job `Mutex` (shared with `printDraft` / `testPrint`);
+2. `orderRepository.getById(orderId)` once → missing → `OrderNotFound`;
+3. require `status == ACCEPTED` else `InvalidOrderState`;
+4. `PrinterProfileProvider.getActiveProfile()` → null → `PrinterNotConfigured`;
+5. `ReceiptComposer.compose(order, kind=FINAL, pricePrintMode=profile.pricePrintMode, charsPerLine=profile.charsPerLine)`;
+6. encode → connect → print → disconnect;
+7. `CancellationException` rethrown.
+
+FINAL composer semantics already: header = frozen `displayNumber` (not BOZZA); total = frozen `order.total` (D-066); all lines `DOUBLE_BOTH` (D-065); layout width scale-aware (D-067).
+
+PRINT-021 **must not** reimplement or alter the service/composer path.
+
+#### UI integration points (FROZEN)
+
+| Surface | Owner | Action |
+|---------|-------|--------|
+| **Accepted Order Detail** (primary; from Today Orders) | `AcceptedOrderDetailViewModel` + Screen | Enable existing **`STAMPA`** |
+| **Post-accept Accepted** (Acceptance Preview after ACCETTA) | `AcceptancePreviewViewModel` + Screen `AcceptedActions` | Enable existing **`STAMPA`** |
+
+- **No new NavHost destination.**
+- Today Orders list remains navigation-only (tap row → detail); no list-row print action required.
+- Current-business-day restriction **inherited**: detail uses `GetCurrentDayAcceptedOrder`; list uses `observeAcceptedByBusinessDate`. No historical access.
+
+#### Enabled / disabled (FROZEN)
+
+`STAMPA` enabled only when:
+
+- UI state shows a valid current-day ACCEPTED order (`Content` / post-accept Accepted Ready);
+- not already in accepted-print `PRINTING`;
+- not busy with duplicate/replace (detail) or other conflicting busy flags as applicable.
+
+While `PRINTING`:
+
+- disable `STAMPA` (no duplicate tap → second job);
+- disable `NUOVO ORDINE DA QUESTO` / conflicting mutation CTAs on detail;
+- do not mutate the accepted order;
+- `HOME` / leave destination may remain (leaving cancels VM job; order unchanged).
+
+#### Printer precheck (FROZEN)
+
+**A — no UI pre-resolve.** Tap always allowed when enabled; `PrinterService` returns `PrinterNotConfigured` / `BluetoothDisabled` / etc. Matches PRINT-020 / BT-007.
+
+#### One tap / one job (FROZEN)
+
+```text
+explicit STAMPA tap
+→ at most one PrinterService.printAccepted(exactAcceptedOrderId)
+while accepted-print job active
+```
+
+No retry loop; no automatic reconnect from UI; no duplicate call after recomposition / state restore (guard job active + PRINTING).
+
+#### Orthogonal print phase (FROZEN)
+
+Use an orthogonal accepted-print UI state (PRINT-020 pattern), e.g. `AcceptedPrintUiState` Idle/Printing/Success/Error, **independent** from detail observation / Accepted preview state so refresh cannot wipe `PRINTING` incorrectly. Preserve via `withTransient`-style merging if embedding transient flags into Content.
+
+#### Success feedback (FROZEN)
+
+Transient Italian copy:
+
+**`Ordine inviato alla stampante`**
+
+Consume/clear after display so it is not replayed forever.
+
+#### Error mapping (FROZEN — align PRINT-020, accepted wording)
+
+| PrinterError | Message |
+|--------------|---------|
+| `PermissionDenied` | Autorizzazione Bluetooth necessaria |
+| `BluetoothDisabled` | Bluetooth disattivato |
+| `PrinterNotConfigured` | Nessuna stampante selezionata |
+| `ConnectionFailed` | Impossibile connettersi alla stampante |
+| `ConnectionLost` | Connessione interrotta durante la stampa |
+| `Timeout` | Timeout di connessione alla stampante |
+| `PrintFailed` / encode / profile / `OrderNotFound` / `InvalidOrderState` / `Unknown` | Impossibile stampare l'ordine |
+
+No PRINT-024 “Verifica se la copia è uscita…”. No automatic retry. User may tap `STAMPA` again when idle for a **new** job (PRINT-023 may later refine retry UX; not required here).
+
+#### Cancellation (FROZEN)
+
+On `CancellationException`: rethrow; restore non-printing UI (`Idle`); **no** Success/Error fake feedback. Matches PRINT-020.
+
+#### Zero-mutation invariant (FROZEN)
+
+Printing **MUST NOT**:
+
+- accept a DRAFT;
+- allocate/reallocate `displayNumber`;
+- mutate `numbering_state`;
+- mutate accepted order / items / totals;
+- recalculate FINAL total from menu or items (FINAL = `order.total`);
+- create duplicate order / change `sourceOrderId`;
+- auto-print after acceptance (PRINT-022).
+
+#### Scope boundary (FROZEN)
+
+| Task | Ownership |
+|------|-----------|
+| PRINT-021 | Manual `STAMPA` on already ACCEPTED |
+| PRINT-022 | Accept + print after successful business commit |
+| PRINT-023 | Dedicated retry-same-order workflow (if any beyond idle re-tap) |
+| PRINT-024 | Uncertain physical outcome microcopy |
+
+#### Required focused tests (FROZEN)
+
+A. print uses exact accepted order id
+B. one tap → one `printAccepted`
+C. non-accepted / Unavailable / non-Content → no service call
+D. PRINTING prevents duplicate tap
+E. success feedback emitted
+F. known `PrinterError` mappings preserved
+G. `CancellationException` rethrown / Idle restored
+H. no `AcceptOrder` call
+I. no numbering / `displayNumber` mutation
+J. no repository business write from print UI
+K. accepted remains accepted (read-only observation)
+L. FINAL semantics covered by existing composer/service tests (no unnecessary duplication)
+M. D-066 FINAL uses `order.total` (existing tests remain)
+N. D-065/D-067 untouched
+O. no PRINT-022 accept+print behavior
+
+#### Hardware acceptance (FROZEN — after impl; not this freeze)
+
+Given already ACCEPTED current-business-day order: one `STAMPA` → one physical receipt; not BOZZA; `displayNumber` visible; readable products/prices; correct total; DOUBLE_BOTH; scale-aware wrap; order unchanged; no new number; no duplicate accepted order; no crash.
+
+#### Out of scope of this freeze task
+
+Production; tests; Gradle; hardware; commit/push; PRINT-022+.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### Readiness
+
+**D-068 FROZEN — PRINT-021 READY FOR IMPLEMENTATION.**
+
+
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
 Latest reimport rule says same product name updates even if category changes.

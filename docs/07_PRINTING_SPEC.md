@@ -490,6 +490,24 @@ Invoca `PrinterService.printDraft(orderId)`.
 - nessuna auto-retry;
 - tipografia base business **DOUBLE_BOTH**: **D-065** (non ownership di PRINT-020); layout scale-aware **D-067**; PRINT-020 **COMPLETE** (Samsung+NETUM hardware PASS).
 
+## 26ter. Accepted print UI (PRINT-021 / D-068)
+
+Accepted Order Detail (ARCH-004 / Today Orders) e post-accept Accepted screen:
+
+`STAMPA` (mai `RISTAMPA`).
+
+Invoca `PrinterService.printAccepted(orderId)`.
+
+- header carta = frozen `displayNumber` (`PrintKind.FINAL`);
+- **non** `BOZZA`;
+- ordine resta `ACCEPTED` immutabile;
+- nessuna mutation business/Room/numbering;
+- nessuna auto-retry;
+- tipografia/layout: **D-065** / **D-067** (non ownership di PRINT-021);
+- **non** accept+print (**PRINT-022**);
+- **non** retry UX dedicata (**PRINT-023**);
+- **non** uncertain-outcome microcopy (**PRINT-024**).
+
 ## 27. Hardware validation NETUM
 
 Checklist (**HW-001 / D-060** capability + **D-061** physical freeze + **D-065** business base scale):

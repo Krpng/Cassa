@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-021 (PrintAccepted integration); M9 9/14; PRINT-020 COMPLETE
+NEXT: M9 — PRINT-021 (PrintAccepted / D-068 FROZEN); M9 9/14; PRINT-020 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1758,4 +1758,44 @@ schema: DB_v2 UNCHANGED
 migration: NONE
 ```
 
-**PRINT-020 COMPLETE.** Next authorized task: **PRINT-021** (PrintAccepted integration). Do not start PRINT-021+ / HW-002 without explicit authorization.
+**PRINT-020 COMPLETE.** Next authorized task: **PRINT-021** (PrintAccepted integration / **D-068 FROZEN**). Do not start PRINT-021 implementation / PRINT-022+ / HW-002 without explicit authorization.
+
+## 54. PRINT-021 CONTRACT FREEZE (2026-09-17) — D-068 FROZEN
+
+```yaml
+decision: D-068
+status: FROZEN
+base_HEAD: 0dd79f7
+M9: 9/14 COMPLETE
+PRINT-020: COMPLETE
+PRINT-021: READY FOR IMPLEMENTATION
+title: Accepted order manual print (STAMPA)
+primary_entry: AcceptedOrderDetail -> STAMPA
+secondary_entry: AcceptancePreview Accepted -> STAMPA
+new_destination: NO
+API: PrinterService.printAccepted(orderId: String): PrintResult
+service_status: COMPLETE (D-054)
+PrintKind: FINAL
+displayNumber: frozen accepted order.displayNumber
+total: frozen order.total (D-066)
+header: NOT BOZZA
+business_mutation: NONE (READ-ONLY)
+numbering_mutation: NONE
+auto_retry: NO
+printer_precheck: A — service returns typed errors
+success_feedback: "Ordine inviato alla stampante"
+PRINT-022: OUT OF SCOPE
+PRINT-023: OUT OF SCOPE
+PRINT-024: OUT OF SCOPE
+D-065: UNCHANGED
+D-066: UNCHANGED
+D-067: UNCHANGED
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed_this_freeze: NO
+tests_changed_this_freeze: NO
+gradle: NOT RUN
+hardware: NOT RUN
+```
+
+**D-068 FROZEN — READY FOR IMPLEMENTATION.** Do not implement PRINT-021 until explicitly authorized.

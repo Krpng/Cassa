@@ -758,11 +758,11 @@ Retry:
 
 ### ARCH-004 (pre-PRINT)
 
-Nel dettaglio current-day (ARCH-004), prima di M8/M9:
+Nel dettaglio current-day (ARCH-004):
 
-- CTA `[ STAMPA ]` = **VISIBLE + DISABLED**;
-- nessuna azione print;
-- coerenza con post-accept M6.
+- CTA `[ STAMPA ]` = enable via **PRINT-021 / D-068** (`PrinterService.printAccepted`); label **`STAMPA`** only;
+- prima di PRINT-021: VISIBLE + DISABLED (nessuna azione print);
+- coerenza con post-accept M6 (stessa label/semantica).
 
 ## 22. Ordini accettati della giornata corrente (no archivio storico)
 

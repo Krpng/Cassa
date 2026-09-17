@@ -53,7 +53,7 @@ Questa matrice collega requisiti, backlog e test.
 | M9 business receipt base text scale | **D-065 COMPLETE** (`2ac8233`; `DOUBLE_BOTH`) | composer unit PASS; hardware PASS |
 | Draft printable total source | **D-066 COMPLETE** (`2ac8233`) | composer regression 14+6+2.50→22,50 PASS; hardware PASS |
 | Scale-aware receipt layout width | **D-067 COMPLETE** (`f7dad97`; 42÷2=21 under DOUBLE_BOTH; profile stays 42) | layoutWidth A–Q PASS; paper PASS |
-| Final print | PRINT-004/007/021 | PRINT-T002..014 |
+| Final / accepted manual print | PRINT-021 **READY** (D-068 FROZEN); service `printAccepted` COMPLETE (D-054) | ViewModel A–O; paper after impl; composer FINAL already PASS |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |
 | Bluetooth RFCOMM/SPP driver | BT-004 **COMPLETE** (D-058; `82cc98f`; Q1-A secure) | unit + PHONE+NETUM hardware PASS |
 | Timeout/disconnect/error mapping | BT-005 **COMPLETE** (D-059; `3aad082`; connect 10_000 ms; Q2-A connect-only) | unit + PHONE+NETUM (normal + local BT-off → ConnectionLost) |
