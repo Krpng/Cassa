@@ -92,4 +92,27 @@ class ReceiptTextLayoutTest {
         assertEquals('|', line.first())
         assertEquals(true, line.contains(" PIZZE "))
     }
+
+    // --- D-067 scale-aware layout width ---
+
+    @Test
+    fun `D067 layoutWidth multipliers for base 42`() {
+        assertEquals(1, ReceiptTextLayout.horizontalScaleMultiplier(PrintTextScale.NORMAL))
+        assertEquals(1, ReceiptTextLayout.horizontalScaleMultiplier(PrintTextScale.DOUBLE_HEIGHT))
+        assertEquals(2, ReceiptTextLayout.horizontalScaleMultiplier(PrintTextScale.DOUBLE_WIDTH))
+        assertEquals(2, ReceiptTextLayout.horizontalScaleMultiplier(PrintTextScale.DOUBLE_BOTH))
+
+        assertEquals(42, ReceiptTextLayout.layoutWidth(42, PrintTextScale.NORMAL))
+        assertEquals(42, ReceiptTextLayout.layoutWidth(42, PrintTextScale.DOUBLE_HEIGHT))
+        assertEquals(21, ReceiptTextLayout.layoutWidth(42, PrintTextScale.DOUBLE_WIDTH))
+        assertEquals(21, ReceiptTextLayout.layoutWidth(42, PrintTextScale.DOUBLE_BOTH))
+    }
+
+    @Test
+    fun `D067 layoutWidth never returns zero`() {
+        assertEquals(1, ReceiptTextLayout.layoutWidth(0, PrintTextScale.DOUBLE_BOTH))
+        assertEquals(1, ReceiptTextLayout.layoutWidth(-3, PrintTextScale.DOUBLE_BOTH))
+        assertEquals(1, ReceiptTextLayout.layoutWidth(1, PrintTextScale.DOUBLE_BOTH))
+        assertEquals(1, ReceiptTextLayout.layoutWidth(1, PrintTextScale.NORMAL))
+    }
 }

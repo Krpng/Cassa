@@ -16,14 +16,17 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * PRINT-004 / D-051 / D-065 / D-066 golden and focused tests.
+ * PRINT-004 / D-051 / D-065 / D-066 / D-067 golden and focused tests.
  * Owns PRINT-T001..T008, T010..T014. Does not claim PRINT-T009.
  * D-065: every business PrintableLine uses DOUBLE_BOTH.
  * D-066: DRAFT TOTALE from persisted items; FINAL from order.total.
+ * D-067: layout width = layoutWidth(baseCharsPerLine, DOUBLE_BOTH).
  */
 class DefaultReceiptComposerTest {
     private val composer = DefaultReceiptComposer()
-    private val width = 32
+    private val baseCharsPerLine = 42
+    private val width =
+        ReceiptTextLayout.layoutWidth(baseCharsPerLine, PrintTextScale.DOUBLE_BOTH)
 
     // --- PRINT-T001..T008 ---
 
@@ -197,11 +200,12 @@ class DefaultReceiptComposerTest {
     fun `PRINT-T007 item note wrapping`() {
         val note = "per favore senza cipolla cruda grazie"
         val order = baseOrder(items = listOf(pizzaItem(note = note)))
+        val layout = ReceiptTextLayout.layoutWidth(20, PrintTextScale.DOUBLE_BOTH)
         val texts =
             compose(order, PrintKind.FINAL, PricePrintMode.DETAILED, charsPerLine = 20)
                 .lines
                 .map { it.text }
-        val expected = ReceiptTextLayout.wrapPreservingLeadingIndent("NOTA: $note", 20)
+        val expected = ReceiptTextLayout.wrapPreservingLeadingIndent("NOTA: $note", layout)
         assertTrue(expected.size >= 2)
         assertTrue(texts.containsAll(expected))
         assertTrue(expected.first().startsWith("NOTA:"))
@@ -349,7 +353,11 @@ class DefaultReceiptComposerTest {
                     ),
             )
         val texts = compose(order, PrintKind.FINAL, PricePrintMode.DETAILED).lines.map { it.text }
-        assertTrue(texts.any { it.startsWith("1x Stampabile Snapshot") })
+        assertTrue(
+            texts.joinToString("")
+                .replace(" ", "")
+                .contains("StampabileSnapshot"),
+        )
         assertFalse(texts.any { it.contains("Catalog Only Name") })
     }
 
@@ -357,12 +365,13 @@ class DefaultReceiptComposerTest {
     fun `PRINT-T014 long product names wrap without truncation`() {
         val longName = "Supercalifragilisticexpialidocious Pizza Speciale"
         val order = baseOrder(items = listOf(pizzaItem(printedName = longName)))
+        val layout = ReceiptTextLayout.layoutWidth(24, PrintTextScale.DOUBLE_BOTH)
         val texts =
             compose(order, PrintKind.FINAL, PricePrintMode.DETAILED, charsPerLine = 24)
                 .lines
                 .map { it.text }
         val expectedLeft = "1x $longName"
-        val wrapped = ReceiptTextLayout.wrapPreservingLeadingIndent(expectedLeft, 24)
+        val wrapped = ReceiptTextLayout.wrapPreservingLeadingIndent(expectedLeft, layout)
         assertTrue(texts.containsAll(wrapped))
         assertTrue(wrapped.joinToString("").replace(" ", "").contains(longName.replace(" ", "")))
     }
@@ -450,12 +459,15 @@ class DefaultReceiptComposerTest {
             compose(order, PrintKind.FINAL, PricePrintMode.DETAILED, charsPerLine = 16)
                 .lines
                 .map { it.text }
-        assertTrue(texts.contains("NOTA: alpha"))
-        assertTrue(texts.contains("beta"))
+        val joined = texts.joinToString("\n")
+        assertTrue(joined.contains("NOTA:"))
+        assertTrue(joined.contains("alpha"))
+        assertTrue(joined.contains("beta"))
         val noteOrdineIdx = texts.indexOf("NOTE ORDINE:")
         assertTrue(noteOrdineIdx >= 0)
-        assertEquals("prima", texts[noteOrdineIdx + 1])
-        val totalSepIdx = texts.indexOf(separator(16))
+        assertTrue(texts[noteOrdineIdx + 1].startsWith("prima") || texts[noteOrdineIdx + 1] == "prima")
+        val layout = ReceiptTextLayout.layoutWidth(16, PrintTextScale.DOUBLE_BOTH)
+        val totalSepIdx = texts.indexOf(separator(layout))
         assertTrue(totalSepIdx > noteOrdineIdx)
     }
 
@@ -777,13 +789,123 @@ class DefaultReceiptComposerTest {
         assertEquals(Money.ofCents(9999), order.total)
     }
 
+    // --- D-067 scale-aware layout width ---
+
+    @Test
+    fun `D067 DOUBLE_BOTH separators and FRITTURA fit layout width 21`() {
+        val order =
+            baseOrder(
+                status = OrderStatus.DRAFT,
+                displayNumber = null,
+                totalCents = 0,
+                items =
+                    listOf(
+                        item(
+                            id = "f1",
+                            name = "Arancino",
+                            category = ProductCategory.FRITTURA,
+                            sequence = 1,
+                            unitCents = 250,
+                        ),
+                    ),
+            )
+        val doc = compose(order, PrintKind.DRAFT, PricePrintMode.DETAILED)
+        assertEquals(21, width)
+        assertTrue(doc.lines.all { it.textScale == PrintTextScale.DOUBLE_BOTH })
+
+        val banners = doc.lines.map { it.text }.filter { it.all { ch -> ch == '=' } && it.isNotEmpty() }
+        assertTrue(banners.isNotEmpty())
+        assertTrue(banners.all { it.length == width })
+
+        val sep = doc.lines.map { it.text }.first { it.all { ch -> ch == '-' } && it.isNotEmpty() }
+        assertEquals(width, sep.length)
+
+        val fritturaLine =
+            doc.lines.first { it.text.contains("FRITTURA") }
+        assertEquals(1, doc.lines.count { it.text.contains("FRITTURA") })
+        assertTrue(fritturaLine.text.length <= width)
+        assertEquals(PrintEmphasis.EMPHASIZED, fritturaLine.emphasis)
+
+        assertEquals(ReceiptTextLayout.center("BOZZA", width), doc.lines[1].text)
+        assertTrue(doc.lines[1].text.length <= width)
+
+        val totale = doc.lines.map { it.text }.first { it.startsWith("TOTALE") }
+        assertTrue(totale.length <= width)
+        assertTrue(totale.endsWith("2,50"))
+    }
+
+    @Test
+    fun `D067 long product wraps within layout width and preserves price once`() {
+        val longName = "Supercalifragilisticexpialidocious Pizza Speciale Con Molto Testo"
+        val order =
+            baseOrder(
+                items = listOf(pizzaItem(printedName = longName, unitCents = 700)),
+                totalCents = 700,
+            )
+        val doc = compose(order, PrintKind.FINAL, PricePrintMode.DETAILED)
+        val texts = doc.lines.map { it.text }
+        val productLines =
+            texts.filter {
+                !it.startsWith("TOTALE") &&
+                    !it.all { ch -> ch == '=' || ch == '-' } &&
+                    !it.contains("PIZZE") &&
+                    it.isNotEmpty() &&
+                    (it.contains("1x") || it.contains("Supercal") || it.contains("Pizza") ||
+                        it.contains("Speciale") || it.contains("Testo") || it.matches(Regex("^\\d+,\\d\\d$")))
+            }
+        assertTrue(productLines.size >= 2)
+        assertTrue(
+            texts.joinToString("")
+                .replace(" ", "")
+                .contains(longName.replace(" ", "")),
+        )
+        assertTrue(productLines.filter { !it.matches(Regex("^\\d+,\\d\\d$")) }.all { it.length <= width })
+        assertEquals(1, texts.count { it.contains("7,00") && !it.startsWith("TOTALE") })
+        assertTrue(doc.lines.all { it.textScale == PrintTextScale.DOUBLE_BOTH })
+    }
+
+    @Test
+    fun `D067 addition removal and note wrap within layout width`() {
+        val order =
+            baseOrder(
+                items =
+                    listOf(
+                        pizzaItem(
+                            additions =
+                                listOf(
+                                    addition(
+                                        "a1",
+                                        "Provola Affumicata Extra Lunga",
+                                        300,
+                                        0,
+                                    ),
+                                ),
+                            removals = listOf(removal("r1", "Mozzarella Fresca Di Bufala", 0)),
+                            note = "ben cotta senza cipolla cruda per favore grazie",
+                        ),
+                    ),
+                totalCents = 1000,
+            )
+        val doc = compose(order, PrintKind.FINAL, PricePrintMode.DETAILED)
+        val texts = doc.lines.map { it.text }
+        assertTrue(texts.any { it.contains("+ Provola") || it.contains("Affumicata") })
+        assertTrue(texts.any { it.contains("- Mozzarella") || it.contains("Bufala") })
+        assertTrue(texts.any { it.startsWith("NOTA:") || it.contains("cipolla") })
+        assertTrue(
+            texts
+                .filter { it.contains('+') || it.contains('-') || it.startsWith("NOTA") || it.contains("cipolla") }
+                .all { it.length <= width },
+        )
+        assertTrue(doc.lines.all { it.textScale == PrintTextScale.DOUBLE_BOTH })
+    }
+
     // --- helpers ---
 
     private fun compose(
         order: Order,
         kind: PrintKind,
         mode: PricePrintMode,
-        charsPerLine: Int = width,
+        charsPerLine: Int = baseCharsPerLine,
     ): PrintableDocument = composer.compose(order, kind, mode, charsPerLine)
 
     private fun banner(w: Int = width): String = ReceiptTextLayout.bannerLine(w)

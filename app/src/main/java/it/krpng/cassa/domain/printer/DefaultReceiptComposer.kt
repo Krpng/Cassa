@@ -10,11 +10,12 @@ import it.krpng.cassa.domain.pricing.CalculateOrderTotal
 import it.krpng.cassa.domain.pricing.OrderTotalResult
 
 /**
- * Pure Kotlin [ReceiptComposer] implementation (PRINT-004 / D-051 / D-065 / D-066).
+ * Pure Kotlin [ReceiptComposer] implementation (PRINT-004 / D-051 / D-065 / D-066 / D-067).
  * Snapshot-only, deterministic; no catalog, clock, locale, Room, or Android.
  *
  * M9 business receipts use [PrintTextScale.DOUBLE_BOTH] on every composed line (D-065).
- * Layout still wraps with [charsPerLine] as NORMAL width (not style-aware).
+ * Layout width is scale-aware (D-067): compose at
+ * [ReceiptTextLayout.layoutWidth] for DOUBLE_BOTH before assigning textScale.
  *
  * Printed [TOTALE] source (D-066): DRAFT derives from persisted items via
  * [CalculateOrderTotal.fromPersistedItems]; FINAL uses frozen [Order.total].
@@ -26,7 +27,11 @@ class DefaultReceiptComposer : ReceiptComposer {
         pricePrintMode: PricePrintMode,
         charsPerLine: Int,
     ): PrintableDocument {
-        val width = ReceiptTextLayout.effectiveWidth(charsPerLine)
+        val width =
+            ReceiptTextLayout.layoutWidth(
+                baseCharsPerLine = charsPerLine,
+                textScale = PrintTextScale.DOUBLE_BOTH,
+            )
         val lines = mutableListOf<PrintableLine>()
 
         appendHeader(lines, kind, order.displayNumber, width)

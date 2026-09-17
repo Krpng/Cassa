@@ -1,11 +1,38 @@
 package it.krpng.cassa.domain.printer
 
 /**
- * Character-based layout helpers for receipt composition (D-051).
+ * Character-based layout helpers for receipt composition (D-051 / D-067).
  * No ESC/POS, fonts, dots, or code-page byte lengths.
+ *
+ * [layoutWidth] applies D-067 scale-aware column capacity:
+ * `max(1, baseCharsPerLine / horizontalScaleMultiplier(textScale))`.
+ * [PrinterProfile.charsPerLine] remains the NORMAL-font calibrated base (e.g. 42).
  */
 internal object ReceiptTextLayout {
     fun effectiveWidth(charsPerLine: Int): Int = maxOf(charsPerLine, 1)
+
+    /**
+     * Horizontal character-column multiplier for [PrintTextScale] (D-067 / D-060 GS !).
+     * Width scales with DOUBLE_WIDTH / DOUBLE_BOTH; height-only does not.
+     */
+    fun horizontalScaleMultiplier(textScale: PrintTextScale): Int =
+        when (textScale) {
+            PrintTextScale.NORMAL,
+            PrintTextScale.DOUBLE_HEIGHT,
+            -> 1
+            PrintTextScale.DOUBLE_WIDTH,
+            PrintTextScale.DOUBLE_BOTH,
+            -> 2
+        }
+
+    /**
+     * Layout column width for textual wrap/padding/separators under [textScale].
+     * Never returns less than 1. Does not mutate [PrinterProfile.charsPerLine].
+     */
+    fun layoutWidth(
+        baseCharsPerLine: Int,
+        textScale: PrintTextScale,
+    ): Int = maxOf(1, baseCharsPerLine / horizontalScaleMultiplier(textScale))
 
     fun bannerLine(width: Int): String = "=".repeat(width)
 
