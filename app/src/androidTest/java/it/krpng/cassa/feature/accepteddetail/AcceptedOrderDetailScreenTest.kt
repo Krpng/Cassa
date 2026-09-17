@@ -59,6 +59,19 @@ class AcceptedOrderDetailScreenTest {
     }
 
     @Test
+    fun print023ErrorEnablesStampaAgain() {
+        setContent(
+            contentState(),
+            acceptedPrintState = AcceptedPrintUiState.Error("Bluetooth disattivato"),
+        )
+        composeRule.onNodeWithText("Bluetooth disattivato").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithText("STAMPA IN CORSO…").assertDoesNotExist()
+        composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
+        composeRule.onNodeWithText("RIPROVA STAMPA").assertDoesNotExist()
+    }
+
+    @Test
     fun archT023RistampaAbsent() {
         setContent(contentState())
         composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()

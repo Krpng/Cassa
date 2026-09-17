@@ -1144,6 +1144,215 @@ class AcceptancePreviewViewModelTest {
             assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
         }
 
+    // --- PRINT-023 / D-070 targeted retry ---
+
+    @Test
+    fun `PRINT023 Accepted manual fail then explicit STAMPA same orderId`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+            val repository =
+                FakeOrderRepository(acceptedOrder(displayNumber = "042", totalCents = 1_400))
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+            val before = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(listOf(DRAFT_ID), printer.printAcceptedIds)
+            assertEquals(
+                "Bluetooth disattivato",
+                (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+            )
+            assertEquals(0, repository.acceptCalls)
+
+            viewModel.consumeAcceptedPrintFeedback()
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+
+            assertEquals(2, printer.printAcceptedCalls)
+            assertEquals(listOf(DRAFT_ID, DRAFT_ID), printer.printAcceptedIds)
+            assertEquals(0, repository.acceptCalls)
+            val after = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+            assertEquals(before.orderId, after.orderId)
+            assertEquals(before.displayNumber, after.displayNumber)
+            assertEquals(before.total, after.total)
+            assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Error)
+        }
+
+    @Test
+    fun `PRINT023 PRINT022 auto failure then manual STAMPA same orderId`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+            val repository = acceptingRepository()
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+
+            assertEquals(1, repository.acceptCalls)
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(listOf(DRAFT_ID), printer.printAcceptedIds)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+            assertEquals(
+                DRAFT_ID,
+                (viewModel.uiState.value as AcceptancePreviewUiState.Accepted).orderId,
+            )
+            assertEquals(
+                "Ordine accettato. Bluetooth disattivato",
+                (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+            )
+
+            advanceUntilIdle()
+            testScheduler.advanceTimeBy(60_000)
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(1, repository.acceptCalls)
+
+            viewModel.consumeAcceptedPrintFeedback()
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+
+            assertEquals(2, printer.printAcceptedCalls)
+            assertEquals(listOf(DRAFT_ID, DRAFT_ID), printer.printAcceptedIds)
+            assertEquals(1, repository.acceptCalls)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+            assertEquals(
+                DRAFT_ID,
+                (viewModel.uiState.value as AcceptancePreviewUiState.Accepted).orderId,
+            )
+            assertEquals(
+                "Bluetooth disattivato",
+                (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+            )
+        }
+
+    @Test
+    fun `PRINT023 auto fail then successful manual STAMPA`() = runTest(mainDispatcher) {
+        val printer =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+        val repository = acceptingRepository()
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+        val accepted = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+
+        printer.result = PrintResult.Success
+        viewModel.consumeAcceptedPrintFeedback()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(2, printer.printAcceptedCalls)
+        assertEquals(listOf(DRAFT_ID, DRAFT_ID), printer.printAcceptedIds)
+        assertEquals(1, repository.acceptCalls)
+        val success = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Success
+        assertEquals("Ordine inviato alla stampante", success.message)
+        val after = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+        assertEquals(accepted.orderId, after.orderId)
+        assertEquals(accepted.displayNumber, after.displayNumber)
+        assertEquals(accepted.total, after.total)
+
+        advanceUntilIdle()
+        testScheduler.advanceTimeBy(60_000)
+        advanceUntilIdle()
+        assertEquals(2, printer.printAcceptedCalls)
+        assertEquals(1, repository.acceptCalls)
+    }
+
+    @Test
+    fun `PRINT023 failed manual retry does not auto-retry`() = runTest(mainDispatcher) {
+        val printer =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+        val repository = acceptingRepository()
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+        viewModel.consumeAcceptedPrintFeedback()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(2, printer.printAcceptedCalls)
+        assertEquals(1, repository.acceptCalls)
+
+        advanceUntilIdle()
+        testScheduler.advanceTimeBy(60_000)
+        advanceUntilIdle()
+        assertEquals(2, printer.printAcceptedCalls)
+        assertEquals(1, repository.acceptCalls)
+        assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Error)
+    }
+
+    @Test
+    fun `PRINT023 observer after auto print failure does not auto-retry`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+            val repository = acceptingRepository()
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.accept()
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+
+            viewModel.retry()
+            advanceUntilIdle()
+            repository.emitOrder(repository.orderSnapshot())
+            advanceUntilIdle()
+            viewModel.consumeAcceptedPrintFeedback()
+            advanceUntilIdle()
+
+            assertEquals(1, printer.printAcceptedCalls)
+            assertEquals(1, repository.acceptCalls)
+            assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+        }
+
+    @Test
+    fun `PRINT023 Accepted retry blocked in-flight then available after Error`() =
+        runTest(mainDispatcher) {
+            val gate = CompletableDeferred<Unit>()
+            val printer =
+                FakePrinterService(
+                    result = PrintResult.Failure(PrinterError.BluetoothDisabled),
+                    acceptedBlockUntil = gate,
+                )
+            val repository =
+                FakeOrderRepository(acceptedOrder(displayNumber = "001", totalCents = 700))
+            val viewModel = viewModel(repository, printerService = printer)
+            advanceUntilIdle()
+
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+            assertEquals(AcceptedPrintUiState.Printing, viewModel.acceptedPrintUiState.value)
+            assertEquals(1, printer.printAcceptedCalls)
+
+            viewModel.runAcceptedPrint()
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+
+            gate.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+            assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Error)
+
+            viewModel.consumeAcceptedPrintFeedback()
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+
+            assertEquals(2, printer.printAcceptedCalls)
+            assertEquals(listOf(DRAFT_ID, DRAFT_ID), printer.printAcceptedIds)
+            assertEquals(0, repository.acceptCalls)
+        }
+
     private suspend fun kotlinx.coroutines.test.TestScope.assertMappedAutoPrintAfterAcceptError(
         error: PrinterError,
         expectedMessage: String,

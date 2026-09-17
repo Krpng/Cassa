@@ -751,13 +751,14 @@ Ordine rimane `ACCEPTED`.
 - dopo Idle / Error consumato, `STAMPA` manuale PRINT-021 resta disponibile sul **stesso** ordine Accepted (= retry funzionale; **PRINT-023 / D-070**);
 - hardware evidence: success-path NETUM PASS; Bluetooth-disabled failure-path PASS (ordine resta ACCEPTED / visibile in Ordini di oggi).
 
-**PRINT-023 / D-070 (retry stesso ordine Accepted):**
+**PRINT-023 / D-070 COMPLETE (retry stesso ordine Accepted):**
 - retry = nuovo tap esplicito **`STAMPA`** (mai `RISTAMPA` / mai CTA `RIPROVA STAMPA` dedicata) dopo che il job precedente è terminato;
 - stesso `orderId` / `displayNumber` / snapshot immutabili / `order.total`;
 - nessun AcceptOrder / numerazione / ordine duplicato;
 - nessuna auto-retry; bloccato mentre `Printing`;
 - nessun job fallito persistente: dopo navigazione/riavvio basta `STAMPA` su dettaglio Accepted current-day;
 - dialog storico `Impossibile stampare. [RIPROVA] [CHIUDI]` **superseded** da feedback transient + re-tap `STAMPA`;
+- production change not required (ALREADY FUNCTIONALLY SATISFIED); targeted tests PASS; hardware BT-off→on retry PASS;
 - esito fisico incerto (`ConnectionLost`, ecc.) → **PRINT-024**.
 
 **PRINT-024 (fuori scope qui) — uncertain outcome:**

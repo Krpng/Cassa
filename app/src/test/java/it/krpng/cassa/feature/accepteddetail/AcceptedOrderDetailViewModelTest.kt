@@ -641,6 +641,155 @@ class AcceptedOrderDetailViewModelTest {
         advanceUntilIdle()
     }
 
+    // --- PRINT-023 / D-070 targeted retry ---
+
+    @Test
+    fun `PRINT023 fail then explicit STAMPA retries same orderId`() = runTest(mainDispatcher) {
+        val printer =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+        val before = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printer.printAcceptedCalls)
+        assertEquals(listOf(ORDER_ID), printer.printAcceptedIds)
+        assertEquals(
+            "Bluetooth disattivato",
+            (viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error).message,
+        )
+        assertEquals(before.orderId, (viewModel.uiState.value as AcceptedOrderDetailUiState.Content).orderId)
+
+        viewModel.consumeAcceptedPrintFeedback()
+        assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(2, printer.printAcceptedCalls)
+        assertEquals(listOf(ORDER_ID, ORDER_ID), printer.printAcceptedIds)
+        assertEquals(ORDER_ID, printer.printAcceptedIds[0])
+        assertEquals(ORDER_ID, printer.printAcceptedIds[1])
+        val after = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+        assertEquals(before.orderId, after.orderId)
+        assertEquals(before.displayNumber, after.displayNumber)
+        assertEquals(before.total, after.total)
+        assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Error)
+    }
+
+    @Test
+    fun `PRINT023 retry blocked in-flight then available after failure`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer =
+            FakePrinterService(
+                result = PrintResult.Failure(PrinterError.BluetoothDisabled),
+                blockUntil = gate,
+            )
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(AcceptedPrintUiState.Printing, viewModel.acceptedPrintUiState.value)
+        assertEquals(1, printer.printAcceptedCalls)
+
+        viewModel.runAcceptedPrint()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+        assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Error)
+
+        viewModel.consumeAcceptedPrintFeedback()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(2, printer.printAcceptedCalls)
+        assertEquals(listOf(ORDER_ID, ORDER_ID), printer.printAcceptedIds)
+    }
+
+    @Test
+    fun `PRINT023 successful retry shows success feedback and no third call`() =
+        runTest(mainDispatcher) {
+            val printer =
+                FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+            val viewModel =
+                viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+            advanceUntilIdle()
+            val before = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+            assertEquals(1, printer.printAcceptedCalls)
+
+            printer.result = PrintResult.Success
+            viewModel.consumeAcceptedPrintFeedback()
+            viewModel.runAcceptedPrint()
+            advanceUntilIdle()
+
+            assertEquals(2, printer.printAcceptedCalls)
+            assertEquals(listOf(ORDER_ID, ORDER_ID), printer.printAcceptedIds)
+            val success = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Success
+            assertEquals("Ordine inviato alla stampante", success.message)
+            val after = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+            assertEquals(before.orderId, after.orderId)
+            assertEquals(before.displayNumber, after.displayNumber)
+            assertEquals(before.total, after.total)
+
+            advanceUntilIdle()
+            testScheduler.advanceTimeBy(60_000)
+            advanceUntilIdle()
+            assertEquals(2, printer.printAcceptedCalls)
+        }
+
+    @Test
+    fun `PRINT023 failed retry does not auto-retry`() = runTest(mainDispatcher) {
+        val printer =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        viewModel.consumeAcceptedPrintFeedback()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(2, printer.printAcceptedCalls)
+        assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Error)
+
+        advanceUntilIdle()
+        testScheduler.advanceTimeBy(60_000)
+        advanceUntilIdle()
+        assertEquals(2, printer.printAcceptedCalls)
+        assertEquals(listOf(ORDER_ID, ORDER_ID), printer.printAcceptedIds)
+    }
+
+    @Test
+    fun `PRINT023 observer reload after failure does not auto-retry`() = runTest(mainDispatcher) {
+        val printer =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.BluetoothDisabled))
+        val orderFlow = MutableStateFlow<Order?>(acceptedOrder())
+        val viewModel = viewModel(orderFlow = orderFlow, printer = printer)
+        advanceUntilIdle()
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+
+        orderFlow.value = acceptedOrder()
+        advanceUntilIdle()
+        viewModel.consumeAcceptedPrintFeedback()
+        advanceUntilIdle()
+
+        assertEquals(1, printer.printAcceptedCalls)
+        assertTrue(viewModel.uiState.value is AcceptedOrderDetailUiState.Content)
+    }
+
     private suspend fun kotlinx.coroutines.test.TestScope.assertMappedAcceptedPrintError(
         error: PrinterError,
         expectedMessage: String,

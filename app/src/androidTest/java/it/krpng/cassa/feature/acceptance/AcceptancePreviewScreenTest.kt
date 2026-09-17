@@ -351,6 +351,27 @@ class AcceptancePreviewScreenTest {
             .assertIsDisplayed()
         composeRule.onNodeWithText("STAMPA").assertIsEnabled()
         composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
+        composeRule.onNodeWithText("RIPROVA STAMPA").assertDoesNotExist()
+    }
+
+    @Test
+    fun print023AcceptedErrorEnablesStampaAgain() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = acceptedState(),
+                    acceptedPrintState = AcceptedPrintUiState.Error("Bluetooth disattivato"),
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Bluetooth disattivato").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithText("STAMPA IN CORSO…").assertDoesNotExist()
+        composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
+        composeRule.onNodeWithText("RIPROVA STAMPA").assertDoesNotExist()
     }
 
     private fun readyState(): AcceptancePreviewUiState.Ready =

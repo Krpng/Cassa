@@ -531,19 +531,20 @@ Nascondi / rimuovi dopo successo:
 
 ## 12. Stampa fallita
 
-Se ordine già accettato (**PRINT-023 / D-070** — funzionalmente soddisfatto):
+Se ordine già accettato (**PRINT-023 / D-070 COMPLETE** — funzionalmente soddisfatto via re-tap `STAMPA`; no production change):
 
 - feedback transient di errore stampante (PRINT-021 / PRINT-022 wording);
 - CTA stampa resta **`STAMPA`** (mai `RISTAMPA`);
 - dopo fine job (`Error`/`Success` → Idle), un nuovo tap esplicito `STAMPA` ritenta `printAccepted(stesso orderId)`;
-- nessun dialog obbligatorio `[RIPROVA] [CHIUDI]` dedicato alla stampa Accepted (pattern storico superseduto).
+- nessun dialog obbligatorio `[RIPROVA] [CHIUDI]` dedicato alla stampa Accepted (pattern storico superseduto);
+- hardware: BT-off failure → BT-on explicit retry PASS (same order/number; one FINAL; no BOZZA).
 
 Se outcome fisico incerto (**PRINT-024**, fuori scope PRINT-023):
 ```text
 La connessione si è interrotta durante la stampa.
 Verifica se la copia è uscita prima di riprovare.
 ```
-(nessuna implementazione PRINT-024 in questo freeze.)
+(nessuna implementazione PRINT-024 in questa chiusura.)
 
 Se bozza:
 - feedback PRINT-020;

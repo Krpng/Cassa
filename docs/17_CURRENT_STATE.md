@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-023 (Retry same order / D-070 FROZEN; functionally satisfied); M9 11/14; PRINT-022 COMPLETE
+NEXT: M9 — PRINT-024 (uncertain outcome microcopy); M9 12/14; PRINT-023 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1986,4 +1986,55 @@ gradle: NOT RUN
 hardware: NOT RUN
 ```
 
-**D-070 FROZEN — PRINT-023 READY FOR TEST/CLOSURE.** Do not implement new production print UX. Do not start PRINT-024 / HW-002 until authorized.
+**D-070 FROZEN.** See §59 for PRINT-023 final closure evidence.
+
+## 59. PRINT-023 FINAL CLOSURE (2026-09-17) — COMPLETE
+
+```yaml
+task: PRINT-023
+status: COMPLETE
+contract: D-070 FROZEN
+base_HEAD: e41ef78
+M9: 12/14 COMPLETE
+classification: ALREADY FUNCTIONALLY SATISFIED
+production_change_needed: NO
+production_files_changed: NONE
+retry_mechanism: EXISTING STAMPA
+retry_target: SAME ACCEPTED ORDER
+same_orderId: YES
+same_displayNumber: YES
+AcceptOrder_on_retry: NO
+numbering_mutation: NONE
+duplicate_order: NO
+automatic_retry: NO
+blocked_while_printing: YES
+available_after_failure: YES
+special_retry_CTA: NONE
+UI_label: STAMPA
+PRINT-024: NOT IMPLEMENTED
+focused_AcceptedOrderDetailViewModel: 38 PASS (5 PRINT-023)
+focused_AcceptancePreviewViewModel: 59 PASS (6 PRINT-023)
+assembleDebug: PASS
+assembleDebugAndroidTest: PASS
+hardware_retry_validation: PASS
+hardware_first_failure: BluetoothDisabled (Bluetooth OFF)
+order_after_first_failure: ACCEPTED
+bluetooth_restored: YES
+second_explicit_STAMPA: PASS
+FINAL_receipt_on_retry: PASS
+BOZZA: ABSENT
+new_order_after_retry: NO
+new_number_after_retry: NO
+automatic_extra_print: NO
+crash: NO
+PRINT-020: PRESERVED
+PRINT-021: PRESERVED
+PRINT-022: PRESERVED
+remaining_M9:
+  - PRINT-024
+  - HW-002
+schema: DB_v2 UNCHANGED
+migration: NONE
+```
+
+**PRINT-023 COMPLETE.** Next authorized task: **PRINT-024** (uncertain physical outcome microcopy). Do not start HW-002 without explicit authorization.
