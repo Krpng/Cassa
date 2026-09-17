@@ -1888,6 +1888,189 @@ Schema: **DB v2 unchanged**. Migration: **NONE**.
 
 **READY FOR IMPLEMENTATION.**
 
+### D-064 PRINT-020 Draft print integration contract (2026-09-17) — FROZEN
+
+**Task:** PRINT-020 — PrintDraft integration
+**Status:** **FROZEN** — **PRINT-020 READY FOR IMPLEMENTATION**.
+**Base HEAD:** `b026dbb` (BT-007 COMPLETE).
+**Depends on:** M8 PRINT-007 `PrinterService.printDraft` + Mutex (D-054); BT-006 `PrinterProfileProvider` (D-061/D-062); BT-004/005 driver; BT-007 Hilt `PrinterService` graph.
+**Docs-only freeze:** no production/test code changes in this decision.
+
+#### Purpose (FROZEN)
+
+Deliver cashier-facing **Acceptance Preview → `STAMPA BOZZA`** that:
+
+1. prints the **current DRAFT** via existing `PrinterService.printDraft(orderId)`;
+2. is **read-only** w.r.t. order/business persistence (no accept, numbering, status, Room writes);
+3. shows success/failure feedback without PRINT-021..024 / HW-002 scope.
+
+Does **not** own accept-and-print, accepted reprint, uncertain accepted microcopy, or receipt typography redesign.
+
+#### API (FROZEN — actual M8 contract)
+
+```kotlin
+suspend fun printDraft(orderId: String): PrintResult
+```
+
+Actual `DefaultPrinterService` (D-054):
+
+1. whole-job `Mutex` (shared with `printAccepted` / `testPrint`);
+2. `orderRepository.getById(orderId)` once → missing → `OrderNotFound`;
+3. require `status == DRAFT` else `InvalidOrderState`;
+4. `PrinterProfileProvider.getActiveProfile()` → null → `PrinterNotConfigured`;
+5. `ReceiptComposer.compose(order, kind=DRAFT, pricePrintMode=profile.pricePrintMode, charsPerLine=profile.charsPerLine)`;
+6. encode → connect → print → disconnect.
+
+**No** ViewModel-built `PrinterProfile`. **No** direct `PrinterDriver` from UI/VM.
+**No** silent redesign of M8 service semantics.
+
+#### UI entry (FROZEN)
+
+| Item | Value |
+|---|---|
+| Screen | existing **Acceptance Preview** (`AcceptancePreviewScreen` / `AcceptancePreviewRoute`) |
+| Placement | bottom action area with `ANNULLA` / `ACCETTA` (add `STAMPA BOZZA`; no new NavHost destination) |
+| Label | **`STAMPA BOZZA`** exactly (PRD §8 / UX §9 / business §19) |
+| ViewModel | extend **`AcceptancePreviewViewModel`** with orthogonal draft-print phase |
+
+**Not** on `NewOrderScreen` (editor). **Not** label bare `STAMPA` (reserved for ACCEPTED / PRINT-021).
+**Not** `ACCETTA E STAMPA` (PRINT-022).
+
+#### Eligibility / enablement (FROZEN)
+
+**Enabled** only when all hold:
+
+- UI state is `AcceptancePreviewUiState.Ready` (implies persisted draft with ≥1 item — empty uses `EmptyDraft`, COMPLETA already gated);
+- accept job **not** in progress (`!isAccepting`);
+- draft-print phase **not** `PRINTING`.
+
+**No button / no service call** when:
+
+- Loading / NotFound / NotDraft / EmptyDraft / Failure / Accepted;
+- no active printable Ready draft.
+
+**Printer / Bluetooth / permission** are **not** required to be pre-validated in preview UI the BT-007 way. After explicit tap, **service result is authoritative**:
+
+| Situation | Behavior |
+|---|---|
+| No selected printer | `PrinterNotConfigured` → UX below |
+| Stale/unpaired selected id | profile may still resolve (BT-006 provider); connect → typically `ConnectionFailed` / typed driver error |
+| Permission denied mid-job | `PermissionDenied` |
+| Bluetooth disabled mid-job | `BluetoothDisabled` |
+
+Do **not** silently pick another printer. Do **not** auto-clear selection.
+
+#### Snapshot semantics (FROZEN)
+
+One tap → one job → service loads **one** `Order` snapshot at job start (`getById` under Mutex) then composes that snapshot only.
+
+- Concurrent draft edits after load **do not** mix into that receipt.
+- UI observation may show newer draft independently; print completion must **not** restore an older draft into UI.
+- No new snapshot architecture beyond existing D-054 load-once.
+
+#### Business side effects (FROZEN)
+
+`printDraft` = **READ-ONLY business operation**.
+
+MUST NOT:
+
+- accept / set `ACCEPTED`;
+- allocate `displayNumber` / touch `numbering_state`;
+- set `acceptedAt` / `businessDate`;
+- mutate items/quantities/notes;
+- clear/create draft;
+- write Room for the order (printer I/O + transient UI only).
+
+Header paper: **`BOZZA`** centered (existing `DefaultReceiptComposer`); **no** number.
+
+#### Receipt / profile (FROZEN)
+
+- Composer: existing `DefaultReceiptComposer` / PRINT-004 content rules unchanged.
+- Profile: `PrinterProfileProvider` (D-061 physical + DataStore `PricePrintMode`).
+- Physical: 80 / 42 / IBM00858 / ESC t 19 / feed 3 / no cutter.
+- M9 base preference **DOUBLE_BOTH**: **NOT applied** by current composer (`textScale` default NORMAL); **DEFERRED POST-M9** — PRINT-020 must **not** smuggle typography redesign.
+
+#### Execution (FROZEN)
+
+```text
+explicit STAMPA BOZZA tap
+  → AcceptancePreviewViewModel
+  → PrinterService.printDraft(draftId)
+```
+
+- One tap = one job; ViewModel job + service Mutex.
+- While `PRINTING`: disable `STAMPA BOZZA` and `ACCETTA`; keep preview content read-only as today; `ANNULLA` may remain (leaving destination cancels VM job; draft unchanged).
+- **No** print from composition / recomposition / ON_RESUME / draft load / autosave / edit / printer settings / permission callback.
+- **No** automatic retry/reconnect. Manual re-tap when idle/enabled = new job.
+
+#### Success UX (FROZEN)
+
+On `PrintResult.Success`: transient **`Bozza inviata alla stampante`**.
+
+Meaning: service completed connect/print/disconnect for that draft snapshot. Do **not** claim “ordine salvato/stampato” (status remains DRAFT).
+
+Prefer ephemeral inline/Snackbar pattern consistent with BT-007 (consume once; no replay; no timer clearing a newer result — use keyed effect / cancel prior delay).
+
+#### Error UX (FROZEN) — map existing `PrinterError` only
+
+| Error | User-facing |
+|---|---|
+| `PermissionDenied` | Autorizzazione Bluetooth necessaria |
+| `BluetoothDisabled` | Bluetooth disattivato |
+| `PrinterNotConfigured` | Nessuna stampante selezionata |
+| `ConnectionFailed` | Impossibile connettersi alla stampante |
+| `ConnectionLost` | Connessione interrotta durante la stampa |
+| `Timeout` | Timeout di connessione alla stampante |
+| `PrintFailed` / encoder / profile / `Unknown` / unexpected `OrderNotFound`/`InvalidOrderState` in this UI path | Impossibile stampare la bozza |
+| unexpected exception | Impossibile stampare la bozza (recoverable; leave Printing) |
+
+**No** PRINT-024 “Verifica se la copia è uscita…” on draft (accepted uncertainty = PRINT-024 later). Draft reprint is safe w.r.t. business state.
+
+Unexpected service exception: clear Printing → generic recoverable error → no crash.
+
+`CancellationException`: rethrow; do not map to generic failure.
+
+#### Orthogonal print phase (FROZEN)
+
+Prefer sealed phase on `AcceptancePreviewViewModel`: `Idle` / `Printing` / transient `Success` / `Error` — **orthogonal** to `AcceptancePreviewUiState`.
+
+Print completion updates **only** print phase/feedback — never overwrites a newer Ready draft observation.
+
+#### Tests (FROZEN) — JVM primary on ViewModel (+ reuse PRINT-007 service evidence)
+
+A no Ready / NotFound → no `printDraft`
+B EmptyDraft → no call
+C Ready → exactly one `printDraft(draftId)`
+D double-tap while printing → one job
+E success → Printing cleared + success message; new tap allowed
+F–K error mappings (PermissionDenied…Timeout)
+L PrintFailed/Unknown + unexpected exception
+N manual retry → second explicit call
+O–R draft status/`displayNumber`/`numbering_state` unchanged (service/repo boundary or fake)
+S print completion does not overwrite newer Ready
+T/U no auto-print from edit / refresh / recomposition / ON_RESUME
+V PricePrintMode only via profile/service path
+
+Compose optional: button enabled/disabled/progress/one callback if existing preview test infra fits.
+
+#### Manual hardware (FROZEN)
+
+Samsung + NETUM **REQUIRED** after implementation/code review (one tap → one paper; draft remains DRAFT; no displayNumber). **Not** in this freeze task.
+
+#### Out of scope (FROZEN)
+
+PRINT-021..024; HW-002; `ACCETTA E STAMPA`; NewOrder editor print; receipt DOUBLE_BOTH redesign; discovery/pairing; transport/timeout changes; schema/migrations; cloud.
+
+Schema: **DB v2 unchanged**. Migration: **NONE**.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### PRINT-020 readiness
+
+**READY FOR IMPLEMENTATION.**
+
 
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.

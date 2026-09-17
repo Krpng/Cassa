@@ -454,6 +454,20 @@ Contenuto:
 
 Non deve creare Order.
 
+## 26bis. Draft print UI (PRINT-020 / D-064)
+
+Anteprima accettazione (Acceptance Preview):
+`STAMPA BOZZA`.
+
+Invoca `PrinterService.printDraft(orderId)`.
+
+- header carta `BOZZA`;
+- nessun `displayNumber`;
+- ordine resta `DRAFT`;
+- nessuna mutation business/Room;
+- nessuna auto-retry;
+- tipografia DOUBLE_BOTH business: **DEFERRED POST-M9**.
+
 ## 27. Hardware validation NETUM
 
 Checklist (**HW-001 / D-060** capability + **D-061** physical freeze):

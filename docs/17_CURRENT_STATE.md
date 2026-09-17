@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-020 NEXT; BT-007 COMPLETE; M9 8/14
+NEXT: M9 — PRINT-020 READY (D-064 FROZEN); BT-007 COMPLETE; M9 8/14
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1600,3 +1600,32 @@ migration: NONE
 ```
 
 **BT-007 COMPLETE.** Next: **PRINT-020** (PrintDraft integration) when authorized. Do not start PRINT-021+ / HW-002 without explicit authorization.
+
+## 49. PRINT-020 CONTRACT FREEZE (2026-09-17) — D-064 FROZEN
+
+```yaml
+decision: D-064
+status: FROZEN
+base_HEAD: b026dbb
+M8: COMPLETE
+M9: 8/14 COMPLETE
+BT-001..BT-007: COMPLETE
+HW-001: COMPLETE
+PRINT-020: READY FOR IMPLEMENTATION
+title: Draft print integration (STAMPA BOZZA)
+entry: AcceptancePreview -> STAMPA BOZZA
+API: PrinterService.printDraft(orderId: String): PrintResult
+snapshot: service getById once under Mutex (D-054)
+header: BOZZA / no displayNumber
+business_mutation: NONE (READ-ONLY)
+auto_retry: NO
+PRINT-021+: OUT OF SCOPE
+DOUBLE_BOTH_receipt: DEFERRED POST-M9
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed: NO
+tests_changed: NO
+gradle_executed: NO
+```
+
+**READY FOR IMPLEMENTATION.** Do not start PRINT-021+ / HW-002 in this freeze.

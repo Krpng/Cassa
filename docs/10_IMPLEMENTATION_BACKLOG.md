@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **8/14**. Next authorized task: **PRINT-020** — PrintDraft integration. Do not start PRINT-021+ / HW-002 until PRINT-020 COMPLETE (unless explicitly authorized).
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **8/14**. Next authorized task: **PRINT-020** — PrintDraft integration — **READY FOR IMPLEMENTATION** (**D-064 FROZEN**). Do not start PRINT-021+ / HW-002 until PRINT-020 COMPLETE (unless explicitly authorized).
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -688,7 +688,24 @@ Demo M7 (COMPLETE):
 
 **Not owned:** PRINT-020..024; HW-002; receipt typography / DOUBLE_BOTH application; discovery/pairing; transport/timeout changes; physical profile editor; Room/migrations; BT-006 permission-attempt persistence Minor.
 
-### PRINT-020 [P1] PrintDraft integration — NEXT
+### PRINT-020 [P1] PrintDraft integration — READY FOR IMPLEMENTATION (D-064)
+> Cashier **Acceptance Preview → `STAMPA BOZZA`** invokes existing `PrinterService.printDraft(orderId)`. Read-only vs order/business persistence.
+
+**Status:** **READY FOR IMPLEMENTATION**. Contract: **D-064 FROZEN**.
+**Depends on:** BT-007 COMPLETE (`b026dbb`); PRINT-007 `printDraft` + Mutex (D-054); BT-006 `PrinterProfileProvider`.
+
+**Owns (AC) — D-064 FROZEN:**
+1. Button **`STAMPA BOZZA`** on existing Acceptance Preview action area (with ANNULLA/ACCETTA); no new NavHost destination.
+2. Enabled only for `AcceptancePreviewUiState.Ready` + not accepting + not already printing.
+3. One explicit tap → one `printDraft(draftId)`; profile via `PrinterProfileProvider`; no direct `PrinterDriver` from UI.
+4. Header **`BOZZA`** / no `displayNumber`; draft remains DRAFT; no numbering mutation.
+5. Success: transient **Bozza inviata alla stampante**; map `PrinterError` per D-064; no auto-retry; no PRINT-024 accepted uncertainty copy.
+6. Orthogonal print phase on `AcceptancePreviewViewModel`.
+7. JVM ViewModel tests A–V (D-064); Samsung+NETUM manual after review.
+
+**Blocking open questions:** NONE.
+
+**Not owned:** PRINT-021..024; HW-002; `ACCETTA E STAMPA`; NewOrder editor print; DOUBLE_BOTH receipt redesign (POST-M9); discovery/pairing; transport; schema/migrations.
 
 ### PRINT-021 [P1] PrintAccepted integration
 
