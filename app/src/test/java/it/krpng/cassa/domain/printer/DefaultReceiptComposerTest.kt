@@ -11,12 +11,15 @@ import it.krpng.cassa.domain.model.ProductCategory
 import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * PRINT-004 / D-051 golden and focused tests.
+ * PRINT-004 / D-051 / D-065 / D-066 golden and focused tests.
  * Owns PRINT-T001..T008, T010..T014. Does not claim PRINT-T009.
+ * D-065: every business PrintableLine uses DOUBLE_BOTH.
+ * D-066: DRAFT TOTALE from persisted items; FINAL from order.total.
  */
 class DefaultReceiptComposerTest {
     private val composer = DefaultReceiptComposer()
@@ -609,6 +612,171 @@ class DefaultReceiptComposerTest {
         assertEquals(expected, compose(order, PrintKind.FINAL, PricePrintMode.DETAILED).lines)
     }
 
+    // --- D-065 business receipt base text scale ---
+
+    @Test
+    fun `D065 DRAFT every line is DOUBLE_BOTH preserving BOZZA alignment and emphasis`() {
+        val order =
+            baseOrder(
+                status = OrderStatus.DRAFT,
+                displayNumber = null,
+                items = listOf(pizzaItem()),
+                totalCents = 700,
+            )
+        val doc = compose(order, PrintKind.DRAFT, PricePrintMode.DETAILED)
+        assertTrue(doc.lines.isNotEmpty())
+        assertTrue(doc.lines.all { it.textScale == PrintTextScale.DOUBLE_BOTH })
+        assertEquals(ReceiptTextLayout.center("BOZZA", width), doc.lines[1].text)
+        assertEquals(PrintEmphasis.EMPHASIZED, doc.lines[1].emphasis)
+        assertEquals(PrintAlignment.LEFT, doc.lines[1].alignment)
+        assertFalse(doc.lines.joinToString("\n") { it.text }.contains("A37"))
+        assertTrue(doc.lines.none { it.textScale == PrintTextScale.NORMAL })
+    }
+
+    @Test
+    fun `D065 FINAL every line is DOUBLE_BOTH preserving displayNumber alignment and emphasis`() {
+        val order =
+            baseOrder(
+                status = OrderStatus.ACCEPTED,
+                displayNumber = "A37",
+                items = listOf(pizzaItem()),
+                totalCents = 700,
+            )
+        val doc = compose(order, PrintKind.FINAL, PricePrintMode.DETAILED)
+        assertTrue(doc.lines.isNotEmpty())
+        assertTrue(doc.lines.all { it.textScale == PrintTextScale.DOUBLE_BOTH })
+        assertEquals(ReceiptTextLayout.center("A37", width), doc.lines[1].text)
+        assertEquals(PrintEmphasis.EMPHASIZED, doc.lines[1].emphasis)
+        assertEquals(PrintAlignment.LEFT, doc.lines[1].alignment)
+        assertFalse(doc.lines.any { it.text.contains("BOZZA") })
+    }
+
+    @Test
+    fun `D065 DETAILED and TOTAL_ONLY content and PricePrintMode semantics unchanged aside from scale`() {
+        val order =
+            baseOrder(
+                displayNumber = "A37",
+                generalNote = "Portare fuori",
+                items =
+                    listOf(
+                        pizzaItem(
+                            additions = listOf(addition("a1", "Provola", 300, 0)),
+                            removals = listOf(removal("r1", "Mozzarella", 0)),
+                            note = "ben cotta",
+                        ),
+                        item(
+                            id = "b1",
+                            name = "Acqua",
+                            category = ProductCategory.BIBITA,
+                            sequence = 1,
+                            unitCents = 100,
+                        ),
+                    ),
+                totalCents = 1100,
+            )
+
+        val detailed = compose(order, PrintKind.FINAL, PricePrintMode.DETAILED)
+        val totalOnly = compose(order, PrintKind.FINAL, PricePrintMode.TOTAL_ONLY)
+
+        assertTrue(detailed.lines.all { it.textScale == PrintTextScale.DOUBLE_BOTH })
+        assertTrue(totalOnly.lines.all { it.textScale == PrintTextScale.DOUBLE_BOTH })
+
+        val detailedTexts = detailed.lines.map { it.text }
+        assertTrue(detailedTexts.any { it.contains("1x Margherita") && it.contains("7,00") })
+        assertTrue(detailedTexts.any { it.contains("+ Provola") && it.contains("3,00") })
+        assertTrue(detailedTexts.any { it.contains("- Mozzarella") && !it.contains(",") })
+        assertTrue(detailedTexts.any { it.contains("NOTA: ben cotta") })
+        assertTrue(detailedTexts.any { it == "NOTE ORDINE:" })
+        assertTrue(detailedTexts.any { it.contains("Portare fuori") })
+        assertTrue(detailedTexts.any { it.contains("TOTALE") && it.contains("11,00") })
+
+        val totalOnlyTexts = totalOnly.lines.map { it.text }
+        assertTrue(totalOnlyTexts.any { it.startsWith("1x Margherita") && !it.contains("7,00") })
+        assertTrue(totalOnlyTexts.any { it.contains("+ Provola") && !it.contains("3,00") })
+        assertTrue(totalOnlyTexts.any { it.contains("TOTALE") && it.contains("11,00") })
+        assertTrue(totalOnlyTexts.contains(""))
+
+        assertTrue(detailed.lines.all { it.alignment == PrintAlignment.LEFT })
+        assertTrue(totalOnly.lines.all { it.alignment == PrintAlignment.LEFT })
+        assertEquals(
+            PrintEmphasis.EMPHASIZED,
+            detailed.lines.first { it.text.contains("PIZZE") }.emphasis,
+        )
+    }
+
+    // --- D-066 draft printable total source ---
+
+    @Test
+    fun `D066 DRAFT derives TOTALE from items when order total is ZERO`() {
+        val order =
+            baseOrder(
+                status = OrderStatus.DRAFT,
+                displayNumber = null,
+                totalCents = 0,
+                items =
+                    listOf(
+                        pizzaItem(
+                            id = "p-4f",
+                            name = "4 formaggi",
+                            unitCents = 1400,
+                            sequence = 1,
+                        ),
+                        pizzaItem(
+                            id = "p-mar",
+                            name = "Marinara",
+                            unitCents = 600,
+                            sequence = 2,
+                        ),
+                        item(
+                            id = "f-ara",
+                            name = "Arancino G",
+                            category = ProductCategory.FRITTURA,
+                            sequence = 1,
+                            unitCents = 250,
+                        ),
+                    ),
+            )
+        assertEquals(Money.ZERO, order.total)
+        assertNull(order.displayNumber)
+        assertEquals(OrderStatus.DRAFT, order.status)
+
+        val doc = compose(order, PrintKind.DRAFT, PricePrintMode.DETAILED)
+        val texts = doc.lines.map { it.text }
+
+        assertEquals(PrintKind.DRAFT, doc.kind)
+        assertEquals(ReceiptTextLayout.center("BOZZA", width), doc.lines[1].text)
+        assertFalse(texts.any { it.contains("A37") })
+        assertTrue(texts.any { it.contains("1x 4 formaggi") && it.endsWith("14,00") })
+        assertTrue(texts.any { it.contains("1x Marinara") && it.endsWith("6,00") })
+        assertTrue(texts.any { it.contains("1x Arancino G") && it.endsWith("2,50") })
+        assertTrue(texts.any { it.startsWith("TOTALE") && it.endsWith("22,50") })
+        assertFalse(texts.any { it.startsWith("TOTALE") && it.endsWith("0,00") })
+        assertTrue(doc.lines.isNotEmpty())
+        assertTrue(doc.lines.all { it.textScale == PrintTextScale.DOUBLE_BOTH })
+
+        // Compose is observational — input aggregate remains ZERO.
+        assertEquals(Money.ZERO, order.total)
+        assertEquals(OrderStatus.DRAFT, order.status)
+        assertNull(order.displayNumber)
+    }
+
+    @Test
+    fun `D066 FINAL still prints frozen order total not item sum`() {
+        val order =
+            baseOrder(
+                status = OrderStatus.ACCEPTED,
+                displayNumber = "A37",
+                totalCents = 9999,
+                items = listOf(pizzaItem(unitCents = 700)),
+            )
+        // Item-derived sum would be 7,00; frozen accepted total is 99,99.
+        val texts = compose(order, PrintKind.FINAL, PricePrintMode.DETAILED).lines.map { it.text }
+        assertTrue(texts.any { it.startsWith("TOTALE") && it.endsWith("99,99") })
+        assertFalse(texts.any { it.startsWith("TOTALE") && it.endsWith("7,00") })
+        assertEquals(ReceiptTextLayout.center("A37", width), texts[1])
+        assertEquals(Money.ofCents(9999), order.total)
+    }
+
     // --- helpers ---
 
     private fun compose(
@@ -625,7 +793,12 @@ class DefaultReceiptComposerTest {
     private fun line(
         text: String,
         emphasis: PrintEmphasis = PrintEmphasis.NORMAL,
-    ): PrintableLine = PrintableLine(text, emphasis)
+    ): PrintableLine =
+        PrintableLine(
+            text = text,
+            emphasis = emphasis,
+            textScale = PrintTextScale.DOUBLE_BOTH,
+        )
 
     private fun baseOrder(
         status: OrderStatus = OrderStatus.ACCEPTED,

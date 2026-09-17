@@ -7,10 +7,17 @@ import it.krpng.cassa.domain.model.OrderItem
 import it.krpng.cassa.domain.model.OrderItemAddition
 import it.krpng.cassa.domain.model.PricePrintMode
 import it.krpng.cassa.domain.pricing.CalculateOrderTotal
+import it.krpng.cassa.domain.pricing.OrderTotalResult
 
 /**
- * Pure Kotlin [ReceiptComposer] implementation (PRINT-004 / D-051).
+ * Pure Kotlin [ReceiptComposer] implementation (PRINT-004 / D-051 / D-065 / D-066).
  * Snapshot-only, deterministic; no catalog, clock, locale, Room, or Android.
+ *
+ * M9 business receipts use [PrintTextScale.DOUBLE_BOTH] on every composed line (D-065).
+ * Layout still wraps with [charsPerLine] as NORMAL width (not style-aware).
+ *
+ * Printed [TOTALE] source (D-066): DRAFT derives from persisted items via
+ * [CalculateOrderTotal.fromPersistedItems]; FINAL uses frozen [Order.total].
  */
 class DefaultReceiptComposer : ReceiptComposer {
     override fun compose(
@@ -51,10 +58,31 @@ class DefaultReceiptComposer : ReceiptComposer {
                 }
         }
 
-        appendTotal(lines, order.total, width)
+        appendTotal(lines, printableTotal(order, kind), width)
 
-        return PrintableDocument(kind = kind, lines = lines)
+        return PrintableDocument(
+            kind = kind,
+            lines = lines.map { it.copy(textScale = PrintTextScale.DOUBLE_BOTH) },
+        )
     }
+
+    /**
+     * D-066: DRAFT total from item snapshots (ORD-022 / Acceptance Preview parity);
+     * FINAL total from immutable accepted [Order.total].
+     */
+    private fun printableTotal(
+        order: Order,
+        kind: PrintKind,
+    ): Money =
+        when (kind) {
+            PrintKind.FINAL -> order.total
+            PrintKind.DRAFT ->
+                when (val computed = CalculateOrderTotal.fromPersistedItems(order.items).orderTotal) {
+                    is OrderTotalResult.Success -> computed.total
+                    OrderTotalResult.AmountOverflow ->
+                        throw ArithmeticException("Draft order total overflow")
+                }
+        }
 
     private fun appendHeader(
         lines: MutableList<PrintableLine>,
