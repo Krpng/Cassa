@@ -1563,8 +1563,9 @@ cutCommandVariant = null
 
 - M9 preferred base print scale: **DOUBLE_BOTH** (GS ! `0x11`).
 - Belongs to `PrintableDocument` / receipt styling — **not** stored on `PrinterProfile`.
-- Detailed receipt hierarchy (title / order number / total / spacing / effective 2× wrap): **DEFERRED POST-M9 / REAL USE**.
-- Do not treat this freeze as authorization to redesign production `ReceiptComposer` unless separately authorized.
+- **Application** of that base scale on production business receipts: **D-065 FROZEN** (supersedes the earlier “preference only / deferred” reading for base scale).
+- Detailed receipt hierarchy (title / order number / total / spacing / effective 2× wrap): **DEFERRED POST-M9 / REAL USE** (unchanged by D-065).
+- Do not treat D-061 alone as authorization to redesign production `ReceiptComposer` contents; D-065 authorizes **base `textScale` only**.
 
 #### Code page pair (FROZEN)
 
@@ -1985,10 +1986,10 @@ Header paper: **`BOZZA`** centered (existing `DefaultReceiptComposer`); **no** n
 
 #### Receipt / profile (FROZEN)
 
-- Composer: existing `DefaultReceiptComposer` / PRINT-004 content rules unchanged.
+- Composer: existing `DefaultReceiptComposer` / PRINT-004 content rules unchanged by PRINT-020.
 - Profile: `PrinterProfileProvider` (D-061 physical + DataStore `PricePrintMode`).
 - Physical: 80 / 42 / IBM00858 / ESC t 19 / feed 3 / no cutter.
-- M9 base preference **DOUBLE_BOTH**: **NOT applied** by current composer (`textScale` default NORMAL); **DEFERRED POST-M9** — PRINT-020 must **not** smuggle typography redesign.
+- M9 business receipt base scale **DOUBLE_BOTH**: owned by **D-065** (not by PRINT-020). PRINT-020 must **not** smuggle typography redesign beyond what D-065 separately authorizes.
 
 #### Execution (FROZEN)
 
@@ -2059,7 +2060,7 @@ Samsung + NETUM **REQUIRED** after implementation/code review (one tap → one p
 
 #### Out of scope (FROZEN)
 
-PRINT-021..024; HW-002; `ACCETTA E STAMPA`; NewOrder editor print; receipt DOUBLE_BOTH redesign; discovery/pairing; transport/timeout changes; schema/migrations; cloud.
+PRINT-021..024; HW-002; `ACCETTA E STAMPA`; NewOrder editor print; receipt hierarchy redesign beyond D-065 base scale; discovery/pairing; transport/timeout changes; schema/migrations; cloud.
 
 Schema: **DB v2 unchanged**. Migration: **NONE**.
 
@@ -2069,7 +2070,100 @@ Schema: **DB v2 unchanged**. Migration: **NONE**.
 
 #### PRINT-020 readiness
 
-**READY FOR IMPLEMENTATION.**
+**READY FOR IMPLEMENTATION** (integration contract). Hardware draft-print validation is **PAUSED** until **D-065** base scale is implemented (deployed APK still uses composer default `NORMAL`).
+
+
+### D-065 M9 business receipt base text scale (2026-09-17) — FROZEN
+
+**Task:** M9 receipt base scale contract addendum (docs-only freeze).
+**Status:** **FROZEN**.
+**Depends on:** D-060 (`PrintTextScale` / `GS !`); D-061 (DOUBLE_BOTH preference + `charsPerLine=42`); D-051 / PRINT-004 (`DefaultReceiptComposer`); D-064 / PRINT-020 (draft print path consumes composer output).
+**Base HEAD (docs freeze point):** `ff51c5d` (D-064 on main). PRINT-020 production remains **UNCOMMITTED** / code review PASS; hardware draft print **NOT EXECUTED**.
+
+#### Purpose (FROZEN)
+
+Freeze that **production M9 business receipts** use **`PrintableLine.textScale = DOUBLE_BOTH`** (2× width + 2× height) as the **base document style** for lines produced by `DefaultReceiptComposer`, **before** PRINT-020 hardware validation.
+
+This is a **DOCUMENT STYLE** decision. It is **not** a `PrinterProfile` field.
+
+#### Production business receipt scale (FROZEN)
+
+```text
+PrintableLine.textScale = DOUBLE_BOTH   # GS ! 0x11 = 2x width + 2x height
+```
+
+Applies to **all existing receipt lines** emitted by `DefaultReceiptComposer` for business receipts, preserving:
+
+- content / ordering
+- emphasis
+- alignment
+- pricing semantics (`PricePrintMode` DETAILED / TOTAL_ONLY)
+- notes / totals / general note
+- BOZZA / displayNumber header semantics
+
+**No** receipt redesign. **No** change to product layout rules, quantities, additions/removals, money formatting, or section titles beyond assigning the base scale.
+
+#### PrinterProfile (FROZEN — UNCHANGED)
+
+D-061 physical values remain:
+
+```text
+paperWidthMm      = 80
+charsPerLine      = 42
+codePage          = IBM00858
+escPosCodeTable   = 19
+feedLines         = 3
+supportsCut       = false
+cutCommandVariant = null
+```
+
+- **Do not** store text scale on `PrinterProfile`.
+- **Do not** change `charsPerLine` to 21 (or any other value) because of DOUBLE_BOTH.
+- `charsPerLine = 42` remains the calibrated **NORMAL-font** printer/profile layout width.
+
+#### Wrapping / known M9 limitation (FROZEN — not solved here)
+
+Audit of current production layout (`ReceiptTextLayout` / `DefaultReceiptComposer`):
+
+- Wrap, banners, separators, and same-line price fit use **`charsPerLine` only**.
+- Layout is **not** style-aware: it does **not** reduce effective wrap width when `textScale` is DOUBLE_BOTH.
+- Physical horizontal capacity under DOUBLE_BOTH is approximately **half** of NORMAL; therefore lines composed for width 42 may **overflow / wrap poorly** on paper at 2× until a later refinement.
+
+**Known M9 limitation:** style-aware / effective-2× wrapping is **NOT** implemented and is **DEFERRED POST-M9** (with other visual refinements: per-section sizes, title/total/notes hierarchy, spacing, feed fine tuning).
+
+Do **not** silently redefine `charsPerLine` semantics in this contract.
+
+#### Scope (FROZEN)
+
+**In scope:**
+
+- DRAFT business receipt (`PrintKind.DRAFT` / PRINT-020 path)
+- ACCEPTED business receipt when PRINT-021 later integrates (`PrintKind.FINAL`)
+
+**Out of scope:**
+
+- `PrinterProfile` / transport / Bluetooth / settings UI
+- test-print calibration documents unless already explicitly styled
+- redesign of receipt contents, pricing, alignment, or emphasis rules
+- advanced wrapping / hierarchy / spacing / feed changes
+
+#### Relationship to PRINT-020 (FROZEN)
+
+- PRINT-020 itself remains: **IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS** (D-064 integration unchanged by this docs freeze).
+- PRINT-020 **hardware validation is PAUSED** until a separate **D-065 implementation** applies `DOUBLE_BOTH` in production `DefaultReceiptComposer` (current deployed APK still renders business receipt text at **NORMAL**).
+- Do **not** treat this freeze as authorization to start PRINT-021+ or HW-002.
+
+#### Out of scope of this freeze task
+
+Production code; tests; Gradle; hardware; commit/push; PRINT-020 behavior changes; PrinterProfile edits; transport; receipt content redesign.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### Readiness
+
+**D-065 FROZEN.** Next authorized step after this docs freeze: **implement** D-065 base scale in `DefaultReceiptComposer` (minimal), then resume PRINT-020 hardware draft-print validation.
 
 
 ### R-001 Product uniqueness

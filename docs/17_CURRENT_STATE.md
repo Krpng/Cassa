@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-020 READY (D-064 FROZEN); BT-007 COMPLETE; M9 8/14
+NEXT: M9 — D-065 IMPL (DOUBLE_BOTH base) then PRINT-020 hardware; M9 8/14; PRINT-020 UNCOMMITTED
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1611,7 +1611,8 @@ M8: COMPLETE
 M9: 8/14 COMPLETE
 BT-001..BT-007: COMPLETE
 HW-001: COMPLETE
-PRINT-020: READY FOR IMPLEMENTATION
+PRINT-020: IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS
+hardware_draft_print: PAUSED UNTIL D-065 IMPLEMENTED
 title: Draft print integration (STAMPA BOZZA)
 entry: AcceptancePreview -> STAMPA BOZZA
 API: PrinterService.printDraft(orderId: String): PrintResult
@@ -1620,12 +1621,37 @@ header: BOZZA / no displayNumber
 business_mutation: NONE (READ-ONLY)
 auto_retry: NO
 PRINT-021+: OUT OF SCOPE
-DOUBLE_BOTH_receipt: DEFERRED POST-M9
+DOUBLE_BOTH_receipt_base: SEE D-065
 schema: DB_v2 UNCHANGED
 migration: NONE
-production_changed: NO
-tests_changed: NO
-gradle_executed: NO
 ```
 
-**READY FOR IMPLEMENTATION.** Do not start PRINT-021+ / HW-002 in this freeze.
+PRINT-020 integration remains D-064. Hardware draft-print validation is **paused** because the deployed APK still renders business receipt `textScale` at **NORMAL** until D-065 is implemented.
+
+## 50. D-065 M9 BUSINESS RECEIPT BASE TEXT SCALE (2026-09-17) — FROZEN
+
+```yaml
+decision: D-065
+status: FROZEN
+base_HEAD: ff51c5d
+M9: 8/14 COMPLETE
+production_business_receipt_textScale: DOUBLE_BOTH
+PrinterProfile_scale_field: NO
+charsPerLine: 42 UNCHANGED
+effective_2x_wrapping: DEFERRED POST-M9 (layout not style-aware today)
+receipt_contents: UNCHANGED
+pricing: UNCHANGED
+alignment_emphasis: UNCHANGED
+draft_receipt: IN SCOPE
+accepted_receipt: IN SCOPE FOR FUTURE PRINT-021
+PrinterProfile: UNCHANGED (D-061)
+transport: UNCHANGED
+PRINT-020_implementation: UNCHANGED / UNCOMMITTED
+PRINT-020_hardware_test: PAUSED UNTIL D-065 IMPLEMENTED
+production_changed_this_freeze: NO
+tests_changed_this_freeze: NO
+gradle: NOT RUN
+hardware: NOT RUN
+```
+
+**D-065 FROZEN.** Next: implement base `DOUBLE_BOTH` in `DefaultReceiptComposer` (minimal; no redesign), then resume PRINT-020 hardware draft-print validation. Do not start PRINT-021+ / HW-002 without explicit authorization.

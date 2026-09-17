@@ -49,7 +49,8 @@ Questa matrice collega requisiti, backlog e test.
 | Bluetooth runtime permissions | BT-001 **COMPLETE** (D-055; `345dce6`) | unit permission matrix; PRINT-T021 partial (PermissionDenied path only) |
 | List bonded Bluetooth devices | BT-002 **COMPLETE** (D-056; `d97cb49`) | unit PASS; PHONE ONLY androidTest PASS |
 | Persist selected printer id | BT-003 **COMPLETE** (D-057; `e44c3e4`) | JVM DataStore unit PASS |
-| Draft print | PRINT-020 **READY** (D-064) | printDraft UI + ViewModel / PHONE+NETUM after PRINT-020 |
+| Draft print | PRINT-020 **IMPLEMENTED / UNCOMMITTED** (D-064); HW draft-print **PAUSED** until D-065 impl | ViewModel A–W PASS; assembleDebug PASS; PHONE+NETUM after D-065 |
+| M9 business receipt base text scale | **D-065 FROZEN** (`DOUBLE_BOTH`; not PrinterProfile; wrap 2× deferred) | composer unit + PRINT-020 paper after impl |
 | Final print | PRINT-004/007/021 | PRINT-T002..014 |
 | Accept+print after commit | PRINT-022 | PRINT-T022/023 |
 | Bluetooth RFCOMM/SPP driver | BT-004 **COMPLETE** (D-058; `82cc98f`; Q1-A secure) | unit + PHONE+NETUM hardware PASS |

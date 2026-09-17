@@ -56,9 +56,11 @@ Default test:
 - `supportsCut = false`
 - `cutCommandVariant = null`
 
-Preferenza tipografica M9 (non nel profilo): base **DOUBLE_BOTH**; raffinamento gerarchia scontrino **DEFERRED POST-M9**.
+Preferenza tipografica M9 (non nel profilo): base business **DOUBLE_BOTH** — **D-065 FROZEN** (production `DefaultReceiptComposer` must emit `textScale=DOUBLE_BOTH` for business receipt lines). Raffinamento gerarchia / wrapping effettivo 2× / spacing / feed: **DEFERRED POST-M9**.
 
-PrinterProfile **non** possiede stili business (font titolo/item/totale, allineamenti receipt): quelli vivono in `PrintableDocument` / layout.
+`charsPerLine = 42` resta la larghezza di layout calibrata a font **NORMAL**. Il wrap attuale non è style-aware: con DOUBLE_BOTH la capacità orizzontale fisica è circa metà → limitazione nota M9 (D-065), non risolta cambiando `charsPerLine`.
+
+PrinterProfile **non** possiede stili business (font titolo/item/totale, allineamenti receipt, textScale): quelli vivono in `PrintableDocument` / layout.
 
 ## 4. Tipi stampa
 
@@ -399,7 +401,7 @@ Ordine documento (**D-060**):
 5. `feedLines` × LF
 6. optional cut
 
-`PrintableLine` defaults (`alignment=LEFT`, `textScale=NORMAL`) preservano lo scontrino esistente finché il layout non opta nei nuovi stili.
+`PrintableLine` defaults (`alignment=LEFT`, `textScale=NORMAL`) restano i default del modello. Per gli scontrini business di produzione M9, `DefaultReceiptComposer` deve impostare **`textScale=DOUBLE_BOTH`** su tutte le linee emesse (**D-065**), senza redesign di contenuto/emphasis/alignment.
 
 Non mettere layout business nel driver Bluetooth.
 Non inventare mapping silenziosi per `€`/glifi; fallback encoder esistente (`€`→`EUR` se non rappresentabile).
@@ -466,21 +468,21 @@ Invoca `PrinterService.printDraft(orderId)`.
 - ordine resta `DRAFT`;
 - nessuna mutation business/Room;
 - nessuna auto-retry;
-- tipografia DOUBLE_BOTH business: **DEFERRED POST-M9**.
+- tipografia base business **DOUBLE_BOTH**: **D-065** (non ownership di PRINT-020); hardware draft-print **PAUSED** finché D-065 non è implementato (APK attuale ancora NORMAL).
 
 ## 27. Hardware validation NETUM
 
-Checklist (**HW-001 / D-060** capability + **D-061** physical freeze):
+Checklist (**HW-001 / D-060** capability + **D-061** physical freeze + **D-065** business base scale):
 - pairing;
 - selezione bonded device (`printerId` instrumentation);
 - connect / transport (BT-004/005);
 - 80 mm;
-- chars per line — M9 frozen **42** (safe; exact max not claimed);
-- allineamento / grassetto / scale ≤2× (M9 preferred base **DOUBLE_BOTH**, styling deferred);
+- chars per line — M9 frozen **42** (safe NORMAL layout width; exact max not claimed; **not** redefined to 21 for DOUBLE_BOTH);
+- allineamento / grassetto / scale ≤2× (M9 production business base **DOUBLE_BOTH** per **D-065**; hierarchy/wrap refinement deferred);
 - JVM **IBM00858** + `ESC t` **19**;
 - € / accenti — hardware PASS with frozen pair;
 - feed **3** / strappo manuale;
 - cutter: **none** (`supportsCut=false`);
 - 10 stampe consecutive = **HW-002**.
 
-Profilo fisico NETUM M9: **D-061 FROZEN**. Raffinamento visuale scontrino business: **DEFERRED POST-M9**.
+Profilo fisico NETUM M9: **D-061 FROZEN**. Base scale scontrino business: **D-065 FROZEN**. Raffinamento visuale avanzato: **DEFERRED POST-M9**.
