@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — HW-002 (10 consecutive prints); M9 13/14; PRINT-024 COMPLETE
+NEXT: M9 — HW-002 hardware (D-072 FROZEN; STAMPA DI PROVA × 10); M9 13/14; PRINT-024 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -2111,4 +2111,36 @@ schema: DB_v2 UNCHANGED
 migration: NONE
 ```
 
-**PRINT-024 COMPLETE.** Next authorized task: **HW-002** (10 consecutive physical prints). Do not start HW-002 without explicit authorization.
+**PRINT-024 COMPLETE.** Next authorized task: **HW-002** (10 consecutive physical prints / **D-072 FROZEN**). Do not execute HW-002 hardware without explicit authorization.
+
+## 62. HW-002 CONTRACT FREEZE (2026-09-17) — D-072 FROZEN
+
+```yaml
+decision: D-072
+status: FROZEN
+base_HEAD: d311b44
+M9: 13/14 COMPLETE
+PRINT-024: COMPLETE
+HW-002: READY FOR HARDWARE EXECUTION
+title: Ten consecutive NETUM physical prints
+surface: Settings STAMPA DI PROVA (PrinterService.testPrint)
+attempts: 10
+required_successes: 10/10
+consecutive: one session; no restart/BT-toggle/re-pair/config change between jobs
+one_tap_one_job: YES
+lifecycle: connect -> print -> disconnect per job
+business_mutation: NONE
+automatic_retry: NO
+failure_rule: STOP on first failure; no mid-sequence recovery
+ConnectionLost_fault_injection: NO
+photos: NOT REQUIRED
+production_change_required: NO
+schema: DB_v2 UNCHANGED
+migration: NONE
+production_changed_this_freeze: NO
+tests_changed_this_freeze: NO
+gradle: NOT RUN
+hardware: NOT RUN
+```
+
+**D-072 FROZEN — HW-002 READY FOR HARDWARE EXECUTION.** M9 remains **13/14** until HW-002 hardware PASS.

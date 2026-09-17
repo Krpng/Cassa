@@ -574,6 +574,18 @@ Checklist (**HW-001 / D-060** capability + **D-061** physical freeze + **D-065**
 - € / accenti — hardware PASS with frozen pair;
 - feed **3** / strappo manuale;
 - cutter: **none** (`supportsCut=false`);
-- 10 stampe consecutive = **HW-002**.
+- 10 stampe consecutive = **HW-002 / D-072** (`STAMPA DI PROVA` × 10; 10/10; STOP on first failure; no fault injection).
 
 Profilo fisico NETUM M9: **D-061 FROZEN**. Base scale scontrino business: **D-065 FROZEN**. Raffinamento visuale avanzato: **DEFERRED POST-M9**.
+
+## 27bis. Ten consecutive prints (HW-002 / D-072) — READY
+
+**Surface:** Impostazioni → **`STAMPA DI PROVA`** (`PrinterService.testPrint()`).
+
+**Procedure:** 10 consecutive taps in one session; wait for each job to finish; Bluetooth ON; printer ON; selected id `66:32:12:31:E4:25`; no restart / BT toggle / re-pair / config change between attempts.
+
+**PASS:** 10/10 success; exactly one slip per tap; accents/`€` readable on test slip; no duplicates/partials/crashes/auto-retry.
+
+**FAIL:** first failed attempt → STOP and report (no immediate recovery).
+
+**Business mutation:** NONE. **ConnectionLost fault injection:** NO (PRINT-024 separate).

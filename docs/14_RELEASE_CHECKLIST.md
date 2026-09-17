@@ -87,7 +87,7 @@
 - [ ] retry
 - [ ] one-copy behavior
 - [ ] mutex
-- [ ] 10 consecutive prints
+- [ ] 10 consecutive prints (**HW-002 / D-072** — Settings `STAMPA DI PROVA` × 10; 10/10)
 - [ ] printer off/reconnect
 
 ## Privacy/security

@@ -2920,6 +2920,133 @@ Production; tests; Gradle; hardware; commit/push; HW-002; transport/retry policy
 **D-071 FROZEN — PRINT-024 READY FOR IMPLEMENTATION.**
 
 
+### D-072 HW-002 Ten consecutive NETUM physical prints (2026-09-17) — FROZEN
+
+**Task:** HW-002 — 10 consecutive prints
+**Status:** **FROZEN** — **HW-002 READY FOR HARDWARE EXECUTION**.
+**Base HEAD:** `d311b44` (PRINT-024 COMPLETE; M9 13/14).
+**Depends on:** BT-001..007 COMPLETE; HW-001 / D-061; PRINT-007 `testPrint` + Mutex; BT-007 STAMPA DI PROVA UI.
+**Docs-only freeze:** no production/test code changes in this decision.
+
+#### Normative intent (FROZEN)
+
+HW-002 proves **repeated normal physical print reliability** on the frozen NETUM stack (printing §27; test plan §18; release checklist). It is **not** profile calibration (HW-001), **not** receipt-layout revalidation (PRINT-020..023), **not** uncertain-outcome fault injection (PRINT-024).
+
+Backlog one-liner “Demo M9: ordine reale stampato su NETUM” is **already evidenced** by PRINT-020..023 hardware PASS. HW-002 does **not** require ten FINAL business receipts.
+
+#### Selected print surface (FROZEN)
+
+**Impostazioni → Stampante → `STAMPA DI PROVA`** → `PrinterService.testPrint()`.
+
+**Reason:**
+- exercises the same Mutex → profile → encode → `connect` → `print` → `disconnect` lifecycle as business prints (`DefaultPrinterService`);
+- business-neutral (PRINT-T027 / no Order mutation / no numbering);
+- repeats an identical short document (accents + € already on slip);
+- FINAL/DRAFT composition already hardware-validated separately.
+
+**Not selected for the 10-job sequence:** FINAL ACCEPTED re-tap, DRAFT BOZZA, ACCETTA auto-print.
+
+#### Meaning of consecutive (FROZEN)
+
+One manual test session: **10** user-triggered print jobs, one after another, with:
+
+- no app restart between attempts;
+- no Bluetooth toggle;
+- no printer re-pairing;
+- no printer/settings configuration changes;
+- no uninstall / clear data;
+- each job **fully finished** (success or failure UI) before starting the next.
+
+#### One attempt = one job (FROZEN)
+
+For attempts 1..10:
+
+one explicit tap **`STAMPA DI PROVA`**
+→ at most one `PrinterService.testPrint()` job (Mutex / in-flight guard)
+→ expected **exactly one** physical test slip on success
+
+**Forbidden inside an attempt:** double-tap, parallel jobs, automatic retry, manual recovery (BT toggle / app restart / re-pair), PRINT-023-style “retry inside same attempt” after failure.
+
+#### Preconditions (FROZEN)
+
+- Samsung host unlocked; app already installed with preserved data (no reinstall required);
+- Bluetooth ON; NETUM powered ON and paired;
+- selected printer remains **`66:32:12:31:E4:25`** (`BlueTooth Printer`);
+- D-061 profile unchanged (`charsPerLine=42`, `IBM00858`, `escPosCodeTable=19`, `feedLines=3`, `supportsCut=false`);
+- sufficient paper; no mid-sequence permission/profile changes;
+- optional: cold launch app once before attempt 1 (not required between attempts).
+
+#### Expected lifecycle per job (FROZEN — observe, do not change)
+
+Current `DefaultPrinterService` / driver behavior for each job:
+
+`Mutex` → load profile → compose/encode test document → **`connect`** → **`print`** → **`disconnect`** (finally).
+
+Connection does **not** persist across jobs. Reconnect for job N+1 is the normal lifecycle, not a recovery workaround.
+
+#### Per-attempt success (FROZEN)
+
+PASS only if all of:
+
+- app reports success feedback for STAMPA DI PROVA;
+- exactly **one** physical slip exits;
+- slip is complete (not truncated/partial);
+- readable; accents (`à è ì ò ù`) and `€` correct on the test slip;
+- no duplicate second slip for that tap;
+- no crash; Printing state clears; next tap available when idle.
+
+#### Sequence PASS (FROZEN)
+
+**10 / 10** consecutive attempts PASS.
+
+Also required overall:
+
+- exactly **10** explicit taps;
+- exactly **10** physical slips;
+- **0** failed jobs;
+- **0** duplicate slips;
+- **0** automatic retries;
+- **0** crashes;
+- **0** mid-sequence recovery actions.
+
+#### Failure rule (FROZEN)
+
+If attempt **N** fails (app error, missing/partial/duplicate slip, crash, stuck Printing):
+
+1. **STOP** the sequence immediately;
+2. record attempt number + visible app error (if any) + physical observation;
+3. do **not** retry, toggle Bluetooth, power-cycle printer, or restart app before reporting;
+4. HW-002 = **FAIL**.
+
+#### PRINT-024 interaction (FROZEN)
+
+Normal success path only. **No** deliberate ConnectionLost / BT-off mid-write / walk-away / power-cut. PRINT-024 fault injection remains **NOT REQUIRED**.
+
+#### Business mutation (FROZEN)
+
+**NONE** (testPrint creates/modifies no Order; no AcceptOrder; no numbering).
+
+#### Evidence table (FROZEN)
+
+| Attempt | Physical slips | Complete | Readable | Accents/€ OK | Duplicate | App error | Crash | Result |
+|---|---|---|---|---|---|---|---|---|
+| 1..10 | 0/1/2+ | Y/N | Y/N | Y/N | Y/N | text/none | Y/N | PASS/FAIL |
+
+Photos: **NOT REQUIRED** (manual checklist sufficient unless separately requested).
+
+#### Out of scope of this freeze
+
+Production; tests; Gradle; hardware execution; commit/push; changing profile/transport/composer; marking HW-002 or M9 complete.
+
+#### Open questions blocking READY
+
+**NONE.**
+
+#### Readiness
+
+**D-072 FROZEN — HW-002 READY FOR HARDWARE EXECUTION.**
+
+
 ### R-001 Product uniqueness
 Earlier schema considered `(normalizedName, category)`.
 Latest reimport rule says same product name updates even if category changes.

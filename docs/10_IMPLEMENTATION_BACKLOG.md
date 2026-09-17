@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **13/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**). **PRINT-022 COMPLETE** (**D-069**). **PRINT-023 COMPLETE** (**D-070**). **PRINT-024 COMPLETE** (**D-071** — ConnectionLost uncertain microcopy). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). Remaining formal: **HW-002 ONLY**. Do not start HW-002 until authorized.
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **13/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**). **PRINT-022 COMPLETE** (**D-069**). **PRINT-023 COMPLETE** (**D-070**). **PRINT-024 COMPLETE** (**D-071** — ConnectionLost uncertain microcopy). **HW-002** contract **D-072 FROZEN** — READY FOR HARDWARE EXECUTION (`STAMPA DI PROVA` × 10). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). Remaining formal: **HW-002 hardware only**. Do not start HW-002 hardware until authorized.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -831,10 +831,26 @@ Demo M7 (COMPLETE):
 
 **Not owned:** production receipt redesign; BT-006/007 UI; discovery/retry/reconnect; Room/migrations; HW-002; feed fine-tuning / visual hierarchy post-M9.
 
-### HW-002 [P1] 10 consecutive prints
+### HW-002 [P1] 10 consecutive prints — READY (D-072 FROZEN)
+> Prove repeated normal physical print reliability on NETUM: **10 consecutive** `STAMPA DI PROVA` jobs, 10/10 PASS, no fault injection.
 
-Demo M9:
-- ordine reale stampato su NETUM.
+**Status:** **CONTRACT FROZEN (D-072)** — **READY FOR HARDWARE EXECUTION**. No production code changes.
+**Depends on:** BT-007 COMPLETE; HW-001 / D-061; PRINT-007 `testPrint` + Mutex; PRINT-024 COMPLETE (M9 13/14).
+
+**Owns (AC) — D-072 FROZEN:**
+1. Surface = Impostazioni → **`STAMPA DI PROVA`** only (not 10× FINAL/DRAFT).
+2. Consecutive = one session; no app restart / BT toggle / re-pair / config change between jobs; finish job N before N+1.
+3. One tap → one `testPrint` job → one physical slip on success.
+4. Lifecycle expected: connect → print → disconnect per job (current PrinterService).
+5. Sequence PASS only if **10/10**; on first failure **STOP** (no mid-sequence recovery).
+6. No deliberate ConnectionLost; business mutation NONE.
+7. Evidence: attempts 1..10 checklist table (photos not required).
+
+**M9 demo note:** “ordine reale stampato su NETUM” already satisfied by PRINT-020..023 hardware; not part of the 10-job sequence.
+
+**Blocking open questions:** NONE.
+
+**Not owned:** production/test code; profile/transport/composer changes; PRINT-024 fault injection; marking M9 complete before hardware PASS.
 
 ## M10 — Hardening
 
