@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -34,6 +35,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.domain.pricing.OrderTotalResult
 import it.krpng.cassa.feature.common.CassaBackButton
+import kotlinx.coroutines.delay
 
 @Composable
 fun AcceptancePreviewRoute(
@@ -43,6 +45,7 @@ fun AcceptancePreviewRoute(
     viewModel: AcceptancePreviewViewModel = hiltViewModel(),
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
+    val draftPrintState = viewModel.draftPrintUiState.collectAsStateWithLifecycle().value
 
     LaunchedEffect(viewModel, onHome, onOpenNewOrder) {
         viewModel.navigationEvents.collect { event ->
@@ -53,15 +56,32 @@ fun AcceptancePreviewRoute(
         }
     }
 
+    // Keyed by draftPrintState: prior delay is cancelled when state changes (D-064).
+    LaunchedEffect(draftPrintState) {
+        when (draftPrintState) {
+            is DraftPrintUiState.Success,
+            is DraftPrintUiState.Error,
+            -> {
+                delay(3_000)
+                viewModel.consumeDraftPrintFeedback()
+            }
+            DraftPrintUiState.Idle,
+            DraftPrintUiState.Printing,
+            -> Unit
+        }
+    }
+
     BackHandler(enabled = state is AcceptancePreviewUiState.Accepted) {
         viewModel.goHome()
     }
 
     AcceptancePreviewScreen(
         state = state,
+        draftPrintState = draftPrintState,
         onBack = onBack,
         onRetry = viewModel::retry,
         onAccept = viewModel::accept,
+        onDraftPrint = viewModel::runDraftPrint,
         onHome = viewModel::goHome,
         onNewOrder = viewModel::startNewOrder,
     )
@@ -70,9 +90,11 @@ fun AcceptancePreviewRoute(
 @Composable
 fun AcceptancePreviewScreen(
     state: AcceptancePreviewUiState,
+    draftPrintState: DraftPrintUiState = DraftPrintUiState.Idle,
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onAccept: () -> Unit,
+    onDraftPrint: () -> Unit = {},
     onHome: () -> Unit = {},
     onNewOrder: () -> Unit = {},
 ) {
@@ -220,8 +242,10 @@ fun AcceptancePreviewScreen(
                     acceptEnabled = state.isAcceptEnabled,
                     isAccepting = state.isAccepting,
                     hasOverflow = state.hasTotalOverflow,
+                    draftPrintState = draftPrintState,
                     onBack = onBack,
                     onAccept = onAccept,
+                    onDraftPrint = onDraftPrint,
                 )
             }
         }
@@ -467,9 +491,15 @@ private fun PreviewActions(
     acceptEnabled: Boolean,
     isAccepting: Boolean,
     hasOverflow: Boolean,
+    draftPrintState: DraftPrintUiState,
     onBack: () -> Unit,
     onAccept: () -> Unit,
+    onDraftPrint: () -> Unit,
 ) {
+    val isPrinting = draftPrintState is DraftPrintUiState.Printing
+    val printEnabled = !isAccepting && !isPrinting
+    val acceptButtonEnabled = acceptEnabled && !hasOverflow && !isPrinting
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -489,6 +519,61 @@ private fun PreviewActions(
                 )
             }
         }
+        OutlinedButton(
+            onClick = onDraftPrint,
+            enabled = printEnabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .semantics {
+                    contentDescription =
+                        if (isPrinting) {
+                            "Stampa bozza in corso"
+                        } else {
+                            "Stampa bozza"
+                        }
+                },
+        ) {
+            if (isPrinting) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Text("STAMPA IN CORSO…")
+                }
+            } else {
+                Text("STAMPA BOZZA")
+            }
+        }
+        when (draftPrintState) {
+            is DraftPrintUiState.Success -> {
+                Text(
+                    text = draftPrintState.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics {
+                        contentDescription = draftPrintState.message
+                    },
+                )
+            }
+            is DraftPrintUiState.Error -> {
+                Text(
+                    text = draftPrintState.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics {
+                        contentDescription = draftPrintState.message
+                    },
+                )
+            }
+            DraftPrintUiState.Idle,
+            DraftPrintUiState.Printing,
+            -> Unit
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -505,12 +590,12 @@ private fun PreviewActions(
             }
             Button(
                 onClick = onAccept,
-                enabled = acceptEnabled && !hasOverflow,
+                enabled = acceptButtonEnabled,
                 modifier = Modifier
                     .weight(1f)
                     .heightIn(min = 48.dp)
                     .semantics {
-                        contentDescription = if (acceptEnabled && !hasOverflow) {
+                        contentDescription = if (acceptButtonEnabled) {
                             "Accetta ordine"
                         } else {
                             "Accetta ordine non disponibile"

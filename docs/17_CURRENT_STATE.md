@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — D-067 IMPL (scale-aware layout width) then PRINT-020 HW retest/close; M9 8/14; PRINT-020 UNCOMMITTED
+NEXT: M9 — PRINT-021 (PrintAccepted integration); M9 9/14; PRINT-020 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1608,11 +1608,11 @@ decision: D-064
 status: FROZEN
 base_HEAD: b026dbb
 M8: COMPLETE
-M9: 8/14 COMPLETE
+M9: 9/14 COMPLETE
 BT-001..BT-007: COMPLETE
 HW-001: COMPLETE
-PRINT-020: IMPLEMENTED / UNCOMMITTED / CODE REVIEW PASS
-hardware_draft_print: PAUSED UNTIL D-065 IMPLEMENTED
+PRINT-020: COMPLETE
+hardware_draft_print: PASS
 title: Draft print integration (STAMPA BOZZA)
 entry: AcceptancePreview -> STAMPA BOZZA
 API: PrinterService.printDraft(orderId: String): PrintResult
@@ -1626,7 +1626,7 @@ schema: DB_v2 UNCHANGED
 migration: NONE
 ```
 
-PRINT-020 integration remains D-064. Hardware draft-print validation is **paused** because the deployed APK still renders business receipt `textScale` at **NORMAL** until D-065 is implemented.
+PRINT-020 closed under D-064 after D-065/D-066/D-067. See §53 for closure evidence.
 
 ## 50. D-065 M9 BUSINESS RECEIPT BASE TEXT SCALE (2026-09-17) — FROZEN
 
@@ -1709,11 +1709,53 @@ algorithm: reuse existing wrap/price helpers with corrected width
 alignment: textual center/right-price; PrintAlignment LEFT unchanged
 D-065: UNCHANGED
 D-066: UNCHANGED
-PRINT-020: BLOCKED UNTIL D-067 IMPLEMENTATION + HARDWARE RETEST
+PRINT-020: COMPLETE (after D-067 + hardware PASS)
 production_changed_this_freeze: NO
 tests_changed_this_freeze: NO
 gradle: NOT RUN
 hardware: NOT RUN
 ```
 
-**D-067 FROZEN — READY FOR IMPLEMENTATION.** Do not start PRINT-021+ / HW-002 without authorization.
+**D-067 IMPLEMENTED + COMMITTED** (`f7dad97`) and hardware-validated with PRINT-020. Do not start PRINT-021+ / HW-002 without authorization.
+
+## 53. PRINT-020 FINAL CLOSURE (2026-09-17) — COMPLETE
+
+```yaml
+task: PRINT-020
+status: COMPLETE
+contract: D-064 FROZEN
+base_HEAD: f7dad97
+M9: 9/14 COMPLETE
+code_review: PASS — Critical 0 / Major 0 / Minor 0
+focused_tests: AcceptancePreviewViewModelTest 32 PASS
+assembleDebug: PASS
+assembleDebugAndroidTest: PASS
+hardware_NETUM: PASS
+physical_DRAFT_print: PASS
+BOZZA: PASS
+D-065_DOUBLE_BOTH: PASS
+D-066_printed_total: PASS — 22,50
+D-067_scale_aware_layout: PASS — base 42 / effective DOUBLE_BOTH 21
+FRITTURA: PASS — SINGLE LINE
+separators: PASS
+product_price_readability: PASS
+draft_remains_DRAFT: YES
+automatic_acceptance: NO
+displayNumber_allocated: NO
+order_mutation_from_printing: NONE
+numbering_mutation: NONE
+automatic_retry: NO
+success_feedback: "Bozza inviata alla stampante"
+API: PrinterService.printDraft(draftId)
+entry: AcceptancePreview -> STAMPA BOZZA
+remaining_M9:
+  - PRINT-021
+  - PRINT-022
+  - PRINT-023
+  - PRINT-024
+  - HW-002
+schema: DB_v2 UNCHANGED
+migration: NONE
+```
+
+**PRINT-020 COMPLETE.** Next authorized task: **PRINT-021** (PrintAccepted integration). Do not start PRINT-021+ / HW-002 without explicit authorization.

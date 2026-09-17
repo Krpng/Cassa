@@ -488,7 +488,7 @@ Invoca `PrinterService.printDraft(orderId)`.
 - ordine resta `DRAFT`;
 - nessuna mutation business/Room;
 - nessuna auto-retry;
-- tipografia base business **DOUBLE_BOTH**: **D-065** (non ownership di PRINT-020); hardware draft-print **PAUSED** finché D-065 non è implementato (APK attuale ancora NORMAL).
+- tipografia base business **DOUBLE_BOTH**: **D-065** (non ownership di PRINT-020); layout scale-aware **D-067**; PRINT-020 **COMPLETE** (Samsung+NETUM hardware PASS).
 
 ## 27. Hardware validation NETUM
 

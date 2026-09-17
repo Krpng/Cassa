@@ -14,6 +14,9 @@ import it.krpng.cassa.domain.pricing.OrderTotalResult
 import it.krpng.cassa.domain.repository.AcceptOrderResult
 import it.krpng.cassa.domain.repository.CreateDraftResult
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.printer.PrintResult
+import it.krpng.cassa.domain.printer.PrinterError
+import it.krpng.cassa.domain.printer.PrinterService
 import it.krpng.cassa.domain.usecase.AcceptOrder
 import java.time.Instant
 import java.time.LocalDate
@@ -92,11 +95,31 @@ sealed interface AcceptanceNavigationEvent {
     data class OpenNewOrder(val draftId: String) : AcceptanceNavigationEvent
 }
 
+/**
+ * Orthogonal draft-print phase (D-064 / PRINT-020).
+ * Independent from [AcceptancePreviewUiState] so print completion cannot overwrite
+ * newer preview observation, and refresh cannot wipe PRINTING incorrectly.
+ */
+sealed interface DraftPrintUiState {
+    data object Idle : DraftPrintUiState
+
+    data object Printing : DraftPrintUiState
+
+    data class Success(
+        val message: String = "Bozza inviata alla stampante",
+    ) : DraftPrintUiState
+
+    data class Error(
+        val message: String,
+    ) : DraftPrintUiState
+}
+
 @HiltViewModel
 class AcceptancePreviewViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val orderRepository: OrderRepository,
     private val acceptOrder: AcceptOrder,
+    private val printerService: PrinterService,
 ) : ViewModel() {
     private val draftId: String =
         checkNotNull(savedStateHandle.get<String>(DRAFT_ID_ARGUMENT)) {
@@ -107,12 +130,17 @@ class AcceptancePreviewViewModel @Inject constructor(
         MutableStateFlow<AcceptancePreviewUiState>(AcceptancePreviewUiState.Loading)
     val uiState: StateFlow<AcceptancePreviewUiState> = _uiState.asStateFlow()
 
+    private val _draftPrintUiState =
+        MutableStateFlow<DraftPrintUiState>(DraftPrintUiState.Idle)
+    val draftPrintUiState: StateFlow<DraftPrintUiState> = _draftPrintUiState.asStateFlow()
+
     private val _navigationEvents = Channel<AcceptanceNavigationEvent>(Channel.BUFFERED)
     val navigationEvents = _navigationEvents.receiveAsFlow()
 
     private var observationJob: Job? = null
     private var acceptJob: Job? = null
     private var newOrderJob: Job? = null
+    private var draftPrintJob: Job? = null
 
     init {
         observeOrder()
@@ -126,6 +154,8 @@ class AcceptancePreviewViewModel @Inject constructor(
         val current = _uiState.value
         if (current !is AcceptancePreviewUiState.Ready) return
         if (!current.isAcceptEnabled || acceptJob?.isActive == true) return
+        if (draftPrintJob?.isActive == true) return
+        if (_draftPrintUiState.value is DraftPrintUiState.Printing) return
 
         _uiState.value = current.copy(isAccepting = true, acceptError = null)
         acceptJob = viewModelScope.launch {
@@ -159,6 +189,51 @@ class AcceptancePreviewViewModel @Inject constructor(
             } catch (_: Exception) {
                 restoreReady(current, "Impossibile accettare l'ordine.")
             }
+        }
+    }
+
+    /**
+     * Explicit STAMPA BOZZA action (D-064).
+     * One tap → at most one [PrinterService.printDraft] while a job is active.
+     */
+    fun runDraftPrint() {
+        if (draftPrintJob?.isActive == true) return
+        if (_draftPrintUiState.value is DraftPrintUiState.Printing) return
+        if (acceptJob?.isActive == true) return
+        val ready = _uiState.value as? AcceptancePreviewUiState.Ready ?: return
+        if (ready.isAccepting) return
+
+        val orderId = ready.draftId
+        draftPrintJob =
+            viewModelScope.launch {
+                _draftPrintUiState.value = DraftPrintUiState.Printing
+                try {
+                    when (val result = printerService.printDraft(orderId)) {
+                        PrintResult.Success ->
+                            _draftPrintUiState.value = DraftPrintUiState.Success()
+                        is PrintResult.Failure ->
+                            _draftPrintUiState.value =
+                                DraftPrintUiState.Error(mapDraftPrintError(result.error))
+                    }
+                } catch (e: CancellationException) {
+                    _draftPrintUiState.value = DraftPrintUiState.Idle
+                    throw e
+                } catch (_: Exception) {
+                    _draftPrintUiState.value =
+                        DraftPrintUiState.Error("Impossibile stampare la bozza")
+                }
+            }
+    }
+
+    /** Clears transient success/error so feedback is not replayed after recomposition. */
+    fun consumeDraftPrintFeedback() {
+        when (_draftPrintUiState.value) {
+            is DraftPrintUiState.Success,
+            is DraftPrintUiState.Error,
+            -> _draftPrintUiState.value = DraftPrintUiState.Idle
+            DraftPrintUiState.Idle,
+            DraftPrintUiState.Printing,
+            -> Unit
         }
     }
 
@@ -315,4 +390,28 @@ class AcceptancePreviewViewModel @Inject constructor(
     companion object {
         const val DRAFT_ID_ARGUMENT = "draftId"
     }
+
+    private fun mapDraftPrintError(error: PrinterError): String =
+        when (error) {
+            PrinterError.PermissionDenied ->
+                "Autorizzazione Bluetooth necessaria"
+            PrinterError.BluetoothDisabled ->
+                "Bluetooth disattivato"
+            PrinterError.PrinterNotConfigured ->
+                "Nessuna stampante selezionata"
+            PrinterError.ConnectionFailed ->
+                "Impossibile connettersi alla stampante"
+            PrinterError.ConnectionLost ->
+                "Connessione interrotta durante la stampa"
+            PrinterError.Timeout ->
+                "Timeout di connessione alla stampante"
+            PrinterError.PrintFailed,
+            PrinterError.UnsupportedEncoding,
+            PrinterError.UnencodableCharacter,
+            PrinterError.InvalidPrinterProfile,
+            PrinterError.OrderNotFound,
+            PrinterError.InvalidOrderState,
+            PrinterError.Unknown,
+            -> "Impossibile stampare la bozza"
+        }
 }

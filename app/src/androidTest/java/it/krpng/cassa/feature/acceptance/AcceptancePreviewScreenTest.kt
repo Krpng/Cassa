@@ -81,6 +81,7 @@ class AcceptancePreviewScreenTest {
         composeRule.onNodeWithText("Nota: ben cotta").assertIsDisplayed()
         composeRule.onNodeWithText("Tavolo 4").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Totale anteprima: 17,50 €").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA BOZZA").assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithText("ACCETTA").assertIsEnabled()
         composeRule.onNodeWithText("ACCETTA").performClick()
         composeRule.onNodeWithText("ANNULLA").performClick()
@@ -88,6 +89,83 @@ class AcceptancePreviewScreenTest {
             assertEquals(1, backClicks)
             assertEquals(1, acceptClicks)
         }
+    }
+
+    @Test
+    fun emptyDraftDoesNotShowStampaBozza() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = AcceptancePreviewUiState.EmptyDraft,
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("STAMPA BOZZA").assertDoesNotExist()
+        composeRule.onNodeWithText("ACCETTA").assertDoesNotExist()
+        composeRule.onNodeWithText("Aggiungi almeno un prodotto per accettare l'ordine.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun printingDisablesStampaBozzaAndAccept() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = readyState(),
+                    draftPrintState = DraftPrintUiState.Printing,
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("STAMPA IN CORSO…").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA BOZZA").assertDoesNotExist()
+        composeRule.onNodeWithText("ACCETTA").assertIsNotEnabled()
+        composeRule.onNodeWithText("ANNULLA").assertIsEnabled()
+    }
+
+    @Test
+    fun stampaBozzaTapEmitsExactlyOneCallback() {
+        var taps = 0
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = readyState(),
+                    draftPrintState = DraftPrintUiState.Idle,
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                    onDraftPrint = { taps += 1 },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("STAMPA BOZZA").performClick()
+        composeRule.runOnIdle { assertEquals(1, taps) }
+    }
+
+    @Test
+    fun draftPrintSuccessMessageIsVisible() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = readyState(),
+                    draftPrintState = DraftPrintUiState.Success(),
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Bozza inviata alla stampante").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA BOZZA").assertIsEnabled()
     }
 
     @Test
@@ -193,4 +271,29 @@ class AcceptancePreviewScreenTest {
             assertEquals(1, newOrderClicks)
         }
     }
+
+    private fun readyState(): AcceptancePreviewUiState.Ready =
+        AcceptancePreviewUiState.Ready(
+            draftId = "draft-1",
+            sections = listOf(
+                AcceptancePreviewSectionUi(
+                    title = "PIZZE",
+                    lines = listOf(
+                        AcceptancePreviewLineUi(
+                            itemId = "p1",
+                            quantity = 1,
+                            productName = "Margherita",
+                            productPrintedName = "MARGHERITA",
+                            additionNames = emptyList(),
+                            removalNames = emptyList(),
+                            note = null,
+                            finalUnitPrice = Money.ofCents(700),
+                            lineTotal = Money.ofCents(700),
+                        ),
+                    ),
+                ),
+            ),
+            generalNote = null,
+            orderTotal = OrderTotalResult.Success(Money.ofCents(700)),
+        )
 }

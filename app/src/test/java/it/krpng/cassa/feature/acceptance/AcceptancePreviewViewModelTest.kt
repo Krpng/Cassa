@@ -21,8 +21,12 @@ import it.krpng.cassa.domain.repository.ReplaceDraftResult
 import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
+import it.krpng.cassa.domain.printer.PrintResult
+import it.krpng.cassa.domain.printer.PrinterError
+import it.krpng.cassa.domain.printer.PrinterService
 import it.krpng.cassa.domain.usecase.AcceptOrder
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +40,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -74,7 +79,7 @@ class AcceptancePreviewViewModelTest {
             .map { it.simpleName }
 
         assertEquals(
-            listOf("SavedStateHandle", "OrderRepository", "AcceptOrder"),
+            listOf("SavedStateHandle", "OrderRepository", "AcceptOrder", "PrinterService"),
             parameterTypes,
         )
     }
@@ -325,14 +330,444 @@ class AcceptancePreviewViewModelTest {
         assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
     }
 
-    private fun viewModel(repository: FakeOrderRepository): AcceptancePreviewViewModel =
+    // --- PRINT-020 draft print ---
+
+    @Test
+    fun `PRINT020 A non-Ready does not call printDraft`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService()
+        val viewModel =
+            viewModel(
+                FakeOrderRepository(null),
+                printerService = printer,
+            )
+        advanceUntilIdle()
+        assertEquals(AcceptancePreviewUiState.NotFound, viewModel.uiState.value)
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+
+        assertEquals(0, printer.printDraftCalls)
+        assertEquals(DraftPrintUiState.Idle, viewModel.draftPrintUiState.value)
+    }
+
+    @Test
+    fun `PRINT020 B EmptyDraft does not call printDraft`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService()
+        val viewModel =
+            viewModel(
+                FakeOrderRepository(draft(items = emptyList())),
+                printerService = printer,
+            )
+        advanceUntilIdle()
+        assertEquals(AcceptancePreviewUiState.EmptyDraft, viewModel.uiState.value)
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+
+        assertEquals(0, printer.printDraftCalls)
+        assertEquals(DraftPrintUiState.Idle, viewModel.draftPrintUiState.value)
+    }
+
+    @Test
+    fun `PRINT020 C valid Ready calls printDraft once with draftId`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printer.printDraftCalls)
+        assertEquals(listOf(DRAFT_ID), printer.printDraftIds)
+        assertTrue(viewModel.draftPrintUiState.value is DraftPrintUiState.Success)
+        assertEquals(
+            "Bozza inviata alla stampante",
+            (viewModel.draftPrintUiState.value as DraftPrintUiState.Success).message,
+        )
+    }
+
+    @Test
+    fun `PRINT020 D double tap while printing calls printDraft once`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer =
+            FakePrinterService(
+                result = PrintResult.Success,
+                blockUntil = gate,
+            )
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(DraftPrintUiState.Printing, viewModel.draftPrintUiState.value)
+
+        viewModel.runDraftPrint()
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(1, printer.printDraftCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, printer.printDraftCalls)
+        assertTrue(viewModel.draftPrintUiState.value is DraftPrintUiState.Success)
+    }
+
+    @Test
+    fun `PRINT020 E success clears printing and allows new tap`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertTrue(viewModel.draftPrintUiState.value is DraftPrintUiState.Success)
+
+        viewModel.consumeDraftPrintFeedback()
+        assertEquals(DraftPrintUiState.Idle, viewModel.draftPrintUiState.value)
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(2, printer.printDraftCalls)
+    }
+
+    @Test
+    fun `PRINT020 F PermissionDenied maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedDraftPrintError(
+            PrinterError.PermissionDenied,
+            "Autorizzazione Bluetooth necessaria",
+        )
+    }
+
+    @Test
+    fun `PRINT020 G BluetoothDisabled maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedDraftPrintError(
+            PrinterError.BluetoothDisabled,
+            "Bluetooth disattivato",
+        )
+    }
+
+    @Test
+    fun `PRINT020 H PrinterNotConfigured maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedDraftPrintError(
+            PrinterError.PrinterNotConfigured,
+            "Nessuna stampante selezionata",
+        )
+    }
+
+    @Test
+    fun `PRINT020 I ConnectionFailed maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedDraftPrintError(
+            PrinterError.ConnectionFailed,
+            "Impossibile connettersi alla stampante",
+        )
+    }
+
+    @Test
+    fun `PRINT020 J ConnectionLost maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedDraftPrintError(
+            PrinterError.ConnectionLost,
+            "Connessione interrotta durante la stampa",
+        )
+    }
+
+    @Test
+    fun `PRINT020 K Timeout maps expected feedback`() = runTest(mainDispatcher) {
+        assertMappedDraftPrintError(
+            PrinterError.Timeout,
+            "Timeout di connessione alla stampante",
+        )
+    }
+
+    @Test
+    fun `PRINT020 L PrintFailed and Unknown map generic failure`() = runTest(mainDispatcher) {
+        assertMappedDraftPrintError(
+            PrinterError.PrintFailed,
+            "Impossibile stampare la bozza",
+        )
+        assertMappedDraftPrintError(
+            PrinterError.Unknown,
+            "Impossibile stampare la bozza",
+        )
+    }
+
+    @Test
+    fun `PRINT020 M unexpected exception is recoverable`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(throwOnPrintDraft = true)
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+
+        val error = viewModel.draftPrintUiState.value as DraftPrintUiState.Error
+        assertEquals("Impossibile stampare la bozza", error.message)
+
+        viewModel.consumeDraftPrintFeedback()
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(2, printer.printDraftCalls)
+    }
+
+    @Test
+    fun `PRINT020 N manual retry after failure starts new job`() = runTest(mainDispatcher) {
+        val printer =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.ConnectionFailed))
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertTrue(viewModel.draftPrintUiState.value is DraftPrintUiState.Error)
+
+        printer.result = PrintResult.Success
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+
+        assertEquals(2, printer.printDraftCalls)
+        assertTrue(viewModel.draftPrintUiState.value is DraftPrintUiState.Success)
+    }
+
+    @Test
+    fun `PRINT020 O while printing accept is ignored`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer =
+            FakePrinterService(
+                result = PrintResult.Success,
+                blockUntil = gate,
+            )
+        val repository = FakeOrderRepository(draft()).apply {
+            acceptResult = AcceptOrderResult.Accepted(
+                orderId = DRAFT_ID,
+                displayNumber = "001",
+                total = Money.ofCents(700),
+                acceptedAt = NOW,
+                businessDate = LocalDate.parse("2026-09-14"),
+                numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
+                numberingCycle = null,
+            )
+            emitAcceptedOnAccept = true
+        }
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(DraftPrintUiState.Printing, viewModel.draftPrintUiState.value)
+
+        viewModel.accept()
+        advanceUntilIdle()
+        assertEquals(0, repository.acceptCalls)
+        assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Ready)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(0, repository.acceptCalls)
+    }
+
+    @Test
+    fun `PRINT020 P while accepting print is ignored`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val repository = FakeOrderRepository(draft()).apply {
+            acceptBlock = { gate.await() }
+            acceptResult = AcceptOrderResult.Accepted(
+                orderId = DRAFT_ID,
+                displayNumber = "002",
+                total = Money.ofCents(700),
+                acceptedAt = NOW,
+                businessDate = LocalDate.parse("2026-09-14"),
+                numberingMode = it.krpng.cassa.domain.model.NumberingMode.SEQUENTIAL,
+                numberingCycle = null,
+            )
+            emitAcceptedOnAccept = true
+        }
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.accept()
+        advanceUntilIdle()
+        assertTrue((viewModel.uiState.value as AcceptancePreviewUiState.Ready).isAccepting)
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(0, printer.printDraftCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(0, printer.printDraftCalls)
+        assertEquals(1, repository.acceptCalls)
+    }
+
+    @Test
+    fun `PRINT020 Q R S T print does not mutate draft business state`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val repository = FakeOrderRepository(draft())
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+
+        val before = viewModel.uiState.value as AcceptancePreviewUiState.Ready
+        val writeBefore = repository.writeCount
+        val acceptBefore = repository.acceptCalls
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+
+        val after = viewModel.uiState.value as AcceptancePreviewUiState.Ready
+        assertEquals(before.draftId, after.draftId)
+        assertEquals(before.sections, after.sections)
+        assertEquals(before.generalNote, after.generalNote)
+        assertEquals(before.orderTotal, after.orderTotal)
+        assertEquals(writeBefore, repository.writeCount)
+        assertEquals(acceptBefore, repository.acceptCalls)
+        assertNull(repository.orderSnapshot()?.displayNumber)
+        assertEquals(OrderStatus.DRAFT, repository.orderSnapshot()?.status)
+        assertEquals(1, printer.printDraftCalls)
+    }
+
+    @Test
+    fun `PRINT020 U print completion does not overwrite newer Ready`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer =
+            FakePrinterService(
+                result = PrintResult.Success,
+                blockUntil = gate,
+            )
+        val repository = FakeOrderRepository(draft())
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(DraftPrintUiState.Printing, viewModel.draftPrintUiState.value)
+
+        repository.emitOrder(
+            draft(
+                items = listOf(
+                    item(id = "1", category = ProductCategory.PIZZA, sequence = 1),
+                    item(id = "2", category = ProductCategory.BIBITA, sequence = 1, name = "Acqua"),
+                ),
+                generalNote = "updated while printing",
+            ),
+        )
+        advanceUntilIdle()
+
+        val mid = viewModel.uiState.value as AcceptancePreviewUiState.Ready
+        assertEquals("updated while printing", mid.generalNote)
+        assertEquals(2, mid.sections.sumOf { it.lines.size })
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        val after = viewModel.uiState.value as AcceptancePreviewUiState.Ready
+        assertEquals("updated while printing", after.generalNote)
+        assertEquals(2, after.sections.sumOf { it.lines.size })
+        assertTrue(viewModel.draftPrintUiState.value is DraftPrintUiState.Success)
+    }
+
+    @Test
+    fun `PRINT020 V retry observe does not auto print`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+        assertEquals(0, printer.printDraftCalls)
+
+        viewModel.retry()
+        advanceUntilIdle()
+        viewModel.retry()
+        advanceUntilIdle()
+
+        assertEquals(0, printer.printDraftCalls)
+        assertEquals(DraftPrintUiState.Idle, viewModel.draftPrintUiState.value)
+    }
+
+    @Test
+    fun `PRINT020 W consume idle does not clear Printing`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer =
+            FakePrinterService(
+                result = PrintResult.Success,
+                blockUntil = gate,
+            )
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(DraftPrintUiState.Printing, viewModel.draftPrintUiState.value)
+
+        viewModel.consumeDraftPrintFeedback()
+        assertEquals(DraftPrintUiState.Printing, viewModel.draftPrintUiState.value)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertTrue(viewModel.draftPrintUiState.value is DraftPrintUiState.Success)
+
+        // Simulate newer failure after consume of prior success.
+        viewModel.consumeDraftPrintFeedback()
+        printer.result = PrintResult.Failure(PrinterError.Timeout)
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(
+            "Timeout di connessione alla stampante",
+            (viewModel.draftPrintUiState.value as DraftPrintUiState.Error).message,
+        )
+        // Old success consume must not wipe newer error (consume only clears Success/Error once).
+        viewModel.consumeDraftPrintFeedback()
+        assertEquals(DraftPrintUiState.Idle, viewModel.draftPrintUiState.value)
+    }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.assertMappedDraftPrintError(
+        error: PrinterError,
+        expectedMessage: String,
+    ) {
+        val printer = FakePrinterService(result = PrintResult.Failure(error))
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+
+        val state = viewModel.draftPrintUiState.value as DraftPrintUiState.Error
+        assertEquals(expectedMessage, state.message)
+        assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Ready)
+    }
+
+    private fun viewModel(
+        repository: FakeOrderRepository,
+        printerService: PrinterService = FakePrinterService(),
+    ): AcceptancePreviewViewModel =
         AcceptancePreviewViewModel(
             savedStateHandle = SavedStateHandle(
                 mapOf(AcceptancePreviewViewModel.DRAFT_ID_ARGUMENT to DRAFT_ID),
             ),
             orderRepository = repository,
             acceptOrder = AcceptOrder(repository),
+            printerService = printerService,
         )
+
+    private class FakePrinterService(
+        var result: PrintResult = PrintResult.Success,
+        var throwOnPrintDraft: Boolean = false,
+        private val blockUntil: CompletableDeferred<Unit>? = null,
+    ) : PrinterService {
+        var printDraftCalls: Int = 0
+            private set
+        val printDraftIds = mutableListOf<String>()
+
+        override suspend fun printDraft(orderId: String): PrintResult {
+            printDraftCalls += 1
+            printDraftIds += orderId
+            blockUntil?.await()
+            if (throwOnPrintDraft) error("unexpected printDraft failure")
+            return result
+        }
+
+        override suspend fun printAccepted(orderId: String): PrintResult =
+            error("printAccepted must not be called by PRINT-020")
+
+        override suspend fun testPrint(): PrintResult =
+            error("testPrint must not be called by PRINT-020")
+    }
 
     private class FakeOrderRepository(
         initial: Order?,
@@ -350,6 +785,13 @@ class AcceptancePreviewViewModelTest {
         var acceptResult: AcceptOrderResult = AcceptOrderResult.PersistenceFailure
         var acceptBlock: (suspend () -> Unit)? = null
         var emitAcceptedOnAccept: Boolean = false
+
+        fun orderSnapshot(): Order? = order.value
+
+        fun emitOrder(value: Order?) {
+            order.value = value
+            activeDraftId = value?.takeIf { it.status == OrderStatus.DRAFT }?.id
+        }
 
         private fun write(): Nothing {
             writeCount += 1
