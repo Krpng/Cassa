@@ -504,6 +504,7 @@ Invoca `PrinterService.printAccepted(orderId)`.
 - nessuna mutation business/Room/numbering;
 - nessuna auto-retry;
 - tipografia/layout: **D-065** / **D-067** (non ownership di PRINT-021);
+- **PRINT-021 COMPLETE** (Samsung+NETUM hardware PASS);
 - **non** accept+print (**PRINT-022**);
 - **non** retry UX dedicata (**PRINT-023**);
 - **non** uncertain-outcome microcopy (**PRINT-024**).

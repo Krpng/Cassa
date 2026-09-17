@@ -27,6 +27,7 @@ import it.krpng.cassa.domain.printer.PrinterService
 import it.krpng.cassa.domain.usecase.AcceptOrder
 import java.time.Instant
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -716,6 +717,151 @@ class AcceptancePreviewViewModelTest {
         assertEquals(DraftPrintUiState.Idle, viewModel.draftPrintUiState.value)
     }
 
+    // --- PRINT-021 / D-068 accepted print ---
+
+    @Test
+    fun `PRINT021 J DRAFT still calls printDraft not printAccepted`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printer.printDraftCalls)
+        assertEquals(0, printer.printAcceptedCalls)
+        assertEquals(listOf(DRAFT_ID), printer.printDraftIds)
+    }
+
+    @Test
+    fun `PRINT021 K ACCEPTED print calls printAccepted with exact id`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val repository = FakeOrderRepository(acceptedOrder(displayNumber = "042", totalCents = 1_400))
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Accepted)
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printer.printAcceptedCalls)
+        assertEquals(0, printer.printDraftCalls)
+        assertEquals(listOf(DRAFT_ID), printer.printAcceptedIds)
+        val success = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Success
+        assertEquals("Ordine inviato alla stampante", success.message)
+    }
+
+    @Test
+    fun `PRINT021 L M accepted double tap while printing calls once`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer =
+            FakePrinterService(
+                result = PrintResult.Success,
+                acceptedBlockUntil = gate,
+            )
+        val viewModel =
+            viewModel(
+                FakeOrderRepository(acceptedOrder(displayNumber = "001", totalCents = 700)),
+                printerService = printer,
+            )
+        advanceUntilIdle()
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(AcceptedPrintUiState.Printing, viewModel.acceptedPrintUiState.value)
+
+        viewModel.runAcceptedPrint()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+        assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Success)
+    }
+
+    @Test
+    fun `PRINT021 O maps PrinterNotConfigured for accepted`() = runTest(mainDispatcher) {
+        val printer =
+            FakePrinterService(result = PrintResult.Failure(PrinterError.PrinterNotConfigured))
+        val viewModel =
+            viewModel(
+                FakeOrderRepository(acceptedOrder(displayNumber = "001", totalCents = 700)),
+                printerService = printer,
+            )
+        advanceUntilIdle()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        val error = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error
+        assertEquals("Nessuna stampante selezionata", error.message)
+    }
+
+    @Test
+    fun `PRINT021 P accepted CancellationException restores Idle`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(throwAcceptedCancellation = true)
+        val viewModel =
+            viewModel(
+                FakeOrderRepository(acceptedOrder(displayNumber = "001", totalCents = 700)),
+                printerService = printer,
+            )
+        advanceUntilIdle()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+        assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+    }
+
+    @Test
+    fun `PRINT021 Q R accepted print does not accept or allocate number`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val repository =
+            FakeOrderRepository(acceptedOrder(displayNumber = "042", totalCents = 1_400))
+        val viewModel = viewModel(repository, printerService = printer)
+        advanceUntilIdle()
+        val before = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(0, repository.acceptCalls)
+        assertEquals(0, repository.writeCount)
+        val after = viewModel.uiState.value as AcceptancePreviewUiState.Accepted
+        assertEquals(before.displayNumber, after.displayNumber)
+        assertEquals(before.orderId, after.orderId)
+        assertEquals(before.total, after.total)
+    }
+
+    @Test
+    fun `PRINT021 S Ready runAcceptedPrint is no-op`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val viewModel = viewModel(FakeOrderRepository(draft()), printerService = printer)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is AcceptancePreviewUiState.Ready)
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(0, printer.printAcceptedCalls)
+        assertEquals(0, printer.printDraftCalls)
+        assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+    }
+
+    @Test
+    fun `PRINT021 Accepted runDraftPrint is no-op`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val viewModel =
+            viewModel(
+                FakeOrderRepository(acceptedOrder(displayNumber = "001", totalCents = 700)),
+                printerService = printer,
+            )
+        advanceUntilIdle()
+
+        viewModel.runDraftPrint()
+        advanceUntilIdle()
+        assertEquals(0, printer.printDraftCalls)
+        assertEquals(0, printer.printAcceptedCalls)
+    }
+
     private suspend fun kotlinx.coroutines.test.TestScope.assertMappedDraftPrintError(
         error: PrinterError,
         expectedMessage: String,
@@ -748,11 +894,17 @@ class AcceptancePreviewViewModelTest {
     private class FakePrinterService(
         var result: PrintResult = PrintResult.Success,
         var throwOnPrintDraft: Boolean = false,
+        var throwOnPrintAccepted: Boolean = false,
+        var throwAcceptedCancellation: Boolean = false,
         private val blockUntil: CompletableDeferred<Unit>? = null,
+        private val acceptedBlockUntil: CompletableDeferred<Unit>? = null,
     ) : PrinterService {
         var printDraftCalls: Int = 0
             private set
+        var printAcceptedCalls: Int = 0
+            private set
         val printDraftIds = mutableListOf<String>()
+        val printAcceptedIds = mutableListOf<String>()
 
         override suspend fun printDraft(orderId: String): PrintResult {
             printDraftCalls += 1
@@ -762,11 +914,17 @@ class AcceptancePreviewViewModelTest {
             return result
         }
 
-        override suspend fun printAccepted(orderId: String): PrintResult =
-            error("printAccepted must not be called by PRINT-020")
+        override suspend fun printAccepted(orderId: String): PrintResult {
+            printAcceptedCalls += 1
+            printAcceptedIds += orderId
+            acceptedBlockUntil?.await()
+            if (throwAcceptedCancellation) throw CancellationException("test cancel")
+            if (throwOnPrintAccepted) error("unexpected printAccepted failure")
+            return result
+        }
 
         override suspend fun testPrint(): PrintResult =
-            error("testPrint must not be called by PRINT-020")
+            error("testPrint must not be called by PRINT-020/021")
     }
 
     private class FakeOrderRepository(

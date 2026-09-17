@@ -46,6 +46,7 @@ fun AcceptancePreviewRoute(
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
     val draftPrintState = viewModel.draftPrintUiState.collectAsStateWithLifecycle().value
+    val acceptedPrintState = viewModel.acceptedPrintUiState.collectAsStateWithLifecycle().value
 
     LaunchedEffect(viewModel, onHome, onOpenNewOrder) {
         viewModel.navigationEvents.collect { event ->
@@ -71,6 +72,20 @@ fun AcceptancePreviewRoute(
         }
     }
 
+    LaunchedEffect(acceptedPrintState) {
+        when (acceptedPrintState) {
+            is AcceptedPrintUiState.Success,
+            is AcceptedPrintUiState.Error,
+            -> {
+                delay(3_000)
+                viewModel.consumeAcceptedPrintFeedback()
+            }
+            AcceptedPrintUiState.Idle,
+            AcceptedPrintUiState.Printing,
+            -> Unit
+        }
+    }
+
     BackHandler(enabled = state is AcceptancePreviewUiState.Accepted) {
         viewModel.goHome()
     }
@@ -78,10 +93,12 @@ fun AcceptancePreviewRoute(
     AcceptancePreviewScreen(
         state = state,
         draftPrintState = draftPrintState,
+        acceptedPrintState = acceptedPrintState,
         onBack = onBack,
         onRetry = viewModel::retry,
         onAccept = viewModel::accept,
         onDraftPrint = viewModel::runDraftPrint,
+        onAcceptedPrint = viewModel::runAcceptedPrint,
         onHome = viewModel::goHome,
         onNewOrder = viewModel::startNewOrder,
     )
@@ -91,10 +108,12 @@ fun AcceptancePreviewRoute(
 fun AcceptancePreviewScreen(
     state: AcceptancePreviewUiState,
     draftPrintState: DraftPrintUiState = DraftPrintUiState.Idle,
+    acceptedPrintState: AcceptedPrintUiState = AcceptedPrintUiState.Idle,
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onAccept: () -> Unit,
     onDraftPrint: () -> Unit = {},
+    onAcceptedPrint: () -> Unit = {},
     onHome: () -> Unit = {},
     onNewOrder: () -> Unit = {},
 ) {
@@ -170,7 +189,8 @@ fun AcceptancePreviewScreen(
                 )
                 AcceptedActions(
                     isCreatingNewOrder = state.isCreatingNewOrder,
-                    onPrint = {},
+                    acceptedPrintState = acceptedPrintState,
+                    onPrint = onAcceptedPrint,
                     onHome = onHome,
                     onNewOrder = onNewOrder,
                 )
@@ -334,10 +354,15 @@ private fun AcceptedBody(
 @Composable
 private fun AcceptedActions(
     isCreatingNewOrder: Boolean,
+    acceptedPrintState: AcceptedPrintUiState,
     onPrint: () -> Unit,
     onHome: () -> Unit,
     onNewOrder: () -> Unit,
 ) {
+    val isPrinting = acceptedPrintState is AcceptedPrintUiState.Printing
+    val printEnabled = !isCreatingNewOrder && !isPrinting
+    val newOrderEnabled = !isCreatingNewOrder && !isPrinting
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -347,13 +372,58 @@ private fun AcceptedActions(
     ) {
         Button(
             onClick = onPrint,
-            enabled = false,
+            enabled = printEnabled,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .semantics { contentDescription = "Stampa non disponibile" },
+                .semantics {
+                    contentDescription =
+                        if (isPrinting) {
+                            "Stampa ordine in corso"
+                        } else {
+                            "Stampa ordine"
+                        }
+                },
         ) {
-            Text("STAMPA")
+            if (isPrinting) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Text("STAMPA IN CORSO…")
+                }
+            } else {
+                Text("STAMPA")
+            }
+        }
+        when (acceptedPrintState) {
+            is AcceptedPrintUiState.Success -> {
+                Text(
+                    text = acceptedPrintState.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics {
+                        contentDescription = acceptedPrintState.message
+                    },
+                )
+            }
+            is AcceptedPrintUiState.Error -> {
+                Text(
+                    text = acceptedPrintState.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics {
+                        contentDescription = acceptedPrintState.message
+                    },
+                )
+            }
+            AcceptedPrintUiState.Idle,
+            AcceptedPrintUiState.Printing,
+            -> Unit
         }
         OutlinedButton(
             onClick = onHome,
@@ -367,7 +437,7 @@ private fun AcceptedActions(
         }
         Button(
             onClick = onNewOrder,
-            enabled = !isCreatingNewOrder,
+            enabled = newOrderEnabled,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)

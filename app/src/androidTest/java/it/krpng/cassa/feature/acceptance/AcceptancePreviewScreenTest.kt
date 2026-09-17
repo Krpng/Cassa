@@ -9,6 +9,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import it.krpng.cassa.core.money.Money
 import it.krpng.cassa.domain.pricing.OrderTotalResult
 import org.junit.Assert.assertEquals
@@ -80,7 +81,9 @@ class AcceptancePreviewScreenTest {
         composeRule.onNodeWithText("Rimossi: Basilico").assertIsDisplayed()
         composeRule.onNodeWithText("Nota: ben cotta").assertIsDisplayed()
         composeRule.onNodeWithText("Tavolo 4").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Totale anteprima: 17,50 €").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Totale anteprima: 17,50 €")
+            .performScrollTo()
+            .assertIsDisplayed()
         composeRule.onNodeWithText("STAMPA BOZZA").assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithText("ACCETTA").assertIsEnabled()
         composeRule.onNodeWithText("ACCETTA").performClick()
@@ -261,7 +264,9 @@ class AcceptancePreviewScreenTest {
         composeRule.onNodeWithText("RIMUOVI").assertDoesNotExist()
         composeRule.onNodeWithText("SALVA").assertDoesNotExist()
         composeRule.onNodeWithText("STAMPA").assertIsDisplayed()
-        composeRule.onNodeWithText("STAMPA").assertIsNotEnabled()
+        composeRule.onNodeWithText("STAMPA").assertIsEnabled()
+        composeRule.onNodeWithText("STAMPA BOZZA").assertDoesNotExist()
+        composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
         composeRule.onNodeWithText("HOME").assertIsEnabled()
         composeRule.onNodeWithText("NUOVO ORDINE").assertIsEnabled()
         composeRule.onNodeWithText("HOME").performClick()
@@ -270,6 +275,61 @@ class AcceptancePreviewScreenTest {
             assertEquals(1, homeClicks)
             assertEquals(1, newOrderClicks)
         }
+    }
+
+    @Test
+    fun acceptedStampaTapEmitsExactlyOneCallback() {
+        var taps = 0
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = acceptedState(),
+                    acceptedPrintState = AcceptedPrintUiState.Idle,
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                    onAcceptedPrint = { taps += 1 },
+                )
+            }
+        }
+        composeRule.onNodeWithText("STAMPA").performClick()
+        composeRule.runOnIdle { assertEquals(1, taps) }
+    }
+
+    @Test
+    fun acceptedPrintingDisablesStampa() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = acceptedState(),
+                    acceptedPrintState = AcceptedPrintUiState.Printing,
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("STAMPA IN CORSO…").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertDoesNotExist()
+        composeRule.onNodeWithText("STAMPA BOZZA").assertDoesNotExist()
+        composeRule.onNodeWithText("NUOVO ORDINE").assertIsNotEnabled()
+    }
+
+    @Test
+    fun acceptedPrintSuccessMessageIsVisible() {
+        composeRule.setContent {
+            MaterialTheme {
+                AcceptancePreviewScreen(
+                    state = acceptedState(),
+                    acceptedPrintState = AcceptedPrintUiState.Success(),
+                    onBack = {},
+                    onRetry = {},
+                    onAccept = {},
+                )
+            }
+        }
+        composeRule.onNodeWithText("Ordine inviato alla stampante").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertIsEnabled()
     }
 
     private fun readyState(): AcceptancePreviewUiState.Ready =
@@ -295,5 +355,33 @@ class AcceptancePreviewScreenTest {
             ),
             generalNote = null,
             orderTotal = OrderTotalResult.Success(Money.ofCents(700)),
+        )
+
+    private fun acceptedState(): AcceptancePreviewUiState.Accepted =
+        AcceptancePreviewUiState.Accepted(
+            orderId = "order-1",
+            displayNumber = "001",
+            total = Money.ofCents(1_400),
+            acceptedAt = java.time.Instant.parse("2026-09-14T18:00:00Z"),
+            businessDate = java.time.LocalDate.parse("2026-09-14"),
+            sections = listOf(
+                AcceptancePreviewSectionUi(
+                    title = "PIZZE",
+                    lines = listOf(
+                        AcceptancePreviewLineUi(
+                            itemId = "p1",
+                            quantity = 2,
+                            productName = "Margherita",
+                            productPrintedName = "MARGHERITA",
+                            additionNames = emptyList(),
+                            removalNames = emptyList(),
+                            note = null,
+                            finalUnitPrice = Money.ofCents(700),
+                            lineTotal = Money.ofCents(1_400),
+                        ),
+                    ),
+                ),
+            ),
+            generalNote = null,
         )
 }

@@ -647,7 +647,7 @@ Mostrare anche `generalNote` se presente.
 
 ### Azioni ARCH-004
 
-- `[ STAMPA ]` — label invariata (**mai** `RISTAMPA`). **PRINT-021 / D-068:** enabled su detail current-day ACCEPTED (non busy / non printing); invoca `PrinterService.printAccepted(orderId)`. Prima di PRINT-021: VISIBLE + DISABLED.
+- `[ STAMPA ]` — label invariata (**mai** `RISTAMPA`). **PRINT-021 / D-068 COMPLETE:** enabled su detail current-day ACCEPTED (non busy / non printing); invoca `PrinterService.printAccepted(orderId)`.
 - `[ INDIETRO ]` — vedi navigation.
 - `[ HOME ]` — vedi navigation.
 
@@ -673,7 +673,7 @@ Nessun controllo di modifica:
 Sul detail valido (`ACCEPTED` + currentBusinessDate):
 
 - `[ NUOVO ORDINE DA QUESTO ]` — **VISIBLE + ENABLED**;
-- `[ STAMPA ]` — **PRINT-021 / D-068** enable su detail valido (vedi §15); prima di PRINT-021: VISIBLE + DISABLED;
+- `[ STAMPA ]` — **PRINT-021 / D-068 COMPLETE:** enable su detail valido (vedi §15); invoca `PrinterService.printAccepted(orderId)`;
 - `[ INDIETRO ]` / `[ HOME ]` — invariati.
 
 ### Success navigation — no active DRAFT (ARCH-006, invariato)

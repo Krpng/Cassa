@@ -29,6 +29,9 @@ import it.krpng.cassa.domain.repository.SplitStandardPizzaItemResult
 import it.krpng.cassa.domain.repository.UpdateGeneralNoteResult
 import it.krpng.cassa.domain.repository.UpdateNumberingModeResult
 import it.krpng.cassa.domain.repository.UpdateOrderItemResult
+import it.krpng.cassa.domain.printer.PrintResult
+import it.krpng.cassa.domain.printer.PrinterError
+import it.krpng.cassa.domain.printer.PrinterService
 import it.krpng.cassa.domain.usecase.DuplicateAcceptedOrder
 import it.krpng.cassa.domain.usecase.GetCurrentDayAcceptedOrder
 import it.krpng.cassa.domain.usecase.ReplaceDraftWithAcceptedOrderDuplicate
@@ -36,6 +39,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -466,10 +471,194 @@ class AcceptedOrderDetailViewModelTest {
         assertTrue(content.duplicateError!!.contains("non è più disponibile"))
     }
 
+    // --- PRINT-021 / D-068 ---
+
+    @Test
+    fun `PRINT021 A valid Content calls printAccepted once with exact id`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printer.printAcceptedCalls)
+        assertEquals(listOf(ORDER_ID), printer.printAcceptedIds)
+        assertEquals(0, printer.printDraftCalls)
+        val success = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Success
+        assertEquals("Ordine inviato alla stampante", success.message)
+        assertTrue(viewModel.uiState.value is AcceptedOrderDetailUiState.Content)
+    }
+
+    @Test
+    fun `PRINT021 B C double tap while printing calls service once`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer = FakePrinterService(result = PrintResult.Success, blockUntil = gate)
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(AcceptedPrintUiState.Printing, viewModel.acceptedPrintUiState.value)
+
+        viewModel.runAcceptedPrint()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(1, printer.printAcceptedCalls)
+        assertTrue(viewModel.acceptedPrintUiState.value is AcceptedPrintUiState.Success)
+    }
+
+    @Test
+    fun `PRINT021 D unavailable does not call printAccepted`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val viewModel = viewModel(orderFlow = MutableStateFlow(null), printer = printer)
+        advanceUntilIdle()
+        assertTrue(viewModel.uiState.value is AcceptedOrderDetailUiState.Unavailable)
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(0, printer.printAcceptedCalls)
+        assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+    }
+
+    @Test
+    fun `PRINT021 F maps PrinterNotConfigured`() = runTest(mainDispatcher) {
+        assertMappedAcceptedPrintError(
+            PrinterError.PrinterNotConfigured,
+            "Nessuna stampante selezionata",
+        )
+    }
+
+    @Test
+    fun `PRINT021 F maps PermissionDenied`() = runTest(mainDispatcher) {
+        assertMappedAcceptedPrintError(
+            PrinterError.PermissionDenied,
+            "Autorizzazione Bluetooth necessaria",
+        )
+    }
+
+    @Test
+    fun `PRINT021 F maps BluetoothDisabled`() = runTest(mainDispatcher) {
+        assertMappedAcceptedPrintError(
+            PrinterError.BluetoothDisabled,
+            "Bluetooth disattivato",
+        )
+    }
+
+    @Test
+    fun `PRINT021 F maps ConnectionFailed`() = runTest(mainDispatcher) {
+        assertMappedAcceptedPrintError(
+            PrinterError.ConnectionFailed,
+            "Impossibile connettersi alla stampante",
+        )
+    }
+
+    @Test
+    fun `PRINT021 F maps ConnectionLost`() = runTest(mainDispatcher) {
+        assertMappedAcceptedPrintError(
+            PrinterError.ConnectionLost,
+            "Connessione interrotta durante la stampa",
+        )
+    }
+
+    @Test
+    fun `PRINT021 F maps Timeout`() = runTest(mainDispatcher) {
+        assertMappedAcceptedPrintError(
+            PrinterError.Timeout,
+            "Timeout di connessione alla stampante",
+        )
+    }
+
+    @Test
+    fun `PRINT021 G unexpected failure maps generic message`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(throwOnPrintAccepted = true)
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        val error = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error
+        assertEquals("Impossibile stampare l'ordine", error.message)
+    }
+
+    @Test
+    fun `PRINT021 H CancellationException restores Idle`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(throwCancellation = true)
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        assertEquals(1, printer.printAcceptedCalls)
+        assertEquals(AcceptedPrintUiState.Idle, viewModel.acceptedPrintUiState.value)
+        assertTrue(viewModel.uiState.value is AcceptedOrderDetailUiState.Content)
+    }
+
+    @Test
+    fun `PRINT021 I content unchanged after successful print`() = runTest(mainDispatcher) {
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val order = acceptedOrder()
+        val viewModel = viewModel(orderFlow = MutableStateFlow(order), printer = printer)
+        advanceUntilIdle()
+        val before = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+
+        val after = viewModel.uiState.value as AcceptedOrderDetailUiState.Content
+        assertEquals(before.orderId, after.orderId)
+        assertEquals(before.displayNumber, after.displayNumber)
+        assertEquals(before.total, after.total)
+        assertEquals(0, printer.printDraftCalls)
+    }
+
+    @Test
+    fun `PRINT021 while duplicating print is ignored`() = runTest(mainDispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val printer = FakePrinterService(result = PrintResult.Success)
+        val repository = FakeOrderRepository(MutableStateFlow(acceptedOrder())).apply {
+            duplicateGate = gate
+            duplicateResult = DuplicateAcceptedOrderResult.DraftConflict("existing-draft")
+        }
+        val viewModel = detailViewModel(repository, printer = printer)
+        advanceUntilIdle()
+
+        viewModel.onDuplicateOrder()
+        advanceUntilIdle()
+        assertTrue((viewModel.uiState.value as AcceptedOrderDetailUiState.Content).isDuplicating)
+
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        assertEquals(0, printer.printAcceptedCalls)
+
+        gate.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    private suspend fun kotlinx.coroutines.test.TestScope.assertMappedAcceptedPrintError(
+        error: PrinterError,
+        expectedMessage: String,
+    ) {
+        val printer = FakePrinterService(result = PrintResult.Failure(error))
+        val viewModel = viewModel(orderFlow = MutableStateFlow(acceptedOrder()), printer = printer)
+        advanceUntilIdle()
+        viewModel.runAcceptedPrint()
+        advanceUntilIdle()
+        val state = viewModel.acceptedPrintUiState.value as AcceptedPrintUiState.Error
+        assertEquals(expectedMessage, state.message)
+    }
+
     private fun detailViewModel(
         repository: FakeOrderRepository,
         settingsFail: Boolean = false,
         orderId: String = ORDER_ID,
+        printer: PrinterService = FakePrinterService(),
     ): AcceptedOrderDetailViewModel {
         val settings = FakeSettingsRepository(fail = settingsFail)
         val clock = FixedClock(romeLocal("2026-09-15T18:00:00"))
@@ -493,6 +682,7 @@ class AcceptedOrderDetailViewModelTest {
                 clockProvider = clock,
             ),
             orderRepository = repository,
+            printerService = printer,
         )
     }
 
@@ -500,8 +690,39 @@ class AcceptedOrderDetailViewModelTest {
         orderFlow: MutableStateFlow<Order?>,
         settingsFail: Boolean = false,
         orderId: String = ORDER_ID,
+        printer: PrinterService = FakePrinterService(),
     ): AcceptedOrderDetailViewModel =
-        detailViewModel(FakeOrderRepository(orderFlow), settingsFail, orderId)
+        detailViewModel(FakeOrderRepository(orderFlow), settingsFail, orderId, printer)
+
+    private class FakePrinterService(
+        var result: PrintResult = PrintResult.Success,
+        var throwOnPrintAccepted: Boolean = false,
+        var throwCancellation: Boolean = false,
+        private val blockUntil: CompletableDeferred<Unit>? = null,
+    ) : PrinterService {
+        var printAcceptedCalls: Int = 0
+            private set
+        var printDraftCalls: Int = 0
+            private set
+        val printAcceptedIds = mutableListOf<String>()
+
+        override suspend fun printDraft(orderId: String): PrintResult {
+            printDraftCalls += 1
+            error("printDraft must not be called by PRINT-021 detail")
+        }
+
+        override suspend fun printAccepted(orderId: String): PrintResult {
+            printAcceptedCalls += 1
+            printAcceptedIds += orderId
+            blockUntil?.await()
+            if (throwCancellation) throw CancellationException("test cancel")
+            if (throwOnPrintAccepted) error("unexpected printAccepted failure")
+            return result
+        }
+
+        override suspend fun testPrint(): PrintResult =
+            error("testPrint must not be called by PRINT-021")
+    }
 
     private class FixedClock(private val now: Instant) : ClockProvider {
         override fun now(): Instant = now
@@ -542,6 +763,7 @@ class AcceptedOrderDetailViewModelTest {
         var duplicateCalls: Int = 0
         var replaceCalls: Int = 0
         var lastExpectedDraftId: String? = null
+        var duplicateGate: CompletableDeferred<Unit>? = null
 
         override suspend fun getById(orderId: String): Order? = orderFlow.value
 
@@ -616,6 +838,7 @@ class AcceptedOrderDetailViewModelTest {
             currentBusinessDate: LocalDate,
         ): DuplicateAcceptedOrderResult {
             duplicateCalls += 1
+            duplicateGate?.await()
             return duplicateResult
         }
 

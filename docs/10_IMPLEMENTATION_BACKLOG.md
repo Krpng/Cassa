@@ -530,7 +530,7 @@ Demo M7 (COMPLETE):
 > Complete on `cee8162`. `DefaultPrinterService` + `PrinterProfileProvider` abstraction + Q6b.
 ## M9 — Bluetooth NETUM — IN PROGRESS
 
-> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **9/14**. **PRINT-020 COMPLETE** (**D-064**; Samsung+NETUM hardware PASS). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`; scale-aware layout 42→21 under DOUBLE_BOTH). **PRINT-021** contract **D-068 FROZEN** — READY FOR IMPLEMENTATION. Remaining formal: PRINT-021..024, HW-002. Do not implement PRINT-021+ / HW-002 until authorized.
+> M8 COMPLETE. BT-001..007 COMPLETE. HW-001 COMPLETE (`3d05c91` / D-060 + D-061). **BT-007 COMPLETE**. M9 **10/14**. **PRINT-020 COMPLETE** (**D-064**). **PRINT-021 COMPLETE** (**D-068**; Samsung+NETUM hardware PASS). **D-065** + **D-066** COMPLETE (`2ac8233`). **D-067 COMPLETE** (`f7dad97`). Remaining formal: PRINT-022..024, HW-002. Do not start PRINT-022+ / HW-002 until authorized.
 
 ### BT-001 [P1] Runtime permission manager — COMPLETE (`345dce6` / D-055)
 > Android-facing Bluetooth runtime permission evaluation for **bonded-only** MVP. No discovery, SCAN, location, RFCOMM, NETUM, PrinterService, or printer UI.
@@ -729,10 +729,10 @@ Demo M7 (COMPLETE):
 
 **Not owned:** PrinterProfile edits; encoder wrap; typography hierarchy; PRINT-021+; feed/spacing polish.
 
-### PRINT-021 [P1] PrintAccepted integration — READY (D-068 FROZEN)
+### PRINT-021 [P1] PrintAccepted integration — COMPLETE (D-068)
 > Enable existing **`STAMPA`** on current-day ACCEPTED surfaces to invoke `PrinterService.printAccepted(orderId)`. Business read-only reprint / first manual final print of an already-accepted order. Never label `RISTAMPA`.
 
-**Status:** **CONTRACT FROZEN (D-068)** — **READY FOR IMPLEMENTATION**. Not started.
+**Status:** **COMPLETE**. Contract: **D-068 FROZEN**. Code review PASS (Critical 0 / Major 0 / Minor 1 accepted). Focused ViewModel tests PASS (AcceptedOrderDetail 33; AcceptancePreview 40). UI androidTest PASS. `assembleDebug` / `assembleDebugAndroidTest` PASS. Samsung+NETUM actual hardware FINAL print **PASS**.
 **Depends on:** PRINT-007 `printAccepted` + Mutex (D-054 COMPLETE); BT-006/007; PRINT-020 COMPLETE; D-065/D-066/D-067 COMPLETE; ARCH-004 Accepted Order Detail + post-accept Accepted CTAs.
 
 **Owns (AC) — D-068 FROZEN:**
@@ -742,7 +742,9 @@ Demo M7 (COMPLETE):
 4. `PrintKind.FINAL`: frozen `displayNumber` header (not BOZZA); frozen `order.total`; frozen snapshots; D-065/D-067 via existing composer path.
 5. Success: transient **Ordine inviato alla stampante**; map `PrinterError` consistently with PRINT-020 (accepted wording); no auto-retry; no PRINT-024 uncertainty copy.
 6. Orthogonal accepted-print phase on owning ViewModels (observation must not wipe PRINTING incorrectly).
-7. Focused JVM ViewModel tests A–O (D-068); Samsung+NETUM manual after implementation.
+7. Focused JVM ViewModel tests A–O (D-068); Samsung+NETUM manual **PASS**.
+
+**Hardware closure evidence:** one explicit STAMPA → one physical FINAL receipt; BOZZA absent; displayNumber **001**; products/prices readable (4 formaggi 14,00 + 4 stagioni 14,00); TOTALE **28,00**; DOUBLE_BOTH 2×; scale-aware wrap; separators OK; no crash; no business/numbering mutation; no automatic accept/print/retry.
 
 **Blocking open questions:** NONE.
 

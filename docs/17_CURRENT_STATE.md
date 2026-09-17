@@ -917,7 +917,7 @@ baseline_close:
   Manual_ARCH-007: 5/5 PASS
   JVM: 506 PASS
   connected: 160 PASS
-NEXT: M9 — PRINT-021 (PrintAccepted / D-068 FROZEN); M9 9/14; PRINT-020 COMPLETE
+NEXT: M9 — PRINT-022 (Accept and print after commit); M9 10/14; PRINT-021 COMPLETE
 ```
 
 Do **not** resurrect ARCH-002/003/005.
@@ -1766,9 +1766,9 @@ migration: NONE
 decision: D-068
 status: FROZEN
 base_HEAD: 0dd79f7
-M9: 9/14 COMPLETE
+M9: 10/14 COMPLETE
 PRINT-020: COMPLETE
-PRINT-021: READY FOR IMPLEMENTATION
+PRINT-021: COMPLETE
 title: Accepted order manual print (STAMPA)
 primary_entry: AcceptedOrderDetail -> STAMPA
 secondary_entry: AcceptancePreview Accepted -> STAMPA
@@ -1792,10 +1792,55 @@ D-066: UNCHANGED
 D-067: UNCHANGED
 schema: DB_v2 UNCHANGED
 migration: NONE
-production_changed_this_freeze: NO
-tests_changed_this_freeze: NO
-gradle: NOT RUN
-hardware: NOT RUN
+hardware_NETUM: PASS
 ```
 
-**D-068 FROZEN — READY FOR IMPLEMENTATION.** Do not implement PRINT-021 until explicitly authorized.
+PRINT-021 closed under D-068. See §55 for closure evidence.
+
+## 55. PRINT-021 FINAL CLOSURE (2026-09-17) — COMPLETE
+
+```yaml
+task: PRINT-021
+status: COMPLETE
+contract: D-068 FROZEN
+base_HEAD: 53c81aa
+M9: 10/14 COMPLETE
+code_review: PASS — Critical 0 / Major 0 / Minor 1 accepted
+focused_tests_detail_VM: 33 PASS
+focused_tests_preview_VM: 40 PASS
+UI_androidTest: PASS
+assembleDebug: PASS
+assembleDebugAndroidTest: PASS
+hardware_NETUM: PASS
+physical_FINAL_print: PASS
+BOZZA: ABSENT
+displayNumber: "001"
+printed_total: "28,00"
+products_prices: PASS
+D-065_DOUBLE_BOTH: PASS
+D-067_scale_aware_layout: PASS
+separators: PASS
+no_crash: PASS
+manual_app_verification: PASS
+accepted_order_mutation: NONE
+numbering_mutation: NONE
+displayNumber_allocation: NONE
+duplicate_order_creation: NONE
+automatic_acceptance: NO
+automatic_print_after_acceptance: NO
+automatic_retry: NO
+success_feedback: "Ordine inviato alla stampante"
+API: PrinterService.printAccepted(orderId)
+primary_entry: AcceptedOrderDetail -> STAMPA
+secondary_entry: AcceptancePreview Accepted -> STAMPA
+DRAFT_PRINT-020: PRESERVED (printDraft)
+remaining_M9:
+  - PRINT-022
+  - PRINT-023
+  - PRINT-024
+  - HW-002
+schema: DB_v2 UNCHANGED
+migration: NONE
+```
+
+**PRINT-021 COMPLETE.** Next authorized task: **PRINT-022** (Accept and print after commit). Do not start PRINT-022+ / HW-002 without explicit authorization.

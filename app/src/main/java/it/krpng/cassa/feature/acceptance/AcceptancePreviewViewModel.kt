@@ -114,6 +114,24 @@ sealed interface DraftPrintUiState {
     ) : DraftPrintUiState
 }
 
+/**
+ * Orthogonal accepted-print phase (D-068 / PRINT-021) for post-accept Accepted UI.
+ * Independent from [AcceptancePreviewUiState] and from [DraftPrintUiState].
+ */
+sealed interface AcceptedPrintUiState {
+    data object Idle : AcceptedPrintUiState
+
+    data object Printing : AcceptedPrintUiState
+
+    data class Success(
+        val message: String = "Ordine inviato alla stampante",
+    ) : AcceptedPrintUiState
+
+    data class Error(
+        val message: String,
+    ) : AcceptedPrintUiState
+}
+
 @HiltViewModel
 class AcceptancePreviewViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -134,6 +152,10 @@ class AcceptancePreviewViewModel @Inject constructor(
         MutableStateFlow<DraftPrintUiState>(DraftPrintUiState.Idle)
     val draftPrintUiState: StateFlow<DraftPrintUiState> = _draftPrintUiState.asStateFlow()
 
+    private val _acceptedPrintUiState =
+        MutableStateFlow<AcceptedPrintUiState>(AcceptedPrintUiState.Idle)
+    val acceptedPrintUiState: StateFlow<AcceptedPrintUiState> = _acceptedPrintUiState.asStateFlow()
+
     private val _navigationEvents = Channel<AcceptanceNavigationEvent>(Channel.BUFFERED)
     val navigationEvents = _navigationEvents.receiveAsFlow()
 
@@ -141,6 +163,7 @@ class AcceptancePreviewViewModel @Inject constructor(
     private var acceptJob: Job? = null
     private var newOrderJob: Job? = null
     private var draftPrintJob: Job? = null
+    private var acceptedPrintJob: Job? = null
 
     init {
         observeOrder()
@@ -237,6 +260,49 @@ class AcceptancePreviewViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Explicit STAMPA action for already ACCEPTED order (D-068 / PRINT-021).
+     * One tap → at most one [PrinterService.printAccepted] while a job is active.
+     */
+    fun runAcceptedPrint() {
+        if (acceptedPrintJob?.isActive == true) return
+        if (_acceptedPrintUiState.value is AcceptedPrintUiState.Printing) return
+        val accepted = _uiState.value as? AcceptancePreviewUiState.Accepted ?: return
+        if (accepted.isCreatingNewOrder || newOrderJob?.isActive == true) return
+
+        val acceptedOrderId = accepted.orderId
+        acceptedPrintJob =
+            viewModelScope.launch {
+                _acceptedPrintUiState.value = AcceptedPrintUiState.Printing
+                try {
+                    when (val result = printerService.printAccepted(acceptedOrderId)) {
+                        PrintResult.Success ->
+                            _acceptedPrintUiState.value = AcceptedPrintUiState.Success()
+                        is PrintResult.Failure ->
+                            _acceptedPrintUiState.value =
+                                AcceptedPrintUiState.Error(mapAcceptedPrintError(result.error))
+                    }
+                } catch (e: CancellationException) {
+                    _acceptedPrintUiState.value = AcceptedPrintUiState.Idle
+                    throw e
+                } catch (_: Exception) {
+                    _acceptedPrintUiState.value =
+                        AcceptedPrintUiState.Error("Impossibile stampare l'ordine")
+                }
+            }
+    }
+
+    fun consumeAcceptedPrintFeedback() {
+        when (_acceptedPrintUiState.value) {
+            is AcceptedPrintUiState.Success,
+            is AcceptedPrintUiState.Error,
+            -> _acceptedPrintUiState.value = AcceptedPrintUiState.Idle
+            AcceptedPrintUiState.Idle,
+            AcceptedPrintUiState.Printing,
+            -> Unit
+        }
+    }
+
     fun goHome() {
         if (_uiState.value !is AcceptancePreviewUiState.Accepted) return
         _navigationEvents.trySend(AcceptanceNavigationEvent.GoHome)
@@ -246,6 +312,8 @@ class AcceptancePreviewViewModel @Inject constructor(
         val current = _uiState.value
         if (current !is AcceptancePreviewUiState.Accepted) return
         if (current.isCreatingNewOrder || newOrderJob?.isActive == true) return
+        if (acceptedPrintJob?.isActive == true) return
+        if (_acceptedPrintUiState.value is AcceptedPrintUiState.Printing) return
 
         _uiState.value = current.copy(isCreatingNewOrder = true, actionError = null)
         newOrderJob = viewModelScope.launch {
@@ -413,5 +481,29 @@ class AcceptancePreviewViewModel @Inject constructor(
             PrinterError.InvalidOrderState,
             PrinterError.Unknown,
             -> "Impossibile stampare la bozza"
+        }
+
+    private fun mapAcceptedPrintError(error: PrinterError): String =
+        when (error) {
+            PrinterError.PermissionDenied ->
+                "Autorizzazione Bluetooth necessaria"
+            PrinterError.BluetoothDisabled ->
+                "Bluetooth disattivato"
+            PrinterError.PrinterNotConfigured ->
+                "Nessuna stampante selezionata"
+            PrinterError.ConnectionFailed ->
+                "Impossibile connettersi alla stampante"
+            PrinterError.ConnectionLost ->
+                "Connessione interrotta durante la stampa"
+            PrinterError.Timeout ->
+                "Timeout di connessione alla stampante"
+            PrinterError.PrintFailed,
+            PrinterError.UnsupportedEncoding,
+            PrinterError.UnencodableCharacter,
+            PrinterError.InvalidPrinterProfile,
+            PrinterError.OrderNotFound,
+            PrinterError.InvalidOrderState,
+            PrinterError.Unknown,
+            -> "Impossibile stampare l'ordine"
         }
 }

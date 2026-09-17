@@ -30,10 +30,32 @@ class AcceptedOrderDetailScreenTest {
     }
 
     @Test
-    fun archT022StampaVisibleAndDisabled() {
-        setContent(contentState())
-        composeRule.onNodeWithText("STAMPA").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Stampa non disponibile").assertIsNotEnabled()
+    fun archT022StampaVisibleAndEnabledWhenIdle() {
+        var printClicks = 0
+        setContent(contentState(), onAcceptedPrint = { printClicks += 1 })
+        composeRule.onNodeWithText("STAMPA").assertIsDisplayed().assertIsEnabled()
+        composeRule.onNodeWithContentDescription("Stampa ordine").assertIsEnabled()
+        composeRule.onNodeWithText("STAMPA").performClick()
+        composeRule.runOnIdle { assertEquals(1, printClicks) }
+    }
+
+    @Test
+    fun print021PrintingDisablesStampa() {
+        setContent(contentState(), acceptedPrintState = AcceptedPrintUiState.Printing)
+        composeRule.onNodeWithText("STAMPA IN CORSO…").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("Stampa ordine in corso").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("Nuovo ordine da questo").assertIsNotEnabled()
+    }
+
+    @Test
+    fun print021SuccessFeedbackVisible() {
+        setContent(
+            contentState(),
+            acceptedPrintState = AcceptedPrintUiState.Success(),
+        )
+        composeRule.onNodeWithText("Ordine inviato alla stampante").assertIsDisplayed()
+        composeRule.onNodeWithText("STAMPA").assertIsEnabled()
     }
 
     @Test
@@ -48,8 +70,7 @@ class AcceptedOrderDetailScreenTest {
         setContent(contentState(), onDuplicateOrder = { duplicateClicks += 1 })
         composeRule.onNodeWithText("NUOVO ORDINE DA QUESTO").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Nuovo ordine da questo").assertIsEnabled()
-        composeRule.onNodeWithText("STAMPA").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("Stampa non disponibile").assertIsNotEnabled()
+        composeRule.onNodeWithText("STAMPA").assertIsDisplayed().assertIsEnabled()
         composeRule.onNodeWithText("RISTAMPA").assertDoesNotExist()
         composeRule.onNodeWithText("NUOVO ORDINE DA QUESTO").performClick()
         composeRule.runOnIdle { assertEquals(1, duplicateClicks) }
@@ -157,9 +178,11 @@ class AcceptedOrderDetailScreenTest {
 
     private fun setContent(
         state: AcceptedOrderDetailUiState,
+        acceptedPrintState: AcceptedPrintUiState = AcceptedPrintUiState.Idle,
         onBackToToday: () -> Unit = {},
         onHome: () -> Unit = {},
         onDuplicateOrder: () -> Unit = {},
+        onAcceptedPrint: () -> Unit = {},
         onConflictCancel: () -> Unit = {},
         onConflictResume: () -> Unit = {},
         onConflictReplace: () -> Unit = {},
@@ -168,9 +191,11 @@ class AcceptedOrderDetailScreenTest {
             MaterialTheme {
                 AcceptedOrderDetailScreen(
                     state = state,
+                    acceptedPrintState = acceptedPrintState,
                     onBackToToday = onBackToToday,
                     onHome = onHome,
                     onDuplicateOrder = onDuplicateOrder,
+                    onAcceptedPrint = onAcceptedPrint,
                     onConflictCancel = onConflictCancel,
                     onConflictResume = onConflictResume,
                     onConflictReplace = onConflictReplace,

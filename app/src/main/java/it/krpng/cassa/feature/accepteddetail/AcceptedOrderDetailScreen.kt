@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import it.krpng.cassa.feature.common.CassaBackButton
+import kotlinx.coroutines.delay
 
 @Composable
 fun AcceptedOrderDetailRoute(
@@ -42,6 +45,7 @@ fun AcceptedOrderDetailRoute(
     viewModel: AcceptedOrderDetailViewModel = hiltViewModel(),
 ) {
     val state = viewModel.uiState.collectAsStateWithLifecycle().value
+    val acceptedPrintState = viewModel.acceptedPrintUiState.collectAsStateWithLifecycle().value
     BackHandler(onBack = onBackToToday)
     LaunchedEffect(viewModel, onOpenNewOrder) {
         viewModel.navigationEvents.collect { event ->
@@ -51,11 +55,26 @@ fun AcceptedOrderDetailRoute(
             }
         }
     }
+    LaunchedEffect(acceptedPrintState) {
+        when (acceptedPrintState) {
+            is AcceptedPrintUiState.Success,
+            is AcceptedPrintUiState.Error,
+            -> {
+                delay(3_000)
+                viewModel.consumeAcceptedPrintFeedback()
+            }
+            AcceptedPrintUiState.Idle,
+            AcceptedPrintUiState.Printing,
+            -> Unit
+        }
+    }
     AcceptedOrderDetailScreen(
         state = state,
+        acceptedPrintState = acceptedPrintState,
         onBackToToday = onBackToToday,
         onHome = onHome,
         onDuplicateOrder = viewModel::onDuplicateOrder,
+        onAcceptedPrint = viewModel::runAcceptedPrint,
         onClearDuplicateError = viewModel::clearDuplicateError,
         onConflictCancel = viewModel::onConflictCancel,
         onConflictResume = viewModel::onConflictResume,
@@ -67,15 +86,18 @@ fun AcceptedOrderDetailRoute(
 @Composable
 fun AcceptedOrderDetailScreen(
     state: AcceptedOrderDetailUiState,
+    acceptedPrintState: AcceptedPrintUiState = AcceptedPrintUiState.Idle,
     onBackToToday: () -> Unit,
     onHome: () -> Unit,
     onDuplicateOrder: () -> Unit = {},
+    onAcceptedPrint: () -> Unit = {},
     onClearDuplicateError: () -> Unit = {},
     onConflictCancel: () -> Unit = {},
     onConflictResume: () -> Unit = {},
     onConflictReplace: () -> Unit = {},
     onRetry: () -> Unit = {},
 ) {
+    val isPrinting = acceptedPrintState is AcceptedPrintUiState.Printing
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -107,6 +129,8 @@ fun AcceptedOrderDetailScreen(
                 DetailActions(
                     onHome = onHome,
                     onDuplicateOrder = null,
+                    onAcceptedPrint = onAcceptedPrint,
+                    acceptedPrintState = acceptedPrintState,
                     printEnabled = false,
                     duplicateEnabled = false,
                 )
@@ -129,6 +153,8 @@ fun AcceptedOrderDetailScreen(
                 DetailActions(
                     onHome = onHome,
                     onDuplicateOrder = null,
+                    onAcceptedPrint = onAcceptedPrint,
+                    acceptedPrintState = acceptedPrintState,
                     printEnabled = false,
                     duplicateEnabled = false,
                 )
@@ -152,6 +178,8 @@ fun AcceptedOrderDetailScreen(
                 DetailActions(
                     onHome = onHome,
                     onDuplicateOrder = null,
+                    onAcceptedPrint = onAcceptedPrint,
+                    acceptedPrintState = acceptedPrintState,
                     printEnabled = false,
                     duplicateEnabled = false,
                 )
@@ -199,8 +227,10 @@ fun AcceptedOrderDetailScreen(
                 DetailActions(
                     onHome = onHome,
                     onDuplicateOrder = onDuplicateOrder,
-                    printEnabled = false,
-                    duplicateEnabled = !state.isDuplicating && !state.isReplacing,
+                    onAcceptedPrint = onAcceptedPrint,
+                    acceptedPrintState = acceptedPrintState,
+                    printEnabled = !state.isDuplicating && !state.isReplacing && !isPrinting,
+                    duplicateEnabled = !state.isDuplicating && !state.isReplacing && !isPrinting,
                 )
                 if (state.activeDraftConflict != null) {
                     ActiveDraftConflictDialog(
@@ -445,9 +475,12 @@ private fun DetailLine(line: AcceptedOrderDetailLineUi) {
 private fun DetailActions(
     onHome: () -> Unit,
     onDuplicateOrder: (() -> Unit)?,
+    onAcceptedPrint: () -> Unit,
+    acceptedPrintState: AcceptedPrintUiState,
     printEnabled: Boolean,
     duplicateEnabled: Boolean,
 ) {
+    val isPrinting = acceptedPrintState is AcceptedPrintUiState.Printing
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -468,14 +501,61 @@ private fun DetailActions(
             }
         }
         Button(
-            onClick = {},
+            onClick = onAcceptedPrint,
             enabled = printEnabled,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp)
-                .semantics { contentDescription = "Stampa non disponibile" },
+                .semantics {
+                    contentDescription =
+                        if (isPrinting) {
+                            "Stampa ordine in corso"
+                        } else if (printEnabled) {
+                            "Stampa ordine"
+                        } else {
+                            "Stampa non disponibile"
+                        }
+                },
         ) {
-            Text("STAMPA")
+            if (isPrinting) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Text("STAMPA IN CORSO…")
+                }
+            } else {
+                Text("STAMPA")
+            }
+        }
+        when (acceptedPrintState) {
+            is AcceptedPrintUiState.Success -> {
+                Text(
+                    text = acceptedPrintState.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics {
+                        contentDescription = acceptedPrintState.message
+                    },
+                )
+            }
+            is AcceptedPrintUiState.Error -> {
+                Text(
+                    text = acceptedPrintState.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.semantics {
+                        contentDescription = acceptedPrintState.message
+                    },
+                )
+            }
+            AcceptedPrintUiState.Idle,
+            AcceptedPrintUiState.Printing,
+            -> Unit
         }
         OutlinedButton(
             onClick = onHome,

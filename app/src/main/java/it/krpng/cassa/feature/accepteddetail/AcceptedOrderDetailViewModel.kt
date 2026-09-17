@@ -9,6 +9,9 @@ import it.krpng.cassa.domain.acceptance.AcceptancePreviewOrdering
 import it.krpng.cassa.domain.model.Order
 import it.krpng.cassa.domain.pricing.CalculateOrderTotal
 import it.krpng.cassa.domain.repository.OrderRepository
+import it.krpng.cassa.domain.printer.PrintResult
+import it.krpng.cassa.domain.printer.PrinterError
+import it.krpng.cassa.domain.printer.PrinterService
 import it.krpng.cassa.domain.usecase.DuplicateAcceptedOrder
 import it.krpng.cassa.domain.usecase.DuplicateAcceptedOrderOutcome
 import it.krpng.cassa.domain.usecase.GetCurrentDayAcceptedOrder
@@ -18,6 +21,7 @@ import it.krpng.cassa.domain.usecase.ReplaceDraftWithAcceptedOrderDuplicateOutco
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -79,6 +83,24 @@ sealed interface AcceptedOrderDetailNavigationEvent {
     ) : AcceptedOrderDetailNavigationEvent
 }
 
+/**
+ * Orthogonal accepted-print phase (D-068 / PRINT-021).
+ * Independent from [AcceptedOrderDetailUiState] so observation refresh cannot wipe PRINTING.
+ */
+sealed interface AcceptedPrintUiState {
+    data object Idle : AcceptedPrintUiState
+
+    data object Printing : AcceptedPrintUiState
+
+    data class Success(
+        val message: String = "Ordine inviato alla stampante",
+    ) : AcceptedPrintUiState
+
+    data class Error(
+        val message: String,
+    ) : AcceptedPrintUiState
+}
+
 @HiltViewModel
 class AcceptedOrderDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -86,6 +108,7 @@ class AcceptedOrderDetailViewModel @Inject constructor(
     private val duplicateAcceptedOrder: DuplicateAcceptedOrder,
     private val replaceDraftWithAcceptedOrderDuplicate: ReplaceDraftWithAcceptedOrderDuplicate,
     private val orderRepository: OrderRepository,
+    private val printerService: PrinterService,
 ) : ViewModel() {
     private val orderId: String =
         savedStateHandle.get<String>(ORDER_ID_ARGUMENT).orEmpty()
@@ -94,6 +117,10 @@ class AcceptedOrderDetailViewModel @Inject constructor(
         MutableStateFlow<AcceptedOrderDetailUiState>(AcceptedOrderDetailUiState.Loading)
     val uiState: StateFlow<AcceptedOrderDetailUiState> = _uiState.asStateFlow()
 
+    private val _acceptedPrintUiState =
+        MutableStateFlow<AcceptedPrintUiState>(AcceptedPrintUiState.Idle)
+    val acceptedPrintUiState: StateFlow<AcceptedPrintUiState> = _acceptedPrintUiState.asStateFlow()
+
     private val _navigationEvents = Channel<AcceptedOrderDetailNavigationEvent>(Channel.BUFFERED)
     val navigationEvents = _navigationEvents.receiveAsFlow()
 
@@ -101,6 +128,7 @@ class AcceptedOrderDetailViewModel @Inject constructor(
     private var duplicateJob: Job? = null
     private var replaceJob: Job? = null
     private var resumeJob: Job? = null
+    private var acceptedPrintJob: Job? = null
 
     init {
         observe()
@@ -110,9 +138,55 @@ class AcceptedOrderDetailViewModel @Inject constructor(
         observe()
     }
 
+    /**
+     * Explicit STAMPA action (D-068 / PRINT-021).
+     * One tap → at most one [PrinterService.printAccepted] while a job is active.
+     */
+    fun runAcceptedPrint() {
+        if (acceptedPrintJob?.isActive == true) return
+        if (_acceptedPrintUiState.value is AcceptedPrintUiState.Printing) return
+        val content = _uiState.value as? AcceptedOrderDetailUiState.Content ?: return
+        if (content.isBusy) return
+
+        val acceptedOrderId = content.orderId
+        acceptedPrintJob =
+            viewModelScope.launch {
+                _acceptedPrintUiState.value = AcceptedPrintUiState.Printing
+                try {
+                    when (val result = printerService.printAccepted(acceptedOrderId)) {
+                        PrintResult.Success ->
+                            _acceptedPrintUiState.value = AcceptedPrintUiState.Success()
+                        is PrintResult.Failure ->
+                            _acceptedPrintUiState.value =
+                                AcceptedPrintUiState.Error(mapAcceptedPrintError(result.error))
+                    }
+                } catch (e: CancellationException) {
+                    _acceptedPrintUiState.value = AcceptedPrintUiState.Idle
+                    throw e
+                } catch (_: Exception) {
+                    _acceptedPrintUiState.value =
+                        AcceptedPrintUiState.Error("Impossibile stampare l'ordine")
+                }
+            }
+    }
+
+    /** Clears transient success/error so feedback is not replayed after recomposition. */
+    fun consumeAcceptedPrintFeedback() {
+        when (_acceptedPrintUiState.value) {
+            is AcceptedPrintUiState.Success,
+            is AcceptedPrintUiState.Error,
+            -> _acceptedPrintUiState.value = AcceptedPrintUiState.Idle
+            AcceptedPrintUiState.Idle,
+            AcceptedPrintUiState.Printing,
+            -> Unit
+        }
+    }
+
     fun onDuplicateOrder() {
         val content = _uiState.value as? AcceptedOrderDetailUiState.Content ?: return
         if (content.isBusy || duplicateJob?.isActive == true || replaceJob?.isActive == true) return
+        if (acceptedPrintJob?.isActive == true) return
+        if (_acceptedPrintUiState.value is AcceptedPrintUiState.Printing) return
         duplicateJob = viewModelScope.launch {
             _uiState.value = content.copy(
                 isDuplicating = true,
@@ -344,6 +418,30 @@ class AcceptedOrderDetailViewModel @Inject constructor(
     companion object {
         const val ORDER_ID_ARGUMENT = "orderId"
     }
+
+    private fun mapAcceptedPrintError(error: PrinterError): String =
+        when (error) {
+            PrinterError.PermissionDenied ->
+                "Autorizzazione Bluetooth necessaria"
+            PrinterError.BluetoothDisabled ->
+                "Bluetooth disattivato"
+            PrinterError.PrinterNotConfigured ->
+                "Nessuna stampante selezionata"
+            PrinterError.ConnectionFailed ->
+                "Impossibile connettersi alla stampante"
+            PrinterError.ConnectionLost ->
+                "Connessione interrotta durante la stampa"
+            PrinterError.Timeout ->
+                "Timeout di connessione alla stampante"
+            PrinterError.PrintFailed,
+            PrinterError.UnsupportedEncoding,
+            PrinterError.UnencodableCharacter,
+            PrinterError.InvalidPrinterProfile,
+            PrinterError.OrderNotFound,
+            PrinterError.InvalidOrderState,
+            PrinterError.Unknown,
+            -> "Impossibile stampare l'ordine"
+        }
 }
 
 private val AcceptedOrderDetailUiState.Content.isBusy: Boolean
